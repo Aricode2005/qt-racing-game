@@ -1,0 +1,4 @@
+set(__QT_DEPLOY_TARGET_ApexVelocity_FILE /Users/mukutchatterjee/Downloads/qt-racing-game/build/ApexVelocity)
+set(__QT_DEPLOY_TARGET_ApexVelocity_TYPE EXECUTABLE)
+set(__QT_DEPLOY_TARGET_capture_screenshots_FILE /Users/mukutchatterjee/Downloads/qt-racing-game/build/capture_screenshots)
+set(__QT_DEPLOY_TARGET_capture_screenshots_TYPE EXECUTABLE)
