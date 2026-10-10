@@ -14,12 +14,15 @@ struct RenderableSprite {
     int height = 0;
     qreal rotation = 0;
     bool drawSkidSmoke = false;
+    qreal anchorYRatio = 1.0;
+    qreal clipY = 99999.0;
+    qreal opacity = 1.0;
 };
 
 RasterRenderer::RasterRenderer() {
 }
 
-void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int screenWidth, int screenHeight) {
+void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int screenWidth, int screenHeight, qreal dt) {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
@@ -27,8 +30,8 @@ void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int scr
 
     // Smooth camera heading offset for backdrop parallax
     const RoadSegment& currentSeg = engine.getTrack().findSegment(player.worldZ);
-    m_cameraHeading += currentSeg.curve * (player.speed / 180.0) * 0.016;
-    m_rainAnimTime += 0.016;
+    m_cameraHeading += currentSeg.curve * (player.speed / 180.0) * dt;
+    m_rainAnimTime += dt;
 
     if (player.lookingBack) {
         // LOOK-BACK REAR VIEW
@@ -50,7 +53,7 @@ void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int scr
         qreal shakeWorldX = 0;
         qreal shakeWorldY = 0;
         if (player.impactCameraShake > 0) {
-            qreal sMag = player.impactCameraShake * 15.0;
+            qreal sMag = player.impactCameraShake * 28.0;
             shakeWorldX = (QRandomGenerator::global()->generateDouble() * 2.0 - 1.0) * sMag;
             shakeWorldY = (QRandomGenerator::global()->generateDouble() * 2.0 - 1.0) * sMag;
         }
@@ -62,6 +65,24 @@ void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int scr
         renderBackdrop(painter, engine, screenWidth, screenHeight);
         renderRoad(painter, engine, screenWidth, screenHeight, false);
         renderSceneryAndCars(painter, engine, screenWidth, screenHeight, false);
+
+        // Distance atmosphere fog overlay
+        {
+            qreal fogHorizon = screenHeight * 0.42 + player.pitchG * 140.0;
+            QLinearGradient fogGrad(0, fogHorizon, 0, fogHorizon + screenHeight * 0.12);
+            TimeOfDay tod = engine.getTimeOfDay();
+            if (tod == TIME_NIGHT) {
+                fogGrad.setColorAt(0.0, QColor(8, 10, 18, 120));
+                fogGrad.setColorAt(1.0, QColor(8, 10, 18, 0));
+            } else if (tod == TIME_SUNSET) {
+                fogGrad.setColorAt(0.0, QColor(180, 120, 70, 90));
+                fogGrad.setColorAt(1.0, QColor(180, 120, 70, 0));
+            } else {
+                fogGrad.setColorAt(0.0, QColor(200, 210, 230, 80));
+                fogGrad.setColorAt(1.0, QColor(200, 210, 230, 0));
+            }
+            painter.fillRect(0, (int)fogHorizon - 20, screenWidth, (int)(screenHeight * 0.14), fogGrad);
+        }
 
         if (engine.getTimeOfDay() == TIME_NIGHT) {
             renderNightHeadlights(painter, engine, screenWidth, screenHeight);
@@ -95,6 +116,7 @@ void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int scr
 
         renderSteeringWheel(painter, engine, screenWidth, screenHeight);
         renderWindshieldEffects(painter, engine, screenWidth, screenHeight);
+        renderSportPedals(painter, engine, screenWidth, screenHeight);
     }
 
     renderHUD(painter, engine, screenWidth, screenHeight);
@@ -109,29 +131,49 @@ void RasterRenderer::renderBackdrop(QPainter& p, const GameEngine& engine, int w
     qreal pitchOffset = player.pitchG * 140.0;
     qreal currentHorizon = horizonY + pitchOffset;
 
-    // 1. Sky and distant celestial backdrop (Clouds, Sun/Moon, Stars)
+    // 1. Sky and distant panoramic backdrop (Clouds, Sun/Moon, Stars, Mountains/City)
     const QImage& bg = RasterAssets::instance().getBackdrop(theme, tod);
     int bgW = bg.width();
     int bgH = bg.height();
 
-    int bgOffset = (int)(m_cameraHeading * 320.0) % bgW;
-    if (bgOffset < 0) bgOffset += bgW;
+    int destH = qRound(currentHorizon + 25);
+    if (destH > 0 && bgH > 0) {
+        // Natural aspect ratio scaling for seamless 360-degree cylindrical panorama
+        qreal scaleBg = (qreal)destH / (qreal)bgH;
+        qreal destW = bgW * scaleBg;
 
-    int destH = qRound(currentHorizon + 35);
-    int destY = 0;
+        // Smooth camera heading panning without stretching or wrapping artifacts
+        qreal panX = -fmod(m_cameraHeading * 420.0, destW);
+        if (panX > 0) panX -= destW;
 
-    p.drawImage(QRect(0, destY, w, destH), bg, QRect(bgOffset, 0, bgW - bgOffset, bgH));
-    if (bgOffset > 0) {
-        int drawnW = (int)(((qreal)(bgW - bgOffset) / bgW) * w);
-        p.drawImage(QRect(drawnW, destY, w - drawnW, destH), bg, QRect(0, 0, bgOffset, bgH));
+        for (qreal x = panX; x < w; x += destW) {
+            p.drawImage(QRectF(x, 0, destW + 0.5, destH), bg);
+        }
     }
 
-    // 2. Dynamic drifting atmospheric cloud layers
+    // 2. Soft atmospheric distance horizon haze gradient blending sky into asphalt
+    QLinearGradient haze(0, currentHorizon - 25, 0, currentHorizon + 35);
+    if (tod == TIME_NIGHT) {
+        haze.setColorAt(0.0, QColor(8, 10, 16, 0));
+        haze.setColorAt(0.5, QColor(12, 16, 26, 160));
+        haze.setColorAt(1.0, QColor(8, 10, 16, 0));
+    } else if (tod == TIME_SUNSET) {
+        haze.setColorAt(0.0, QColor(240, 110, 50, 0));
+        haze.setColorAt(0.5, QColor(235, 115, 55, 120));
+        haze.setColorAt(1.0, QColor(48, 62, 36, 0));
+    } else {
+        haze.setColorAt(0.0, QColor(160, 195, 235, 0));
+        haze.setColorAt(0.5, QColor(180, 210, 245, 130));
+        haze.setColorAt(1.0, QColor(52, 78, 42, 0));
+    }
+    p.fillRect(0, qRound(currentHorizon - 25), w, 60, haze);
+
+    // 3. Dynamic drifting atmospheric cloud layers
     if (tod != TIME_NIGHT) {
         p.save();
         p.setRenderHint(QPainter::Antialiasing, true);
-        qreal cloudShift = player.distanceTraveled * 120.0 + m_rainAnimTime * 35.0;
-        QColor cloudCol = (tod == TIME_SUNSET) ? QColor(255, 190, 150, 75) : QColor(255, 255, 255, 85);
+        qreal cloudShift = player.distanceTraveled * 80.0 + m_rainAnimTime * 25.0;
+        QColor cloudCol = (tod == TIME_SUNSET) ? QColor(255, 190, 150, 65) : QColor(255, 255, 255, 75);
         p.setBrush(cloudCol);
         p.setPen(Qt::NoPen);
 
@@ -145,9 +187,6 @@ void RasterRenderer::renderBackdrop(QPainter& p, const GameEngine& engine, int w
         }
         p.restore();
     }
-
-    // 3. The "Traffic Rider" Approaching Mountain/Scenery Illusion
-    renderApproachingMountains(p, engine, w, h, currentHorizon);
 }
 
 void RasterRenderer::renderApproachingMountains(QPainter& p, const GameEngine& engine, int w, int h, qreal horizonY) {
@@ -407,7 +446,8 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     qreal horizonY = isMirror ? (h * 0.50) : (h * 0.42);
     qreal currentHorizon = horizonY + (player.pitchG * 140.0);
 
-    qreal camDepth = 0.80;
+    qreal speedFovBoost = 1.0 + (player.speed / 400.0) * 0.15;
+    qreal camDepth = 0.80 * speedFovBoost;
     qreal camHeight = 950;
     qreal camX = player.x * roadWidth + mirrorOffsetAngle;
 
@@ -416,7 +456,7 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     qreal eyeHeight = baseElevation + camHeight;
     qreal camZ = player.worldZ;
 
-    int drawDistance = isMirror ? 90 : 180;
+    int drawDistance = isMirror ? 32 : 140;
     qreal maxy = h;
 
     qreal x = 0;
@@ -456,8 +496,8 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
         seg.p1.scale = camDepth / p1CamZ;
         seg.p2.scale = camDepth / p2CamZ;
 
-        qreal p1CamX = seg.p1.worldX - (isMirror ? -camX : camX);
-        qreal p2CamX = seg.p2.worldX - (isMirror ? -camX : camX);
+        qreal p1CamX = seg.p1.worldX - camX;
+        qreal p2CamX = seg.p2.worldX - camX;
 
         seg.p1.screenX = qRound((w / 2.0) + (seg.p1.scale * p1CamX * (w / 2.0)));
         seg.p1.screenY = qRound(currentHorizon - (seg.p1.scale * (seg.p1.worldY - eyeHeight) * (h / 2.0)));
@@ -473,9 +513,10 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     TimeOfDay tod = engine.getTimeOfDay();
 
     for (int n = 0; n < segs.size(); ++n) {
-        const RoadSegment& s = segs[n];
+        RoadSegment& s = segs[n];
 
         if (s.p1.camZ <= 1.0 || s.p2.screenY >= s.p1.screenY || s.p2.screenY >= maxy) {
+            s.clip = maxy;
             continue;
         }
 
@@ -578,142 +619,146 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             }
         }
 
+        s.clip = maxy;
         maxy = s.p2.screenY;
+    }
+
+    if (isMirror) {
+        m_mirrorSegments = segs;
+    } else {
+        m_forwardSegments = segs;
     }
 }
 
 void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine, int w, int h, bool isMirror, qreal mirrorOffsetAngle) {
+    Q_UNUSED(mirrorOffsetAngle);
     const Track& track = engine.getTrack();
     const PlayerCar& player = engine.getPlayer();
     int segLen = track.getInfo().segmentLength;
-    qreal roadWidth = track.getInfo().roadWidth;
-    qreal camDepth = 0.80;
-    qreal camHeight = 950;
-    qreal camX = player.x * roadWidth + mirrorOffsetAngle;
 
-    int baseIndex = (int)(player.worldZ / segLen);
-    qreal baseElevation = track.getSegment(baseIndex).elevation;
-    qreal eyeHeight = baseElevation + camHeight;
-    qreal camZ = player.worldZ;
+    // Use road segments already projected along curves and hills by renderRoad!
+    const QVector<RoadSegment>& segs = isMirror ? m_mirrorSegments : m_forwardSegments;
+    if (segs.isEmpty()) return;
 
-    qreal horizonY = isMirror ? (h * 0.50) : (h * 0.42);
-    qreal currentHorizon = horizonY + (player.pitchG * 140.0);
-
-    int drawDist = isMirror ? 90 : 180;
     QVector<RenderableSprite> spritesToDraw;
+    int drawDist = segs.size();
 
-    for (int n = drawDist; n >= 0; --n) {
-        int segIdx = isMirror ? (baseIndex - n) : (baseIndex + n);
-        const RoadSegment& seg = track.getSegment(segIdx);
-        qreal segZ = isMirror ? (camZ - n * segLen) : (camZ + n * segLen);
+    // 1. Highway Overhead Gantries & Roadside Scenery (Curve-aligned & ground-anchored)
+    for (int n = drawDist - 1; n >= 0; --n) {
+        const RoadSegment& s = segs[n];
+        if (s.p1.camZ <= 40.0) continue;
 
-        qreal relCamZ = isMirror ? (camZ - segZ) : (segZ - camZ);
-        if (relCamZ <= 80) continue;
-
-        qreal scale = camDepth / relCamZ;
-        qreal screenY = currentHorizon - (scale * (seg.elevation - eyeHeight) * (h / 2.0));
-        qreal projScale = scale * (w / 2.0);
+        qreal projScale = s.p1.scale * (w / 2.0);
 
         auto addScenery = [&](SceneryType st, qreal lateralOffset) {
             const QImage& sImg = RasterAssets::instance().getScenery(st);
-            qreal screenX = (w / 2.0) + (scale * (lateralOffset * roadWidth - (isMirror ? -camX : camX)) * (w / 2.0));
+            // Position scenery relative to the curved road center and width
+            qreal screenX = s.p1.screenX + (lateralOffset * s.p1.screenW);
+            qreal screenY = s.p1.screenY;
 
             int sw = 0;
             int sh = 0;
             if (st == SCENERY_HIGHWAY_GANTRY) {
-                sw = qRound(projScale * 2500.0);
+                // Overhead gantry spans across all highway lanes with support pylons on shoulders
+                sw = qRound(s.p1.screenW * 2.35);
                 sh = qRound(sw * ((qreal)sImg.height() / sImg.width()));
             } else if (st == SCENERY_WIND_TURBINE) {
-                sh = qRound(projScale * 2400.0);
+                sh = qRound(projScale * 2200.0);
                 sw = qRound(sh * ((qreal)sImg.width() / sImg.height()));
             } else if (st == SCENERY_ROCK_ARCH) {
-                sw = qRound(projScale * 1900.0);
+                sw = qRound(projScale * 1800.0);
                 sh = qRound(sw * ((qreal)sImg.height() / sImg.width()));
             } else if (st == SCENERY_PALM_TREE || st == SCENERY_PINE_TREE) {
-                sh = qRound(projScale * 1250.0);
+                sh = qRound(projScale * 1100.0);
                 sw = qRound(sh * ((qreal)sImg.width() / sImg.height()));
             } else if (st == SCENERY_STREETLIGHT) {
-                sh = qRound(projScale * 1150.0);
+                sh = qRound(projScale * 1050.0);
                 sw = qRound(sh * ((qreal)sImg.width() / sImg.height()));
             } else if (st == SCENERY_BILLBOARD_1 || st == SCENERY_BILLBOARD_2) {
-                sw = qRound(projScale * 2550.0);
-                sh = qRound(sw * ((qreal)sImg.height() / sImg.width()));
+                // High-rise highway billboard with balanced proportions
+                sh = qRound(projScale * 1650.0);
+                sw = qRound(sh * ((qreal)sImg.width() / sImg.height()));
             } else if (st == SCENERY_HOARDING_NEON) {
-                sw = qRound(projScale * 2750.0);
-                sh = qRound(sw * ((qreal)sImg.height() / sImg.width()));
+                sh = qRound(projScale * 1350.0);
+                sw = qRound(sh * ((qreal)sImg.width() / sImg.height()));
             } else if (st == SCENERY_UTILITY_POLE) {
-                sh = qRound(projScale * 1450.0);
+                sh = qRound(projScale * 1250.0);
                 sw = qRound(sh * ((qreal)sImg.width() / sImg.height()));
             } else if (st == SCENERY_BOULDER || st == SCENERY_CACTUS) {
-                sw = qRound(projScale * 800.0);
-                sh = qRound(sw * ((qreal)sImg.height() / sImg.width()));
+                sh = qRound(projScale * 650.0);
+                sw = qRound(sh * ((qreal)sImg.height() / sImg.width()));
             } else {
-                sh = qRound(projScale * 950.0);
+                sh = qRound(projScale * 800.0);
                 sw = qRound(sh * ((qreal)sImg.width() / sImg.height()));
             }
 
-            if (sw >= 3 && screenX + sw / 2 > -80 && screenX - sw / 2 < w + 80 && screenY > 30 && screenY < h + 250) {
+            if (sw >= 3 && screenX + sw / 2 > -120 && screenX - sw / 2 < w + 120 && screenY > 10 && screenY < h + 250) {
                 RenderableSprite rs;
-                rs.camZ = relCamZ;
+                rs.camZ = s.p1.camZ;
                 rs.screenX = screenX;
                 rs.screenY = screenY;
-                rs.scale = scale;
+                rs.scale = s.p1.scale;
                 rs.sprite = sImg;
                 rs.width = sw;
                 rs.height = sh;
+                rs.anchorYRatio = 1.0; // Foundation rests on ground
+                rs.clipY = s.clip;
                 spritesToDraw.append(rs);
             }
         };
 
-        // Highway Overhead Gantry (Centered across road lanes)
-        if (seg.hasGantry) {
+        if (s.hasGantry) {
             addScenery(SCENERY_HIGHWAY_GANTRY, 0.0);
         }
-        if (seg.hasSceneryLeft) {
-            addScenery(seg.sceneryLeft, seg.sceneryLeftX);
+        if (s.hasSceneryLeft) {
+            addScenery(s.sceneryLeft, s.sceneryLeftX);
         }
-        if (seg.hasSceneryRight) {
-            addScenery(seg.sceneryRight, seg.sceneryRightX);
+        if (s.hasSceneryRight) {
+            addScenery(s.sceneryRight, s.sceneryRightX);
         }
     }
 
+    // 2. Traffic Vehicles positioned strictly on the curved road surface
     const QVector<NPCCar>& traffic = engine.getTraffic();
     int totalTrackLen = track.trackLength();
+    qreal camZ = player.worldZ;
 
     for (const NPCCar& npc : traffic) {
         qreal relZ = npc.worldZ - camZ;
         if (relZ < -totalTrackLen / 2) relZ += totalTrackLen;
         if (relZ > totalTrackLen / 2) relZ -= totalTrackLen;
 
-        // Front POV traffic is visible up to 8,000 units ahead; mirror traffic up to 2,800 units behind
-        bool visibleInThisPass = isMirror ? (relZ < 0 && relZ > -2800) : (relZ > 0 && relZ < 8000);
+        bool visibleInThisPass = isMirror ? (relZ < 0 && relZ > -5500) : (relZ > 0 && relZ < 26000);
         if (!visibleInThisPass) continue;
 
         qreal relCamZ = isMirror ? -relZ : relZ;
-        if (relCamZ <= 50) continue;
+        if (relCamZ <= 8) continue;
 
-        qreal scale = camDepth / relCamZ;
-        const RoadSegment& npcSeg = track.findSegment(npc.worldZ);
-        qreal screenY = currentHorizon - (scale * (npcSeg.elevation - eyeHeight) * (h / 2.0));
-        qreal screenX = (w / 2.0) + (scale * (npc.x * roadWidth - (isMirror ? -camX : camX)) * (w / 2.0));
+        // Find which projected segment index the car is on
+        int n = qRound(relCamZ / (qreal)segLen);
+        if (n < 0 || n >= segs.size()) continue;
 
-        // Orientation logic:
-        // Oncoming cars face player (show headlights/front view) in forward view, and face away (rear view) in mirror.
-        // Same-direction cars face away (rear view) in forward view, and face player (front view) in mirror.
+        const RoadSegment& s = segs[n];
+        if (s.p1.camZ <= 8.0) continue;
+
+        // Position car on the curved road surface: center + lane offset
+        qreal screenX = s.p1.screenX + (npc.x * s.p1.screenW);
+        qreal screenY = s.p1.screenY;
+        qreal scale = s.p1.scale;
+
         bool showRear = isMirror ? npc.isOncoming : !npc.isOncoming;
         bool flashLeft = (npc.turnLeft || npc.hazardLights) && npc.blinkerFlash;
         bool flashRight = (npc.turnRight || npc.hazardLights) && npc.blinkerFlash;
         const QImage& carImg = RasterAssets::instance().getVehicle(npc.type, showRear, npc.isBraking, flashLeft, flashRight);
 
-        // Perspective car projection (a car is ~470 world units wide, semi-truck ~580)
         qreal projScale = scale * (w / 2.0);
         qreal worldCarW = (npc.type == VEHICLE_TRUCK_SEMI) ? 580.0 : 470.0;
         int cw = qRound(projScale * worldCarW);
         int ch = qRound(cw * ((qreal)carImg.height() / carImg.width()));
 
-        if (cw >= 3 && screenX + cw / 2 > -80 && screenX - cw / 2 < w + 80 && screenY > 30 && screenY < h + 250) {
+        if (cw >= 3 && screenX + cw / 2 > -100 && screenX - cw / 2 < w + 100 && screenY > 10 && screenY < h + 250) {
             RenderableSprite rs;
-            rs.camZ = relCamZ;
+            rs.camZ = s.p1.camZ;
             rs.screenX = screenX;
             rs.screenY = screenY;
             rs.scale = scale;
@@ -722,34 +767,54 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
             rs.height = ch;
             rs.rotation = isMirror ? -npc.skidAngle : npc.skidAngle;
             rs.drawSkidSmoke = npc.isCrashing && (qAbs(npc.skidAngle) > 0.06);
+            rs.anchorYRatio = 0.825; // Tires make physical contact with asphalt!
+            rs.clipY = s.clip;
+
+            // Distance atmosphere fade: cars smoothly materialize out of horizon haze with zero pop-in
+            qreal distFade = 1.0;
+            if (!isMirror && relCamZ > 12000.0) {
+                distFade = qBound(0.0, (26000.0 - relCamZ) / 10000.0, 1.0);
+            } else if (isMirror && relCamZ > 3000.0) {
+                distFade = qBound(0.0, (5500.0 - relCamZ) / 2000.0, 1.0);
+            }
+            rs.opacity = distFade;
+
             spritesToDraw.append(rs);
         }
     }
 
+    // Depth-sort back to front
     std::sort(spritesToDraw.begin(), spritesToDraw.end(), [](const RenderableSprite& a, const RenderableSprite& b) {
         return a.camZ > b.camZ;
     });
 
+    // Render sprites with proper anchors and hill occlusion clipping
     for (const RenderableSprite& s : spritesToDraw) {
         p.save();
-        p.translate(s.screenX, s.screenY - s.height / 2.0);
+        if (s.opacity < 0.999) {
+            p.setOpacity(s.opacity);
+        }
+        if (s.clipY < s.screenY) {
+            p.setClipRect(QRectF(-200, -200, w + 400, s.clipY + 200));
+        }
+        p.translate(s.screenX, s.screenY - (s.height * s.anchorYRatio));
         if (qAbs(s.rotation) > 0.001) {
             p.rotate(s.rotation * 57.2958);
         }
-        QRect destRect(-s.width / 2, -s.height / 2, s.width, s.height);
+        QRect destRect(-s.width / 2, 0, s.width, s.height);
         p.drawImage(destRect, s.sprite);
 
         // Realistic tire skid smoke puffs billowed across asphalt during crashes
         if (s.drawSkidSmoke) {
             p.setPen(Qt::NoPen);
             int smokeRadius = qMax(4, qRound(s.width * 0.16));
-            QRadialGradient smokeGrad(0, s.height * 0.42, smokeRadius);
+            QRadialGradient smokeGrad(0, s.height * 0.72, smokeRadius);
             smokeGrad.setColorAt(0.0, QColor(220, 220, 225, 170));
             smokeGrad.setColorAt(0.6, QColor(190, 195, 205, 90));
             smokeGrad.setColorAt(1.0, QColor(170, 175, 185, 0));
             p.setBrush(smokeGrad);
-            p.drawEllipse(QPointF(-s.width * 0.30, s.height * 0.42), smokeRadius, smokeRadius * 0.7);
-            p.drawEllipse(QPointF(s.width * 0.30, s.height * 0.42), smokeRadius, smokeRadius * 0.7);
+            p.drawEllipse(QPointF(-s.width * 0.30, s.height * 0.72), smokeRadius, smokeRadius * 0.7);
+            p.drawEllipse(QPointF(s.width * 0.30, s.height * 0.72), smokeRadius, smokeRadius * 0.7);
         }
         p.restore();
     }
@@ -768,10 +833,13 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
         qreal relCamZ = isMirror ? -relZ : relZ;
         if (relCamZ < 450) continue; // Close-range collision sparks rendered on windshield layer
 
-        qreal scale = camDepth / relCamZ;
-        const RoadSegment& spkSeg = track.findSegment(spk.worldZ);
-        qreal screenY = currentHorizon - (scale * (spkSeg.elevation + spk.y - eyeHeight) * (h / 2.0));
-        qreal screenX = (w / 2.0) + (scale * (spk.x * roadWidth - (isMirror ? -camX : camX)) * (w / 2.0));
+        int n = qRound(relCamZ / (qreal)segLen);
+        if (n < 0 || n >= segs.size()) continue;
+
+        const RoadSegment& s = segs[n];
+        qreal scale = s.p1.scale;
+        qreal screenX = s.p1.screenX + (spk.x * s.p1.screenW);
+        qreal screenY = s.p1.screenY - (scale * spk.y * (h / 2.0));
 
         qreal alphaRatio = spk.life / spk.maxLife;
         int alpha = qBound(0, (int)(alphaRatio * 255), 255);
@@ -852,6 +920,48 @@ void RasterRenderer::renderSideWindowsAndAdjacentCars(QPainter& p, const GameEng
     p.setPen(QColor(255, 255, 255, 45));
     p.drawLine(w - 160, sRefY + 80, w, sRefY);
     p.restore();
+
+    // Vehicles actively pulling alongside or passing right outside driver & passenger side glass
+    const QVector<NPCCar>& traffic = engine.getTraffic();
+    int totalTrackLen = engine.getTrack().trackLength();
+
+    for (const NPCCar& npc : traffic) {
+        qreal relZ = npc.worldZ - player.worldZ;
+        if (relZ < -totalTrackLen / 2) relZ += totalTrackLen;
+        if (relZ > totalTrackLen / 2) relZ -= totalTrackLen;
+
+        // Passing alongside window (-140 to +140 units)
+        if (qAbs(relZ) > 140.0) continue;
+
+        qreal latDiff = npc.x - player.x;
+
+        // Passing on left side (Driver side window)
+        if (latDiff < -0.22) {
+            p.save();
+            p.setClipPath(leftPath);
+            const QImage& sideCar = RasterAssets::instance().getVehicleSide(npc.type, false);
+            qreal t = (relZ + 140.0) / 280.0; // 1.0 when ahead, 0.0 when behind
+            int carW = 270;
+            int carH = qRound(carW * ((qreal)sideCar.height() / sideCar.width()));
+            int carX = qRound(-70 + t * 140);
+            int carY = qRound(260 - t * 40);
+            p.drawImage(QRect(carX, carY, carW, carH), sideCar);
+            p.restore();
+        }
+        // Passing on right side (Passenger side window)
+        else if (latDiff > 0.22) {
+            p.save();
+            p.setClipPath(rightPath);
+            const QImage& sideCar = RasterAssets::instance().getVehicleSide(npc.type, true);
+            qreal t = (relZ + 140.0) / 280.0;
+            int carW = 270;
+            int carH = qRound(carW * ((qreal)sideCar.height() / sideCar.width()));
+            int carX = qRound(w - carW + 70 - t * 140);
+            int carY = qRound(260 - t * 40);
+            p.drawImage(QRect(carX, carY, carW, carH), sideCar);
+            p.restore();
+        }
+    }
 }
 
 void RasterRenderer::renderSidewaysPOV(QPainter& p, const GameEngine& engine, int w, int h, bool lookLeft) {
@@ -1145,37 +1255,79 @@ void RasterRenderer::renderWindshieldHolographicHUD(QPainter& p, const GameEngin
     Q_UNUSED(h);
     const PlayerCar& player = engine.getPlayer();
 
-    // Modern Fighter Jet / Corvette holographic HUD projected on windshield
-    int hudX = dashX + 370;
-    int hudY = dashY + 395;
+    // Professional Supercar / Fighter Jet Holographic HUD projected on windshield
+    int hudX = dashX + 375;
+    int hudY = dashY + 365;
 
     p.save();
-    p.setOpacity(0.85);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setOpacity(0.88);
 
-    // Glowing Cyan holographic speed
-    QFont hudFont("Arial", 16, QFont::Bold);
-    p.setFont(hudFont);
-    p.setPen(QColor(0, 240, 255, 220));
-    p.drawText(hudX - 60, hudY, QString("%1").arg((int)player.speed));
+    // 1. Sleek Cyber HUD Framing Brackets [  ]
+    p.setPen(QPen(QColor(0, 240, 255, 120), 1.5));
+    p.drawLine(hudX - 85, hudY - 26, hudX - 95, hudY - 26);
+    p.drawLine(hudX - 95, hudY - 26, hudX - 95, hudY + 38);
+    p.drawLine(hudX - 95, hudY + 38, hudX - 85, hudY + 38);
+
+    p.drawLine(hudX + 85, hudY - 26, hudX + 95, hudY - 26);
+    p.drawLine(hudX + 95, hudY - 26, hudX + 95, hudY + 38);
+    p.drawLine(hudX + 95, hudY + 38, hudX + 85, hudY + 38);
+
+    // 2. Large Glowing Digital Speed Readout
+    QFont spdFont("Arial", 22, QFont::Bold);
+    p.setFont(spdFont);
+    p.setPen(QColor(0, 240, 255));
+    p.drawText(QRect(hudX - 90, hudY - 22, 110, 32), Qt::AlignRight | Qt::AlignVCenter, QString("%1").arg((int)player.speed));
 
     QFont unitFont("Arial", 8, QFont::Bold);
     p.setFont(unitFont);
-    p.setPen(QColor(0, 210, 230, 180));
-    p.drawText(hudX - 25, hudY, "KM/H");
+    p.setPen(QColor(0, 200, 230, 180));
+    p.drawText(QRect(hudX + 26, hudY - 8, 45, 16), Qt::AlignLeft, "KM/H");
 
-    // Gear
+    // 3. Glowing Race Gear Badge
     QString gearStr;
-    if (player.gear == -1) gearStr = "R";
-    else if (player.gear == 0) gearStr = "N";
-    else gearStr = QString("D%1").arg(player.gear);
+    QColor gearCol = QColor(0, 240, 255);
+    if (player.gear == -1) { gearStr = "R"; gearCol = QColor(255, 50, 50); }
+    else if (player.gear == 0) { gearStr = "N"; gearCol = QColor(255, 200, 40); }
+    else { gearStr = QString("D%1").arg(player.gear); }
 
-    p.drawText(hudX + 25, hudY, gearStr);
+    QRect gearBox(hudX + 24, hudY - 24, 32, 18);
+    p.setBrush(QColor(gearCol.red(), gearCol.green(), gearCol.blue(), 35));
+    p.setPen(QPen(gearCol, 1));
+    p.drawRoundedRect(gearBox, 3, 3);
+    QFont gf("Arial", 8, QFont::Bold);
+    p.setFont(gf);
+    p.setPen(gearCol);
+    p.drawText(gearBox, Qt::AlignCenter, gearStr);
 
-    // Mini HUD RPM bar
-    QRectF hudRpmBar(hudX - 60, hudY + 6, 110, 4);
-    p.fillRect(hudRpmBar, QColor(0, 120, 160, 100));
+    // 4. Multi-Stage LED Shift Lights Tachometer (12 discrete glowing blocks)
     qreal rpmRatio = qBound(0.0, (player.rpm - 800) / 7200.0, 1.0);
-    p.fillRect(QRectF(hudX - 60, hudY + 6, 110 * rpmRatio, 4), (rpmRatio > 0.85) ? QColor(255, 50, 50, 220) : QColor(0, 240, 255, 220));
+    int totalLed = 12;
+    int ledW = 10;
+    int ledH = 4;
+    int ledGap = 2;
+    int startLedX = hudX - 70;
+    int ledY = hudY + 16;
+
+    int litLeds = qRound(rpmRatio * totalLed);
+    for (int i = 0; i < totalLed; ++i) {
+        QRect ledRect(startLedX + i * (ledW + ledGap), ledY, ledW, ledH);
+        if (i < litLeds) {
+            QColor ledCol = (i < 6) ? QColor(40, 230, 90) : ((i < 9) ? QColor(255, 210, 30) : QColor(255, 45, 45));
+            if (rpmRatio > 0.94 && (int)(m_rainAnimTime * 20) % 2 == 0) {
+                ledCol = QColor(255, 255, 255); // Flashing white shift warning!
+            }
+            p.fillRect(ledRect, ledCol);
+        } else {
+            p.fillRect(ledRect, QColor(0, 60, 80, 80));
+        }
+    }
+
+    // 5. Dynamic Turbo Boost indicator
+    p.setPen(QColor(0, 180, 220, 150));
+    QFont bf("Arial", 6, QFont::Bold);
+    p.setFont(bf);
+    p.drawText(startLedX, ledY + 14, QString("BOOST  %1 BAR").arg(QString::number(player.boostBar * 1.6, 'f', 1)));
 
     p.restore();
 }
@@ -1197,10 +1349,12 @@ void RasterRenderer::renderRearviewMirror(QPainter& p, const GameEngine& engine,
     p.fillRect(w / 2 - 12, 0, 24, 22, QColor(20, 22, 26));
     p.fillRect(w / 2 - 7, 18, 14, 10, QColor(48, 52, 60)); // Ball joint pivot
 
-    QImage mirrorBuffer(mw, mh, QImage::Format_ARGB32_Premultiplied);
-    mirrorBuffer.fill(QColor(12, 16, 24));
+    if (m_rearMirrorBuffer.size() != QSize(mw, mh)) {
+        m_rearMirrorBuffer = QImage(mw, mh, QImage::Format_ARGB32_Premultiplied);
+    }
+    m_rearMirrorBuffer.fill(QColor(12, 16, 24));
 
-    QPainter mp(&mirrorBuffer);
+    QPainter mp(&m_rearMirrorBuffer);
     mp.setRenderHint(QPainter::Antialiasing, true);
     mp.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
@@ -1222,7 +1376,7 @@ void RasterRenderer::renderRearviewMirror(QPainter& p, const GameEngine& engine,
 
     // 3. Realistic Sports Car Interior Frame Reflections
     // Rear headliner arch
-    p.setPen(Qt::NoPen);
+    mp.setPen(Qt::NoPen);
     QPainterPath headliner;
     headliner.moveTo(0, 0);
     headliner.lineTo(mw, 0);
@@ -1272,7 +1426,7 @@ void RasterRenderer::renderRearviewMirror(QPainter& p, const GameEngine& engine,
     mirrorClip.addRoundedRect(mx + 6, my + 6, mw - 12, mh - 12, 14, 14);
     p.save();
     p.setClipPath(mirrorClip);
-    p.drawImage(mx, my, mirrorBuffer);
+    p.drawImage(mx, my, m_rearMirrorBuffer);
     p.restore();
 
     // Outer titanium/chrome bevel frame
@@ -1321,11 +1475,13 @@ void RasterRenderer::renderSideMirrors(QPainter& p, const GameEngine& engine, in
         p.setPen(Qt::NoPen);
         p.drawRoundedRect(QRectF(lx + 3, ly + mh * 0.35, 5, mh * 0.32), 2, 2);
 
-        // Mirror reflection buffer
-        QImage leftBuffer(mw, mh, QImage::Format_ARGB32_Premultiplied);
-        leftBuffer.fill(QColor(12, 16, 24));
+        // Mirror reflection buffer (reused member buffer, zero heap allocations)
+        if (m_leftMirrorBuffer.size() != QSize(mw, mh)) {
+            m_leftMirrorBuffer = QImage(mw, mh, QImage::Format_ARGB32_Premultiplied);
+        }
+        m_leftMirrorBuffer.fill(QColor(12, 16, 24));
 
-        QPainter lmp(&leftBuffer);
+        QPainter lmp(&m_leftMirrorBuffer);
         lmp.setRenderHint(QPainter::Antialiasing, true);
         lmp.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
@@ -1338,8 +1494,8 @@ void RasterRenderer::renderSideMirrors(QPainter& p, const GameEngine& engine, in
         lmp.drawImage(QRect(0, 0, mw, (int)(mh * 0.55)), bg, QRect(bgOffset, 0, bgW - bgOffset, bgH));
 
         // Real-time Road and Receding Traffic in Left Lanes
-        renderRoad(lmp, engine, mw, mh, true, -roadWidth * 0.42);
-        renderSceneryAndCars(lmp, engine, mw, mh, true, -roadWidth * 0.42);
+        renderRoad(lmp, engine, mw, mh, true, -roadWidth * 0.45);
+        renderSceneryAndCars(lmp, engine, mw, mh, true, -roadWidth * 0.45);
 
         // REALISTIC CAR FLANK REFLECTION:
         // The rightmost 20% reflects your own sports car's red door flank and rear fender!
@@ -1376,7 +1532,7 @@ void RasterRenderer::renderSideMirrors(QPainter& p, const GameEngine& engine, in
         leftClip.addRoundedRect(lx + 8, ly + 8, mw - 16, mh - 16, 12, 12);
         p.save();
         p.setClipPath(leftClip);
-        p.drawImage(lx, ly, leftBuffer);
+        p.drawImage(lx, ly, m_leftMirrorBuffer);
         p.restore();
 
         // Glass bevel rim
@@ -1412,11 +1568,13 @@ void RasterRenderer::renderSideMirrors(QPainter& p, const GameEngine& engine, in
         p.setPen(Qt::NoPen);
         p.drawRoundedRect(QRectF(rx + mw - 8, ry + mh * 0.35, 5, mh * 0.32), 2, 2);
 
-        // Mirror reflection buffer
-        QImage rightBuffer(mw, mh, QImage::Format_ARGB32_Premultiplied);
-        rightBuffer.fill(QColor(12, 16, 24));
+        // Mirror reflection buffer (reused member buffer, zero heap allocations)
+        if (m_rightMirrorBuffer.size() != QSize(mw, mh)) {
+            m_rightMirrorBuffer = QImage(mw, mh, QImage::Format_ARGB32_Premultiplied);
+        }
+        m_rightMirrorBuffer.fill(QColor(12, 16, 24));
 
-        QPainter rmp(&rightBuffer);
+        QPainter rmp(&m_rightMirrorBuffer);
         rmp.setRenderHint(QPainter::Antialiasing, true);
         rmp.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
@@ -1429,8 +1587,8 @@ void RasterRenderer::renderSideMirrors(QPainter& p, const GameEngine& engine, in
         rmp.drawImage(QRect(0, 0, mw, (int)(mh * 0.55)), bg, QRect(bgOffset, 0, bgW - bgOffset, bgH));
 
         // Real-time Road and Receding Traffic in Right Lanes
-        renderRoad(rmp, engine, mw, mh, true, roadWidth * 0.42);
-        renderSceneryAndCars(rmp, engine, mw, mh, true, roadWidth * 0.42);
+        renderRoad(rmp, engine, mw, mh, true, roadWidth * 0.45);
+        renderSceneryAndCars(rmp, engine, mw, mh, true, roadWidth * 0.45);
 
         // REALISTIC CAR FLANK REFLECTION:
         // The leftmost 20% reflects your own sports car's right door flank and rear fender!
@@ -1471,7 +1629,7 @@ void RasterRenderer::renderSideMirrors(QPainter& p, const GameEngine& engine, in
         rightClip.addRoundedRect(rx + 8, ry + 8, mw - 16, mh - 16, 12, 12);
         p.save();
         p.setClipPath(rightClip);
-        p.drawImage(rx, ry, rightBuffer);
+        p.drawImage(rx, ry, m_rightMirrorBuffer);
         p.restore();
 
         // Glass bevel rim
@@ -2067,13 +2225,18 @@ void RasterRenderer::renderWindshieldEffects(QPainter& p, const GameEngine& engi
         p.fillRect(0, 0, w, h, vignette);
     }
 
-    // Red Damage Impact Vignette Flash
+    // Red Damage Impact Vignette Flash — enhanced for clarity
     if (player.damageFlashTimer > 0) {
-        qreal intensity = qMin(1.0, player.damageFlashTimer / 0.65);
-        QRadialGradient damVig(w / 2.0, h / 2.0, w * 0.65);
-        damVig.setColorAt(0.0, QColor(0, 0, 0, 0));
-        damVig.setColorAt(0.65, QColor(220, 20, 20, 0));
-        damVig.setColorAt(1.0, QColor(240, 25, 25, (int)(170 * intensity)));
+        qreal intensity = qMin(1.0, player.damageFlashTimer / 1.2);
+        // Initial white flash frame for violent impacts
+        if (player.damageFlashTimer > 1.0) {
+            int flashAlpha = qBound(0, (int)(220 * (player.damageFlashTimer - 1.0) / 0.2), 180);
+            p.fillRect(0, 0, w, h, QColor(255, 255, 255, flashAlpha));
+        }
+        QRadialGradient damVig(w / 2.0, h / 2.0, w * 0.60);
+        damVig.setColorAt(0.0, QColor(200, 0, 0, (int)(30 * intensity)));
+        damVig.setColorAt(0.40, QColor(220, 20, 20, (int)(90 * intensity)));
+        damVig.setColorAt(1.0, QColor(240, 25, 25, (int)(220 * intensity)));
         p.fillRect(0, 0, w, h, damVig);
     }
 
@@ -2186,54 +2349,310 @@ void RasterRenderer::renderWindshieldEffects(QPainter& p, const GameEngine& engi
     }
 }
 
-void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int h) {
+void RasterRenderer::renderSportPedals(QPainter& p, const GameEngine& engine, int w, int h) {
     const PlayerCar& player = engine.getPlayer();
+    bool isGas = player.isAccelerating;
+    bool isBrake = player.isBraking;
 
-    p.fillRect(0, 0, w, 28, QColor(10, 12, 16, 225));
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
 
-    QFont hf("Arial", 9, QFont::Bold);
-    p.setFont(hf);
-    p.setPen(QColor(220, 230, 245));
+    // Dynamic Pedal Placement in Bottom-Right Cockpit Footwell
+    // Brake pedal: wider sports billet aluminum plate
+    // Gas pedal: longer curved racing accelerator plate
+    int brakeX = w - 215;
+    int brakeY = h - 110 + (isBrake ? 5 : 0); // Depresses when active
+    int brakeW = 85;
+    int brakeH = 82;
 
-    QString todName = "SUNSET";
-    if (engine.getTimeOfDay() == TIME_DAY) todName = "DAY ☀️";
-    else if (engine.getTimeOfDay() == TIME_NIGHT) todName = "NIGHT 🌙";
-    else todName = "SUNSET 🌅";
+    int gasX = w - 115;
+    int gasY = h - 122 + (isGas ? 6 : 0); // Depresses when active
+    int gasW = 75;
+    int gasH = 96;
 
-    const RoadSegment& cseg = engine.getTrack().findSegment(player.worldZ);
-    QString diffTag = "[NORMAL]";
-    if (engine.getDifficulty() == DIFFICULTY_EASY) diffTag = "[EASY]";
-    else if (engine.getDifficulty() == DIFFICULTY_PRO) diffTag = "[PRO 2.5x]";
+    // 1. BRAKE PEDAL ASSEMBLY
+    {
+        // Dark Footwell Recess / Mounting Bracket
+        p.fillRect(brakeX - 4, brakeY - 4, brakeW + 8, brakeH + 8, QColor(8, 10, 14, 180));
 
-    QString trackTag = QString("%1 %2 [SEC %3] %4").arg(engine.getTrack().getInfo().name.toUpper()).arg(diffTag).arg(player.currentSector).arg(todName);
-    p.drawText(16, 19, trackTag);
+        // Pedal Plate Gradient
+        QLinearGradient bpGrad(brakeX, brakeY, brakeX + brakeW, brakeY + brakeH);
+        if (isBrake) {
+            // Glowing Racing Red When Pressed
+            bpGrad.setColorAt(0.0, QColor(255, 70, 70));
+            bpGrad.setColorAt(0.5, QColor(210, 25, 25));
+            bpGrad.setColorAt(1.0, QColor(140, 12, 12));
+        } else {
+            // Brushed Billet Aluminum Sport Plate
+            bpGrad.setColorAt(0.0, QColor(200, 208, 220));
+            bpGrad.setColorAt(0.4, QColor(145, 155, 168));
+            bpGrad.setColorAt(1.0, QColor(95, 105, 118));
+        }
+        p.setBrush(bpGrad);
+        p.setPen(QPen(isBrake ? QColor(255, 120, 120) : QColor(230, 238, 250), isBrake ? 2.5 : 1.5));
+        p.drawRoundedRect(brakeX, brakeY, brakeW, brakeH, 8, 8);
 
-    // Controls Help in center
-    p.setPen(QColor(150, 165, 185));
-    QFont cf("Arial", 8, QFont::Normal);
-    p.setFont(cf);
-    p.drawText(w / 2 - 235, 19, "WASD: Drive | M: MENU | Q/E: Look | B: Rear | N: Light | R: Fix");
+        // Anti-Slip Rubber Grips / Cross-Drilled Holes
+        p.setBrush(isBrake ? QColor(80, 10, 10) : QColor(25, 28, 35));
+        p.setPen(Qt::NoPen);
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 3; ++c) {
+                p.drawEllipse(brakeX + 18 + c * 24, brakeY + 14 + r * 18, 10, 10);
+            }
+        }
 
-    // Right-side Telemetry: Health & Crashes & Score
-    int rx = w - 380;
+        // Label: "BRAKE" & "[R-CLICK]"
+        QFont bf("Arial", 8, QFont::Bold);
+        p.setFont(bf);
+        p.setPen(isBrake ? Qt::white : QColor(22, 25, 30));
+        p.drawText(QRect(brakeX, brakeY + brakeH - 24, brakeW, 12), Qt::AlignCenter, "BRAKE");
+        QFont sf("Arial", 6, QFont::Normal);
+        p.setFont(sf);
+        p.setPen(isBrake ? QColor(255, 220, 220) : QColor(45, 52, 62));
+        p.drawText(QRect(brakeX, brakeY + brakeH - 12, brakeW, 10), Qt::AlignCenter, "[R-CLICK]");
 
-    // Health
-    QColor hCol = (player.health > 60) ? QColor(40, 225, 90) : ((player.health > 30) ? QColor(250, 180, 20) : QColor(255, 45, 45));
-    p.setPen(hCol);
-    p.setFont(hf);
-    p.drawText(rx, 19, QString("❤️ %1%").arg(player.health));
-
-    // Crashes
-    p.setPen(player.crashCount > 0 ? QColor(255, 100, 100) : QColor(160, 220, 255));
-    p.drawText(rx + 75, 19, QString("💥 %1").arg(player.crashCount));
-
-    // Combo
-    if (player.nearMissCombo > 1) {
-        p.setPen(QColor(255, 210, 50));
-        p.drawText(rx + 155, 19, QString("🔥 x%1").arg(player.nearMissCombo));
+        // Dynamic Brake Caliper Glow Halo when Active
+        if (isBrake) {
+            QRadialGradient bglow(brakeX + brakeW / 2, brakeY + brakeH / 2, brakeW * 0.9);
+            bglow.setColorAt(0.0, QColor(255, 40, 40, 100));
+            bglow.setColorAt(0.6, QColor(255, 20, 20, 30));
+            bglow.setColorAt(1.0, QColor(255, 0, 0, 0));
+            p.setBrush(bglow);
+            p.drawEllipse(brakeX - 16, brakeY - 16, brakeW + 32, brakeH + 32);
+        }
     }
 
-    // Score
+    // 2. ACCELERATOR (GAS) PEDAL ASSEMBLY
+    {
+        // Dark Footwell Recess
+        p.fillRect(gasX - 4, gasY - 4, gasW + 8, gasH + 8, QColor(8, 10, 14, 180));
+
+        // Pedal Plate Gradient
+        QLinearGradient gpGrad(gasX, gasY, gasX + gasW, gasY + gasH);
+        if (isGas) {
+            // Glowing Electric Neon Green / Cyan When Throttle Applied
+            gpGrad.setColorAt(0.0, QColor(60, 255, 140));
+            gpGrad.setColorAt(0.5, QColor(20, 210, 100));
+            gpGrad.setColorAt(1.0, QColor(10, 140, 65));
+        } else {
+            // Polished Aluminum Racing Pedal
+            gpGrad.setColorAt(0.0, QColor(210, 218, 230));
+            gpGrad.setColorAt(0.4, QColor(155, 165, 178));
+            gpGrad.setColorAt(1.0, QColor(105, 115, 128));
+        }
+        p.setBrush(gpGrad);
+        p.setPen(QPen(isGas ? QColor(140, 255, 190) : QColor(235, 242, 252), isGas ? 2.5 : 1.5));
+        p.drawRoundedRect(gasX, gasY, gasW, gasH, 8, 8);
+
+        // Vertical Anti-Slip Ribbed Rubber Inserts
+        p.setBrush(isGas ? QColor(10, 70, 35) : QColor(25, 28, 35));
+        p.setPen(Qt::NoPen);
+        for (int c = 0; c < 3; ++c) {
+            p.drawRoundedRect(gasX + 16 + c * 18, gasY + 12, 8, gasH - 42, 3, 3);
+        }
+
+        // Label: "GAS" & "[L-CLICK]"
+        QFont bf("Arial", 8, QFont::Bold);
+        p.setFont(bf);
+        p.setPen(isGas ? Qt::white : QColor(22, 25, 30));
+        p.drawText(QRect(gasX, gasY + gasH - 26, gasW, 13), Qt::AlignCenter, "GAS");
+        QFont sf("Arial", 6, QFont::Normal);
+        p.setFont(sf);
+        p.setPen(isGas ? QColor(220, 255, 230) : QColor(45, 52, 62));
+        p.drawText(QRect(gasX, gasY + gasH - 13, gasW, 11), Qt::AlignCenter, "[L-CLICK]");
+
+        // Dynamic Throttle Glow Halo when Active
+        if (isGas) {
+            QRadialGradient gglow(gasX + gasW / 2, gasY + gasH / 2, gasW * 0.9);
+            gglow.setColorAt(0.0, QColor(0, 255, 130, 95));
+            gglow.setColorAt(0.6, QColor(0, 220, 110, 30));
+            gglow.setColorAt(1.0, QColor(0, 200, 100, 0));
+            p.setBrush(gglow);
+            p.drawEllipse(gasX - 16, gasY - 16, gasW + 32, gasH + 32);
+        }
+    }
+
+    p.restore();
+}
+
+void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int h) {
+    Q_UNUSED(h);
+    const PlayerCar& player = engine.getPlayer();
+
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    int barH = 50;
+
+    // 1. Sleek Carbon & Frosted Glass Top Racing Header
+    QLinearGradient barGrad(0, 0, 0, barH);
+    barGrad.setColorAt(0.0, QColor(8, 12, 18, 245));
+    barGrad.setColorAt(0.7, QColor(14, 18, 28, 225));
+    barGrad.setColorAt(1.0, QColor(10, 14, 22, 210));
+    p.fillRect(0, 0, w, barH, barGrad);
+
+    // Glowing Lower Accent Line with Racing Cyan / Gold Highlights
+    QLinearGradient lineGrad(0, 0, w, 0);
+    lineGrad.setColorAt(0.0, QColor(0, 240, 255, 180));
+    lineGrad.setColorAt(0.5, QColor(255, 200, 50, 200));
+    lineGrad.setColorAt(1.0, QColor(0, 240, 255, 180));
+    p.fillRect(0, barH - 2, w, 2, lineGrad);
+
+    // -------------------------------------------------------------
+    // LEFT POD: TRACK & SECTOR TELEMETRY
+    // -------------------------------------------------------------
+    int lx = 14;
+    // Track Name Pill
+    QRect trackPill(lx, 8, 195, 20);
+    p.setBrush(QColor(0, 240, 255, 30));
+    p.setPen(QPen(QColor(0, 240, 255, 140), 1));
+    p.drawRoundedRect(trackPill, 4, 4);
+    QFont tf("Arial", 8, QFont::Bold);
+    p.setFont(tf);
     p.setPen(QColor(0, 240, 255));
-    p.drawText(w - 135, 19, QString("SCORE: %1").arg(player.score));
+    p.drawText(trackPill, Qt::AlignCenter, engine.getTrack().getInfo().name.toUpper());
+
+    // Difficulty Pill
+    QString diffText = "NORMAL";
+    QColor diffColor = QColor(255, 200, 40);
+    if (engine.getDifficulty() == DIFFICULTY_EASY) {
+        diffText = "EASY";
+        diffColor = QColor(40, 220, 90);
+    } else if (engine.getDifficulty() == DIFFICULTY_PRO) {
+        diffText = "PRO 2.5x";
+        diffColor = QColor(255, 45, 65);
+    }
+    QRect diffPill(lx + 202, 8, 65, 20);
+    p.setBrush(QColor(diffColor.red(), diffColor.green(), diffColor.blue(), 35));
+    p.setPen(QPen(diffColor, 1));
+    p.drawRoundedRect(diffPill, 4, 4);
+    QFont df("Arial", 7, QFont::Bold);
+    p.setFont(df);
+    p.setPen(diffColor);
+    p.drawText(diffPill, Qt::AlignCenter, diffText);
+
+    // Sub-row: Sector + Distance + Mini Track Progress Bar
+    QFont subF("Arial", 8, QFont::Normal);
+    p.setFont(subF);
+    p.setPen(QColor(165, 185, 210));
+    p.drawText(lx + 2, 42, QString("SEC %1/4").arg(player.currentSector));
+    p.drawText(lx + 56, 42, QString("•  %1 KM").arg(QString::number(player.distanceTraveled, 'f', 1)));
+
+    // Mini Circuit Progress Bar
+    int barX = lx + 115;
+    int barW = 152;
+    int barY = 34;
+    p.fillRect(barX, barY, barW, 6, QColor(25, 32, 45));
+    qreal circuitProg = fmod(player.worldZ, (qreal)engine.getTrack().trackLength()) / (qreal)engine.getTrack().trackLength();
+    p.fillRect(barX, barY, qRound(barW * circuitProg), 6, QColor(0, 240, 255));
+    // Sector tick marks
+    p.setPen(QColor(50, 65, 90));
+    for (int s = 1; s < 4; ++s) {
+        p.drawLine(barX + s * (barW / 4), barY - 1, barX + s * (barW / 4), barY + 7);
+    }
+    // Player dot
+    p.setBrush(QColor(255, 255, 255));
+    p.setPen(QPen(QColor(0, 240, 255), 1.5));
+    p.drawEllipse(QPointF(barX + barW * circuitProg, barY + 3), 4, 4);
+
+    // -------------------------------------------------------------
+    // CENTER POD: RACING APEX NAVIGATOR / TURN ADVISORY
+    // -------------------------------------------------------------
+    int cx = w / 2;
+    const RoadSegment& aheadSeg = engine.getTrack().findSegment(player.worldZ + 550.0);
+    qreal aheadCurve = aheadSeg.curve;
+
+    QRect navPill(cx - 130, 7, 260, 22);
+    if (qAbs(aheadCurve) > 1.8) {
+        // Sharp Hairpin Turn Warning!
+        bool isLeft = (aheadCurve > 0);
+        p.setBrush(QColor(220, 35, 35, 50));
+        p.setPen(QPen(QColor(255, 50, 50), 1.5));
+        p.drawRoundedRect(navPill, 4, 4);
+        QFont nf("Arial", 8, QFont::Bold);
+        p.setFont(nf);
+        p.setPen(QColor(255, 60, 60));
+        p.drawText(navPill, Qt::AlignCenter, isLeft ? "◀◀ SHARP HAIRPIN LEFT [BRAKE]" : "SHARP HAIRPIN RIGHT [BRAKE] ▶▶");
+    } else if (qAbs(aheadCurve) > 0.6) {
+        // Sweeping Curve Advisory
+        bool isLeft = (aheadCurve > 0);
+        p.setBrush(QColor(255, 180, 20, 35));
+        p.setPen(QPen(QColor(255, 190, 30), 1));
+        p.drawRoundedRect(navPill, 4, 4);
+        QFont nf("Arial", 8, QFont::Bold);
+        p.setFont(nf);
+        p.setPen(QColor(255, 210, 50));
+        p.drawText(navPill, Qt::AlignCenter, isLeft ? "◀ SWEEPING CURVE LEFT" : "SWEEPING CURVE RIGHT ▶");
+    } else {
+        // Fast Expressway Straight
+        p.setBrush(QColor(20, 30, 45, 160));
+        p.setPen(QPen(QColor(45, 60, 85), 1));
+        p.drawRoundedRect(navPill, 4, 4);
+        QFont nf("Arial", 8, QFont::Bold);
+        p.setFont(nf);
+        p.setPen(QColor(180, 215, 245));
+        p.drawText(navPill, Qt::AlignCenter, "▲ EXPRESSWAY SPEEDWAY ▲");
+    }
+
+    // Controls cheatsheet pill below turn advisory
+    QFont cf("Arial", 7, QFont::Normal);
+    p.setFont(cf);
+    p.setPen(QColor(135, 155, 180));
+    p.drawText(QRect(cx - 240, 31, 480, 16), Qt::AlignCenter, "WASD or MOUSE: [L-CLICK] GAS  •  [R-CLICK] BRAKE  •  [SPACE] DRIFT  •  [M] MENU");
+
+    // -------------------------------------------------------------
+    // RIGHT POD: SCORE, COMBO, AND VEHICLE INTEGRITY
+    // -------------------------------------------------------------
+    int rx = w - 16;
+
+    // Score box (Digital Monospace style)
+    QFont scoreFont("Arial", 11, QFont::Bold);
+    p.setFont(scoreFont);
+    p.setPen(QColor(0, 240, 255));
+    QString scoreStr = QString("SCORE  %1").arg(player.score);
+    p.drawText(QRect(rx - 220, 6, 220, 20), Qt::AlignRight | Qt::AlignVCenter, scoreStr);
+
+    // Combo Pill (Fiery Glowing Multiplier)
+    if (player.nearMissCombo > 1) {
+        QRect comboPill(rx - 310, 7, 82, 20);
+        p.setBrush(QColor(255, 130, 20, 45));
+        p.setPen(QPen(QColor(255, 160, 30), 1.5));
+        p.drawRoundedRect(comboPill, 4, 4);
+        QFont cmbf("Arial", 8, QFont::Bold);
+        p.setFont(cmbf);
+        p.setPen(QColor(255, 210, 40));
+        p.drawText(comboPill, Qt::AlignCenter, QString("🔥 x%1 COMBO").arg(player.nearMissCombo));
+    }
+
+    // Vehicle Health Segmented Armor Bar (10 discrete glowing segments)
+    int hpX = rx - 200;
+    int hpY = 32;
+    int totalSegs = 10;
+    int segW = 10;
+    int segH = 10;
+    int segGap = 3;
+
+    int activeSegs = qBound(0, qRound((player.health / 100.0) * totalSegs), totalSegs);
+    QColor hpCol = (player.health > 60) ? QColor(40, 225, 90) : ((player.health > 30) ? QColor(255, 180, 30) : QColor(255, 45, 45));
+
+    for (int s = 0; s < totalSegs; ++s) {
+        QRect segRect(hpX + s * (segW + segGap), hpY, segW, segH);
+        if (s < activeSegs) {
+            p.fillRect(segRect, hpCol);
+        } else {
+            p.fillRect(segRect, QColor(30, 36, 48));
+        }
+    }
+
+    // Health label
+    QFont hpf("Arial", 7, QFont::Bold);
+    p.setFont(hpf);
+    p.setPen(hpCol);
+    p.drawText(QRect(hpX - 60, hpY - 1, 54, 12), Qt::AlignRight | Qt::AlignVCenter, QString("%1%").arg(player.health));
+
+    // Collision tally
+    p.setPen(player.crashCount > 0 ? QColor(255, 110, 110) : QColor(140, 170, 205));
+    p.drawText(QRect(rx - 65, hpY - 1, 65, 12), Qt::AlignRight | Qt::AlignVCenter, QString("💥 %1 HITS").arg(player.crashCount));
+
+    p.restore();
 }

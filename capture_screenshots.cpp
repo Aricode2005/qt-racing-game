@@ -5,7 +5,7 @@
 #include "GameWindow.h"
 
 int main(int argc, char *argv[]) {
-    qputenv("QT_QPA_PLATFORM", "offscreen");
+    // Note: Do not use "offscreen" platform on Windows MinGW as it lacks a font engine and produces glyph boxes
     QApplication app(argc, argv);
 
     GameWindow window;
@@ -51,6 +51,26 @@ int main(int argc, char *argv[]) {
         traffic[2].speed = 140.0;
         traffic[2].type = VEHICLE_COMPACT_BLUE;
     }
+    if (traffic.size() > 3) {
+        traffic[3].worldZ = 8530.0; // alongside player -> clearly visible in left quarter window!
+        traffic[3].assignedLane = 1;
+        traffic[3].x = -0.42;
+        traffic[3].speed = 185.0;
+        traffic[3].type = VEHICLE_SPORTS_RED;
+    }
+
+    // 0. Capture Driving View with Passing Cars, Side Mirrors & Interactive Sports Pedals
+    window.setShowMainMenu(false);
+    p.isAccelerating = true; // Shows Gas Pedal depressed with glowing electric neon aura
+    p.lookingLeft = false;
+    p.lookingRight = false;
+    p.povPan = 0.0;
+    QPixmap pixPedals(1280, 720);
+    pixPedals.fill(Qt::black);
+    window.render(&pixPedals);
+    pixPedals.save("C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/side_mirrors_and_pedals_view.png");
+    qDebug() << "Saved side mirrors and pedals screenshot";
+    p.isAccelerating = false;
 
     // 1. Capture driving view with super-tall elevated billboard & Infotainment WEB BROWSER
     window.setShowMainMenu(false);
@@ -62,7 +82,7 @@ int main(int argc, char *argv[]) {
     QPixmap pixWeb(1280, 720);
     pixWeb.fill(Qt::black);
     window.render(&pixWeb);
-    QString pathWeb = "/Users/mukutchatterjee/.gemini/antigravity-ide/brain/b782a276-c0be-482f-819f-90edc44bfd0b/dashboard_web_browser_view.png";
+    QString pathWeb = "C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/dashboard_web_browser_view.png";
     pixWeb.save(pathWeb);
     qDebug() << "Saved web browser screenshot to" << pathWeb;
 
@@ -73,7 +93,7 @@ int main(int argc, char *argv[]) {
     QPixmap pixMusic(1280, 720);
     pixMusic.fill(Qt::black);
     window.render(&pixMusic);
-    QString pathMusic = "/Users/mukutchatterjee/.gemini/antigravity-ide/brain/b782a276-c0be-482f-819f-90edc44bfd0b/dashboard_music_player_view.png";
+    QString pathMusic = "C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/dashboard_music_player_view.png";
     pixMusic.save(pathMusic);
     qDebug() << "Saved music player screenshot to" << pathMusic;
 
@@ -83,14 +103,14 @@ int main(int argc, char *argv[]) {
     QPixmap pixWx(1280, 720);
     pixWx.fill(Qt::black);
     window.render(&pixWx);
-    pixWx.save("/Users/mukutchatterjee/.gemini/antigravity-ide/brain/b782a276-c0be-482f-819f-90edc44bfd0b/dashboard_weather_radar_view.png");
+    pixWx.save("C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/dashboard_weather_radar_view.png");
 
     // 1d. Capture Infotainment GPS Navigation Mode
     engine.setInfotainmentMode(INFO_MODE_RADAR);
     QPixmap pixGps(1280, 720);
     pixGps.fill(Qt::black);
     window.render(&pixGps);
-    pixGps.save("/Users/mukutchatterjee/.gemini/antigravity-ide/brain/b782a276-c0be-482f-819f-90edc44bfd0b/dashboard_gps_nav_view.png");
+    pixGps.save("C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/dashboard_gps_nav_view.png");
 
     // Reset to web page 0 for subsequent driving scenes
     engine.setInfotainmentMode(INFO_MODE_WEB);
@@ -102,7 +122,7 @@ int main(int argc, char *argv[]) {
     QPixmap pixSide(1280, 720);
     pixSide.fill(Qt::black);
     window.render(&pixSide);
-    QString pathSide = "/Users/mukutchatterjee/.gemini/antigravity-ide/brain/b782a276-c0be-482f-819f-90edc44bfd0b/sideways_poles_hoardings_view.png";
+    QString pathSide = "C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/sideways_poles_hoardings_view.png";
     pixSide.save(pathSide);
     qDebug() << "Saved sideways glance screenshot to" << pathSide;
 
@@ -113,7 +133,7 @@ int main(int argc, char *argv[]) {
     QPixmap pixHoard(1280, 720);
     pixHoard.fill(Qt::black);
     window.render(&pixHoard);
-    QString pathHoard = "/Users/mukutchatterjee/.gemini/antigravity-ide/brain/b782a276-c0be-482f-819f-90edc44bfd0b/neon_hoarding_front_view.png";
+    QString pathHoard = "C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/neon_hoarding_front_view.png";
     pixHoard.save(pathHoard);
     qDebug() << "Saved neon hoarding screenshot to" << pathHoard;
 
@@ -122,7 +142,7 @@ int main(int argc, char *argv[]) {
     QPixmap pix2(1280, 720);
     pix2.fill(Qt::black);
     window.render(&pix2);
-    QString path2 = "/Users/mukutchatterjee/.gemini/antigravity-ide/brain/b782a276-c0be-482f-819f-90edc44bfd0b/main_menu_difficulty_view.png";
+    QString path2 = "C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/main_menu_difficulty_view.png";
     pix2.save(path2);
     qDebug() << "Saved main menu screenshot to" << path2;
 
@@ -157,7 +177,7 @@ int main(int argc, char *argv[]) {
     QPixmap pixCrash(1280, 720);
     pixCrash.fill(Qt::black);
     window.render(&pixCrash);
-    QString pathCrash = "/Users/mukutchatterjee/.gemini/antigravity-ide/brain/b782a276-c0be-482f-819f-90edc44bfd0b/realistic_crash_impact_view.png";
+    QString pathCrash = "C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/realistic_crash_impact_view.png";
     pixCrash.save(pathCrash);
     qDebug() << "Saved realistic crash screenshot to" << pathCrash;
 

@@ -23,7 +23,10 @@ protected:
     void paintEvent(QPaintEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void focusOutEvent(QFocusEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
 
 private slots:
     void onGameLoop();
@@ -38,8 +41,17 @@ private:
 
     QTimer m_loopTimer;
     QElapsedTimer m_frameTimer;
+    qreal m_lastDt = 0.016;
+    qreal m_smoothDt = 0.016;
 
-    bool m_showMainMenu = false;
+    bool m_keyGas = false;
+    bool m_keyBrake = false;
+    bool m_mouseGas = false;
+    bool m_mouseBrake = false;
+    QRect m_brakePedalRect;
+    QRect m_gasPedalRect;
+
+    bool m_showMainMenu = true;
     QRect m_diffButtons[3];
     QRect m_todButtons[3];
     QRect m_trackCards[4];

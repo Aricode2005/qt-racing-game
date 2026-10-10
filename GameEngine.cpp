@@ -287,7 +287,8 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
         m_player.speed = qBound(0.0, m_player.speed, m_player.maxSpeed);
     }
 
-    qreal worldSpeed = (m_player.speed / 3.6) * 14.0 * dt;
+    qreal speedBoost = 1.0 + qBound(0.0, (m_player.speed - 60.0) / 300.0, 0.25);
+    qreal worldSpeed = (m_player.speed / 3.6) * 14.0 * speedBoost * dt;
     m_player.worldZ += worldSpeed;
     m_player.distanceTraveled += (m_player.speed / 3600.0) * dt;
 
@@ -491,10 +492,10 @@ void GameEngine::spawnTraffic() {
         m_traffic.append(adj2);
     }
 
-    // 3. Forward Traffic Platoons (+140 to +2400 units)
-    // Distributed in realistic clusters of 2-3 cars with guaranteed open passing lines
+    // 3. Forward Traffic Corridor (+350 to +18,000 units)
+    // Distributed across highway horizon with realistic spacing so cars appear far in distance
     int remainingCount = totalTrafficCount - m_traffic.size();
-    qreal curZ = m_player.worldZ + 160.0;
+    qreal curZ = m_player.worldZ + 350.0;
 
     for (int i = 0; i < remainingCount; ++i) {
         NPCCar npc;
@@ -508,7 +509,7 @@ void GameEngine::spawnTraffic() {
             npc.targetX = npc.x;
             npc.type = (i % 2 == 0) ? VEHICLE_SPORTS_RED : VEHICLE_SEDAN_SILVER;
             npc.speed = 115.0 + speedDelta + (QRandomGenerator::global()->generate() % 30);
-            curZ += 120.0 + (QRandomGenerator::global()->generate() % 90);
+            curZ += 450.0 + (QRandomGenerator::global()->generate() % 350);
         } else {
             // Forward lane with anti-block guarantee: pick a lane that avoids 3-wide blocks
             int lane = 1 + (i % 3);
@@ -528,11 +529,11 @@ void GameEngine::spawnTraffic() {
                 npc.speed = 118.0 + speedDelta + (QRandomGenerator::global()->generate() % 22);
             }
 
-            // Cluster spacing: small gap within platoon (65-85m), larger gap between platoons (150-210m)
+            // Varied distance spreading across the full forward road
             if (i % 2 == 0) {
-                curZ += 75.0 + (QRandomGenerator::global()->generate() % 30);
+                curZ += 320.0 + (QRandomGenerator::global()->generate() % 180);
             } else {
-                curZ += 165.0 + (QRandomGenerator::global()->generate() % 70);
+                curZ += 680.0 + (QRandomGenerator::global()->generate() % 350);
             }
         }
 
@@ -552,7 +553,7 @@ void GameEngine::updateTraffic(qreal dt) {
         qreal worldSpeed = (npc.speed / 3.6) * 14.0 * dt;
 
         if (npc.isOncoming) {
-            // Oncoming traffic moves towards player (decreasing Z)
+            // Oncoming traffic moves toward player (decreasing Z)
             npc.worldZ -= worldSpeed;
             if (npc.worldZ < 0) {
                 npc.worldZ += totalTrackLen;
@@ -580,9 +581,9 @@ void GameEngine::updateTraffic(qreal dt) {
             if (relDist < -totalTrackLen / 2) relDist += totalTrackLen;
             if (relDist > totalTrackLen / 2) relDist -= totalTrackLen;
 
-            // Once oncoming car passes behind player (-220m), recycle ahead in oncoming Lane 0
-            if (relDist < -220) {
-                npc.worldZ = m_player.worldZ + 1100 + (QRandomGenerator::global()->generate() % 1600);
+            // Once oncoming car passes behind player (-3000m, well past mirror range), recycle ahead far on horizon
+            if (relDist < -3000) {
+                npc.worldZ = m_player.worldZ + 16000 + (QRandomGenerator::global()->generate() % 10000);
                 if (npc.worldZ >= totalTrackLen) npc.worldZ -= totalTrackLen;
                 npc.assignedLane = 0;
                 npc.x = laneCoords[0];
@@ -626,9 +627,9 @@ void GameEngine::updateTraffic(qreal dt) {
             if (relDist < -totalTrackLen / 2) relDist += totalTrackLen;
             if (relDist > totalTrackLen / 2) relDist -= totalTrackLen;
 
-            // Continuous recycling: when car falls too far behind (-680m), recycle ahead
-            if (relDist < -680) {
-                npc.worldZ = m_player.worldZ + 950 + (QRandomGenerator::global()->generate() % 1450);
+            // Continuous recycling: when car falls far behind (-4500m, receding completely out of mirrors), recycle far ahead
+            if (relDist < -4500) {
+                npc.worldZ = m_player.worldZ + 14000 + (QRandomGenerator::global()->generate() % 9000);
                 if (npc.worldZ >= totalTrackLen) npc.worldZ -= totalTrackLen;
 
                 int lane = 1 + (QRandomGenerator::global()->generate() % 3);
@@ -745,7 +746,7 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
         qreal lateralOffset = m_player.x - npc.x; // Positive: player is to right of NPC
 
         // Realistic Multi-Phase Physical Collision
-        if (m_player.collisionCooldown <= 0 && qAbs(relZ) < 88 && lateralDist < 0.28) {
+        if (m_player.collisionCooldown <= 0 && qAbs(relZ) < 70 && lateralDist < 0.22) {
             qreal deltaV = npc.isOncoming ? (m_player.speed + npc.speed) : qAbs(m_player.speed - npc.speed);
             qreal mass = (npc.type == VEHICLE_TRUCK_SEMI) ? 2.8 : ((npc.type == VEHICLE_COMPACT_BLUE) ? 0.75 : 1.0);
             int damageTaken = 0;
@@ -810,9 +811,9 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
 
             m_player.health = qMax(0, m_player.health - damageTaken);
             m_player.crashCount++;
-            m_player.collisionCooldown = 1.4;
-            m_player.crashTimer = 2.5;
-            m_player.damageFlashTimer = 0.65;
+            m_player.collisionCooldown = 0.8;
+            m_player.crashTimer = 3.0;
+            m_player.damageFlashTimer = 1.2;
             m_player.nearMissCombo = 1;
             m_player.score = qMax(0, m_player.score - 300);
 
@@ -829,7 +830,7 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
         }
 
         // Near Miss Check
-        if (!npc.nearMissAwarded && relZ < 0 && relZ > -110 && lateralDist < 0.42 && m_player.speed > 95) {
+        if (!npc.nearMissAwarded && relZ < 0 && relZ > -110 && lateralDist < 0.38 && lateralDist > 0.22 && m_player.speed > 80) {
             npc.nearMissAwarded = true;
             int basePoints = npc.isOncoming ? 450 : 180;
             qreal scoreScale = (m_difficulty == DIFFICULTY_EASY) ? 1.0 : ((m_difficulty == DIFFICULTY_PRO) ? 2.5 : 1.5);
