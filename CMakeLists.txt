@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-set(CMAKE_PREFIX_PATH "/Users/mukutchatterjee/Qt/6.11.1/macos")
+# set(CMAKE_PREFIX_PATH "/Users/mukutchatterjee/Qt/6.11.1/macos")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia)
 

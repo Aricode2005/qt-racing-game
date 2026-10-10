@@ -12,7 +12,7 @@ public:
     RasterRenderer();
 
     // Main render call
-    void render(QPainter& painter, const GameEngine& engine, int screenWidth, int screenHeight);
+    void render(QPainter& painter, const GameEngine& engine, int screenWidth, int screenHeight, qreal dt = 0.016);
 
 private:
     void renderBackdrop(QPainter& p, const GameEngine& engine, int w, int h);
@@ -33,10 +33,17 @@ private:
     void renderAnimatedWipers(QPainter& p, const GameEngine& engine, int w, int h, int dashX, int dashY);
     void renderWindshieldHolographicHUD(QPainter& p, const GameEngine& engine, int w, int h, int dashX, int dashY);
     void renderWindshieldEffects(QPainter& p, const GameEngine& engine, int w, int h);
+    void renderSportPedals(QPainter& p, const GameEngine& engine, int w, int h);
     void renderHUD(QPainter& p, const GameEngine& engine, int w, int h);
 
     qreal m_cameraHeading = 0;
     qreal m_rainAnimTime = 0;
+    QImage m_rearMirrorBuffer;
+    QImage m_leftMirrorBuffer;
+    QImage m_rightMirrorBuffer;
+    bool m_mirrorsInitialized = false;
+    QVector<RoadSegment> m_forwardSegments;
+    QVector<RoadSegment> m_mirrorSegments;
 };
 
 #endif // RASTERRENDERER_H
