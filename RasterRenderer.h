@@ -20,8 +20,8 @@ private:
     void renderRoad(QPainter& p, const GameEngine& engine, int w, int h, bool isMirror, qreal mirrorOffsetAngle = 0);
     void renderSceneryAndCars(QPainter& p, const GameEngine& engine, int w, int h, bool isMirror, qreal mirrorOffsetAngle = 0);
     void renderNightHeadlights(QPainter& p, const GameEngine& engine, int w, int h);
-    void renderRearviewMirror(QPainter& p, const GameEngine& engine, int w, int h);
-    void renderSideMirrors(QPainter& p, const GameEngine& engine, int w, int h);
+    void renderRearviewMirror(QPainter& p, const GameEngine& engine, int w, int h, bool updateContent = true);
+    void renderSideMirrors(QPainter& p, const GameEngine& engine, int w, int h, bool updateLeft = true, bool updateRight = true);
     void renderSideWindowsAndAdjacentCars(QPainter& p, const GameEngine& engine, int w, int h);
     void renderSidewaysPOV(QPainter& p, const GameEngine& engine, int w, int h, bool lookLeft);
     void renderCockpit(QPainter& p, const GameEngine& engine, int w, int h);
@@ -38,6 +38,7 @@ private:
 
     qreal m_cameraHeading = 0;
     qreal m_rainAnimTime = 0;
+    quint64 m_frameCounter = 0;
     QImage m_rearMirrorBuffer;
     QImage m_leftMirrorBuffer;
     QImage m_rightMirrorBuffer;
