@@ -12,6 +12,7 @@ GameWindow::GameWindow(QWidget *parent)
     setMinimumSize(960, 540);
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_OpaquePaintEvent, true);
+    setAttribute(Qt::WA_NoSystemBackground, true);
 
     // Initialize procedural raster assets
     RasterAssets::instance().initialize();
@@ -24,11 +25,11 @@ GameWindow::GameWindow(QWidget *parent)
         m_audio.playCrash();
     });
 
-    // 60 FPS Game Loop
+    // High Refresh Rate Smooth Game Loop (up to 120 FPS capable)
     connect(&m_loopTimer, &QTimer::timeout, this, &GameWindow::onGameLoop);
     m_frameTimer.start();
     m_loopTimer.setTimerType(Qt::PreciseTimer);
-    m_loopTimer.start(16); // ~60 FPS
+    m_loopTimer.start(8);
 }
 
 void GameWindow::onGameLoop() {
@@ -36,9 +37,9 @@ void GameWindow::onGameLoop() {
     qreal rawDt = elapsedMs / 1000.0;
     if (rawDt > 0.05) rawDt = 0.05;
 
-    // Exponential smoothing filter to eliminate Windows timer quantization jitter
+    // High-framerate responsive delta filter: eliminates timer quantization jitter without clamping to 30 FPS
     if (m_smoothDt <= 0.001) m_smoothDt = 0.0166;
-    m_smoothDt = m_smoothDt * 0.75 + qBound(0.008, rawDt, 0.033) * 0.25;
+    m_smoothDt = m_smoothDt * 0.35 + qBound(0.004, rawDt, 0.040) * 0.65;
     qreal dt = m_smoothDt;
     m_lastDt = dt;
 
