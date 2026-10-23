@@ -151,6 +151,43 @@ void RasterAssets::generateCockpitAssets() {
     p.fillRect(110, 0, W - 220, 42, roofGrad);
 
     // Dashboard main leather body
+    // Sculpted Supercar Front Hood / Bonnet visible outside lower windshield (Liquid Gunmetal Metallic)
+    {
+        QPainterPath hoodPath;
+        hoodPath.moveTo(235, 478);
+        hoodPath.cubicTo(360, 442, 520, 434, 650, 436);
+        hoodPath.cubicTo(780, 438, 920, 448, 1045, 476);
+        hoodPath.lineTo(1065, 510);
+        hoodPath.lineTo(220, 510);
+        hoodPath.closeSubpath();
+
+        QLinearGradient hoodGrad(640, 432, 640, 500);
+        hoodGrad.setColorAt(0.0, QColor(74, 82, 94));
+        hoodGrad.setColorAt(0.35, QColor(48, 54, 64));
+        hoodGrad.setColorAt(0.75, QColor(28, 32, 38));
+        hoodGrad.setColorAt(1.0, QColor(16, 18, 22));
+        p.setBrush(hoodGrad);
+        p.setPen(QPen(QColor(95, 105, 120), 1.5));
+        p.drawPath(hoodPath);
+
+        // Specular sky reflection across center power-bulge & twin aero hood creases
+        p.setPen(QPen(QColor(185, 200, 220, 140), 2.0));
+        p.drawLine(455, 444, 385, 474);
+        p.drawLine(825, 446, 895, 474);
+        p.setPen(QPen(QColor(14, 16, 20, 190), 1.5));
+        p.drawLine(458, 445, 388, 475);
+        p.drawLine(822, 447, 892, 475);
+
+        // Twin recessed carbon-fiber hood heat-extractor vents
+        p.setBrush(QColor(16, 18, 22));
+        p.setPen(QPen(QColor(62, 68, 78), 1));
+        QPolygon leftVent, rightVent;
+        leftVent  << QPoint(470, 448) << QPoint(535, 446) << QPoint(525, 458) << QPoint(458, 460);
+        rightVent << QPoint(745, 446) << QPoint(810, 448) << QPoint(822, 460) << QPoint(755, 458);
+        p.drawPolygon(leftVent);
+        p.drawPolygon(rightVent);
+    }
+
     const int dashY = 460;
     QPainterPath dashPath;
     dashPath.moveTo(0, dashY + 40);
@@ -170,7 +207,54 @@ void RasterAssets::generateCockpitAssets() {
     p.setPen(QColor(48, 52, 60));
     p.drawPath(dashPath);
 
-    p.setPen(QPen(QColor(220, 40, 40, 190), 2, Qt::DashLine));
+    // Lower Dashboard Two-Tone Luxury Bolster (Warm Espresso / Saddle-Tan Nappa Leather Band)
+    {
+        QPainterPath lowerTrim;
+        lowerTrim.moveTo(0, dashY + 94);
+        lowerTrim.cubicTo(150, dashY + 84, 520, dashY + 74, 615, dashY + 78);
+        lowerTrim.lineTo(970, dashY + 78);
+        lowerTrim.cubicTo(1080, dashY + 78, 1180, dashY + 82, W, dashY + 90);
+        lowerTrim.lineTo(W, H);
+        lowerTrim.lineTo(0, H);
+        lowerTrim.closeSubpath();
+
+        QLinearGradient trimGrad(0, dashY + 74, 0, H);
+        trimGrad.setColorAt(0.0, QColor(74, 52, 38));
+        trimGrad.setColorAt(0.14, QColor(56, 39, 28));
+        trimGrad.setColorAt(0.45, QColor(34, 24, 18));
+        trimGrad.setColorAt(1.0, QColor(16, 12, 10));
+        p.setBrush(trimGrad);
+        p.setPen(QPen(QColor(150, 118, 84, 190), 1.5));
+        p.drawPath(lowerTrim);
+
+        // Brushed Satin Champagne-Titanium Trim Spear across dashboard
+        QLinearGradient spearGrad(0, dashY + 74, W, dashY + 84);
+        spearGrad.setColorAt(0.0, QColor(125, 120, 110));
+        spearGrad.setColorAt(0.5, QColor(190, 182, 166));
+        spearGrad.setColorAt(1.0, QColor(115, 110, 100));
+        p.setPen(QPen(QBrush(spearGrad), 3.5, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(972, dashY + 78, W - 12, dashY + 86);
+        p.drawLine(12, dashY + 92, 165, dashY + 84);
+    }
+
+    // Recessed Dark Forged-Carbon Instrument Binnacle Well
+    {
+        QPainterPath binnacleWell;
+        binnacleWell.moveTo(155, dashY + 42);
+        binnacleWell.cubicTo(205, dashY - 34, 395, dashY - 34, 540, dashY + 25);
+        binnacleWell.lineTo(540, dashY + 195);
+        binnacleWell.lineTo(155, dashY + 195);
+        binnacleWell.closeSubpath();
+        QLinearGradient wellGrad(350, dashY - 30, 350, dashY + 195);
+        wellGrad.setColorAt(0.0, QColor(11, 12, 15));
+        wellGrad.setColorAt(0.5, QColor(18, 20, 24));
+        wellGrad.setColorAt(1.0, QColor(9, 10, 12));
+        p.setBrush(wellGrad);
+        p.setPen(QPen(QColor(68, 72, 82), 1.5));
+        p.drawPath(binnacleWell);
+    }
+
+    p.setPen(QPen(QColor(225, 178, 98, 210), 2, Qt::DashLine));
     QPainterPath stitchPath;
     stitchPath.moveTo(160, dashY + 18);
     stitchPath.cubicTo(220, dashY - 38, 380, dashY - 38, 480, dashY - 30);
@@ -202,6 +286,48 @@ void RasterAssets::generateCockpitAssets() {
     drawAirVent(160, dashY + 50, 70, 45);
     drawAirVent(550, dashY + 50, 55, 45);
     drawAirVent(980, dashY + 55, 75, 45);
+
+    // Sculpted 3D Instrument Binnacle Cowl & Warm Champagne-Amber Ambient Interior Light Pipe
+    {
+        QPainterPath cowlRim;
+        cowlRim.moveTo(152, dashY + 22);
+        cowlRim.cubicTo(215, dashY - 42, 390, dashY - 42, 505, dashY - 26);
+        p.setPen(QPen(QColor(115, 110, 102, 190), 3.5, Qt::SolidLine, Qt::RoundCap));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(cowlRim);
+
+        // Warm Champagne-Gold / Ice-Amber Ambient LED light pipe across passenger fascia
+        p.setPen(QPen(QColor(245, 185, 85, 70), 5.0, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(982, dashY + 42, W - 18, dashY + 48);
+        p.setPen(QPen(QColor(255, 228, 170, 215), 1.8, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(982, dashY + 42, W - 18, dashY + 48);
+
+        // Brushed Titanium & Satin Amber "ENGINE START/STOP" Push Button on Console Left Bezel
+        QPointF startBtn(576, dashY + 132);
+        p.setBrush(QColor(32, 35, 40));
+        p.setPen(QPen(QColor(175, 168, 155), 2));
+        p.drawEllipse(startBtn, 18, 18);
+        QRadialGradient btnGrad(startBtn.x() - 3, startBtn.y() - 4, 15);
+        btnGrad.setColorAt(0.0, QColor(78, 82, 92));
+        btnGrad.setColorAt(0.7, QColor(38, 40, 46));
+        btnGrad.setColorAt(1.0, QColor(20, 22, 26));
+        p.setBrush(btnGrad);
+        p.setPen(QPen(QColor(235, 182, 88), 1.5));
+        p.drawEllipse(startBtn, 13, 13);
+        p.setFont(QFont("Arial", 4, QFont::Bold));
+        p.setPen(QColor(255, 225, 160));
+        p.drawText(QRectF(startBtn.x() - 13, startBtn.y() - 7, 26, 14), Qt::AlignCenter, "START\nENGINE");
+
+        // Knurled Titanium "DRIVE MODE" Rotary Selector below Start Button
+        QPointF modeDial(576, dashY + 182);
+        p.setBrush(QColor(22, 24, 28));
+        p.setPen(QPen(QColor(180, 172, 158, 210), 1.8));
+        p.drawEllipse(modeDial, 15, 15);
+        p.setBrush(QColor(54, 58, 66));
+        p.drawEllipse(modeDial, 9, 9);
+        p.setPen(QPen(QColor(245, 188, 80), 2));
+        p.drawLine(modeDial, QPointF(modeDial.x() + 7, modeDial.y() - 7));
+    }
 
     p.end();
 
@@ -367,7 +493,7 @@ void RasterAssets::generateSidePOVs() {
         p.drawPolygon(doorSill);
 
         // Red leather accent stitching along the door armrest
-        p.setPen(QPen(QColor(220, 40, 40, 200), 2, Qt::DashLine));
+        p.setPen(QPen(QColor(225, 178, 98, 210), 2, Qt::DashLine));
         p.drawLine(10, 495, (int)(W * 0.70), 530);
 
         // Carbon fiber trim inlay
@@ -433,7 +559,7 @@ void RasterAssets::generateSidePOVs() {
         // Steering wheel rim arc visible on right edge
         p.setPen(QPen(QColor(35, 38, 44), 28));
         p.drawArc(W - 90, 400, 220, 220, 70 * 16, 140 * 16);
-        p.setPen(QPen(QColor(225, 35, 35), 4));
+        p.setPen(QPen(QColor(238, 188, 78), 4));
         p.drawArc(W - 90, 400, 220, 220, 135 * 16, 12 * 16); // Center red stripe
     }
 
@@ -457,7 +583,7 @@ void RasterAssets::generateSidePOVs() {
         p.drawPolygon(doorSill);
 
         // Red leather accent stitching along passenger door
-        p.setPen(QPen(QColor(220, 40, 40, 200), 2, Qt::DashLine));
+        p.setPen(QPen(QColor(225, 178, 98, 210), 2, Qt::DashLine));
         p.drawLine((int)(W * 0.30), 530, W - 10, 495);
 
         // Passenger sports bucket seat on the left (ergonomic racing contour)
@@ -524,6 +650,33 @@ void RasterAssets::generateSteeringWheel() {
     const qreal innerR = 150.0;
     const qreal spokeW = 34.0;
 
+    // Brushed Satin Champagne-Titanium Gearshift Paddles (- Downshift Left / + Upshift Right) behind spokes
+    {
+        QLinearGradient padGrad(0, center.y() - 95, 0, center.y() + 25);
+        padGrad.setColorAt(0.0, QColor(195, 188, 172));
+        padGrad.setColorAt(0.5, QColor(128, 122, 112));
+        padGrad.setColorAt(1.0, QColor(68, 65, 60));
+        p.setBrush(padGrad);
+        p.setPen(QPen(QColor(225, 218, 202), 1.5));
+
+        QPolygonF leftPaddle, rightPaddle;
+        leftPaddle  << QPointF(center.x() - 138, center.y() - 88)
+                    << QPointF(center.x() - 112, center.y() - 98)
+                    << QPointF(center.x() - 98,  center.y() + 18)
+                    << QPointF(center.x() - 132, center.y() + 8);
+        rightPaddle << QPointF(center.x() + 138, center.y() - 88)
+                    << QPointF(center.x() + 112, center.y() - 98)
+                    << QPointF(center.x() + 98,  center.y() + 18)
+                    << QPointF(center.x() + 132, center.y() + 8);
+        p.drawPolygon(leftPaddle);
+        p.drawPolygon(rightPaddle);
+
+        p.setFont(QFont("Arial", 13, QFont::Bold));
+        p.setPen(QColor(245, 192, 85));
+        p.drawText(QRectF(center.x() - 136, center.y() - 78, 28, 28), Qt::AlignCenter, "-");
+        p.drawText(QRectF(center.x() + 108, center.y() - 78, 28, 28), Qt::AlignCenter, "+");
+    }
+
     QPainterPath rimPath;
     rimPath.addEllipse(center, outerR, outerR);
     QPainterPath innerHole;
@@ -539,6 +692,47 @@ void RasterAssets::generateSteeringWheel() {
     p.setBrush(rimGrad);
     p.setPen(QPen(QColor(15, 16, 18), 2));
     p.drawPath(rimPath);
+
+    // Two-Tone Warm Espresso / Saddle-Tan Nappa Leather Side Grips (9 o'clock & 3 o'clock)
+    {
+        auto drawLeatherGripArc = [&](qreal startDeg, qreal spanDeg) {
+            QPainterPath grip;
+            grip.arcMoveTo(center.x() - outerR, center.y() - outerR, outerR * 2, outerR * 2, startDeg);
+            grip.arcTo(center.x() - outerR, center.y() - outerR, outerR * 2, outerR * 2, startDeg, spanDeg);
+            qreal endRad = qDegreesToRadians(startDeg + spanDeg);
+            grip.lineTo(center.x() + innerR * qCos(endRad), center.y() - innerR * qSin(endRad));
+            grip.arcTo(center.x() - innerR, center.y() - innerR, innerR * 2, innerR * 2, startDeg + spanDeg, -spanDeg);
+            grip.closeSubpath();
+
+            QRadialGradient leatherGrad(center.x() - 30, center.y() - 40, outerR);
+            leatherGrad.setColorAt(0.0, QColor(96, 66, 46));
+            leatherGrad.setColorAt(0.55, QColor(68, 46, 32));
+            leatherGrad.setColorAt(0.88, QColor(44, 30, 22));
+            leatherGrad.setColorAt(1.0, QColor(28, 19, 14));
+            p.setBrush(leatherGrad);
+            p.setPen(QPen(QColor(175, 145, 105, 160), 1.5));
+            p.drawPath(grip);
+        };
+        drawLeatherGripArc(-46.0, 92.0);   // Right grip (3 o'clock)
+        drawLeatherGripArc(134.0, 92.0);   // Left grip (9 o'clock)
+
+        // Upper carbon-fiber rim gloss clearcoat highlight arc & 5-LED shift-light array
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(180, 192, 210, 85), 3.0, Qt::SolidLine, Qt::RoundCap));
+        qreal midR = (outerR + innerR) * 0.5 + 8.0;
+        p.drawArc(QRectF(center.x() - midR, center.y() - midR, midR * 2, midR * 2), 52 * 16, 76 * 16);
+
+        // Recessed 5-LED shift-light array on top carbon rim
+        for (int i = -2; i <= 2; ++i) {
+            if (i == 0) continue; // Leave 12-o'clock center for gold stripe
+            qreal ang = qDegreesToRadians(90.0 - i * 7.5);
+            qreal lr = (outerR + innerR) * 0.5;
+            QPointF lp(center.x() + lr * qCos(ang), center.y() - lr * qSin(ang));
+            p.setBrush(qAbs(i) == 1 ? QColor(45, 225, 130) : QColor(245, 185, 55));
+            p.setPen(QPen(QColor(20, 22, 26), 1));
+            p.drawEllipse(lp, 3.5, 3.5);
+        }
+    }
 
     p.setPen(QColor(10, 12, 15, 140));
     for (int angleDeg = -50; angleDeg <= 50; angleDeg += 8) {
@@ -556,7 +750,7 @@ void RasterAssets::generateSteeringWheel() {
     redStripe.lineTo(center.x() + innerR * qCos(qDegreesToRadians(95.0)), center.y() - innerR * qSin(qDegreesToRadians(95.0)));
     redStripe.arcTo(center.x() - innerR, center.y() - innerR, innerR * 2, innerR * 2, 95, -10);
     redStripe.closeSubpath();
-    p.setBrush(QColor(230, 35, 35));
+    p.setBrush(QColor(238, 188, 78));
     p.setPen(Qt::NoPen);
     p.drawPath(redStripe);
 
@@ -602,6 +796,46 @@ void RasterAssets::generateSteeringWheel() {
     QFont badgeFont("Arial", 12, QFont::Bold);
     p.setFont(badgeFont);
     p.setPen(Qt::white);
+    // Spoke thumb-encoders, traction dials & hollowed bottom-spoke trim
+    p.setBrush(QColor(18, 20, 24));
+    p.setPen(QPen(QColor(185, 175, 150), 1.5));
+    p.drawRoundedRect(QRectF(center.x() - 7, center.y() + 68, 14, 62), 4, 4); // Hollowed lower spoke slot
+
+    // Left & right spoke rotary thumb dials + illuminated tactile buttons
+    p.setBrush(QColor(28, 30, 36));
+    p.setPen(QPen(QColor(215, 180, 110), 1.5));
+    p.drawEllipse(QPointF(center.x() - 96, center.y()), 9, 9);
+    p.drawEllipse(QPointF(center.x() + 96, center.y()), 9, 9);
+    p.setBrush(QColor(240, 188, 78));
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(QPointF(center.x() - 122, center.y() - 5), 3.5, 3.5);
+    p.setBrush(QColor(80, 215, 245));
+    p.drawEllipse(QPointF(center.x() + 122, center.y() - 5), 3.5, 3.5);
+
+    // Luxury Center Airbag Hub with Champagne-Gold Bezel & Obsidian Crest
+    QRadialGradient luxHub(center.x() - 12, center.y() - 16, 62);
+    luxHub.setColorAt(0.0, QColor(52, 55, 62));
+    luxHub.setColorAt(0.75, QColor(24, 26, 30));
+    luxHub.setColorAt(1.0, QColor(14, 15, 18));
+    p.setBrush(luxHub);
+    p.setPen(QPen(QColor(185, 168, 132), 2.5));
+    p.drawEllipse(center, 58, 58);
+
+    // Inner stitched leather ring on hub
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(QColor(220, 178, 98, 175), 1.5, Qt::DashLine));
+    p.drawEllipse(center, 46, 46);
+
+    // Center GT Medallion (Deep Obsidian Enamel + Satin Champagne-Gold Rim)
+    QRadialGradient crestGrad(center.x() - 6, center.y() - 8, 28);
+    crestGrad.setColorAt(0.0, QColor(42, 36, 28));
+    crestGrad.setColorAt(0.7, QColor(20, 18, 16));
+    crestGrad.setColorAt(1.0, QColor(10, 10, 12));
+    p.setBrush(crestGrad);
+    p.setPen(QPen(QColor(235, 192, 105), 2.2));
+    p.drawEllipse(center, 27, 27);
+    p.setFont(badgeFont);
+    p.setPen(QColor(245, 210, 135));
     p.drawText(QRectF(center.x() - 25, center.y() - 25, 50, 50), Qt::AlignCenter, "GT");
 
     p.end();
@@ -2252,6 +2486,37 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
     p.setPen(QPen(bodyColor.darker(190), 2));
     p.drawPath(body);
 
+    // 3b. Professional Multi-Volume Automotive Shading:
+    // Exterior side mirrors, crisp beltline sky-reflection crease, wheel-arch flares & glossy window glare
+    if (type != VEHICLE_TRUCK_SEMI) {
+        // Left & Right aerodynamic exterior wing mirrors
+        int mirY = carY + qRound(carHeight * 0.34);
+        p.setBrush(bodyColor.darker(125));
+        p.setPen(QPen(bodyColor.darker(185), 1.2));
+        p.drawRoundedRect(left - 2, mirY, 15, 9, 3, 3);
+        p.drawRoundedRect(right - 13, mirY, 15, 9, 3, 3);
+
+        // Specular sky-reflection highlight band across the beltline / trunk shoulder crease
+        int beltY = carY + qRound(carHeight * 0.41);
+        QLinearGradient beltGrad(left + 12, beltY, right - 12, beltY);
+        beltGrad.setColorAt(0.0, QColor(255, 255, 255, 35));
+        beltGrad.setColorAt(0.25, bodyColor.lighter(175));
+        beltGrad.setColorAt(0.5, QColor(255, 255, 255, 195));
+        beltGrad.setColorAt(0.75, bodyColor.lighter(175));
+        beltGrad.setColorAt(1.0, QColor(255, 255, 255, 35));
+        p.setPen(QPen(QBrush(beltGrad), 2.2));
+        p.drawLine(left + 14, beltY, right - 14, beltY);
+
+        // Roof crown specular highlight along upper cabin edge
+        p.setPen(QPen(QColor(255, 255, 255, 145), 1.8));
+        p.drawLine(left + 40, carY + 8, right - 40, carY + 8);
+
+        // Muscular wheel-arch flare highlights on left & right lower fenders
+        p.setPen(QPen(bodyColor.lighter(155), 2.0));
+        p.drawArc(left - 2, carY + carHeight - 40, 26, 30, 30 * 16, 110 * 16);
+        p.drawArc(right - 24, carY + carHeight - 40, 26, 30, 40 * 16, 110 * 16);
+    }
+
     // Sports Car Carbon Fiber Rear Wing / Spoiler
     if (type == VEHICLE_SPORTS_RED && rearView) {
         // Struts
@@ -2284,6 +2549,18 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
             p.setBrush(QColor(16, 22, 32));
             p.setPen(QPen(QColor(36, 42, 52), 1));
             p.drawPath(rearGlass);
+
+            // Diagonal automotive sky reflection streak across rear glass
+            {
+                QPolygon glassGlare;
+                glassGlare << QPoint(left + 52, carY + 15)
+                           << QPoint(left + 78, carY + 15)
+                           << QPoint(left + 54, carY + qRound(carHeight * 0.41))
+                           << QPoint(left + 32, carY + qRound(carHeight * 0.41));
+                p.setBrush(QColor(215, 235, 255, 52));
+                p.setPen(Qt::NoPen);
+                p.drawPolygon(glassGlare);
+            }
 
             // Defroster lines
             p.setPen(QColor(220, 160, 60, 45));

@@ -60,6 +60,14 @@ int main(int argc, char *argv[]) {
     }
 
     // 0. Capture Driving View with Passing Cars, Side Mirrors & Interactive Sports Pedals
+    if (traffic.size() >= 7) {
+        traffic[0].worldZ = 10450.0; traffic[0].x = -0.32; traffic[0].currentPosition = 1;
+        traffic[4].worldZ =  9950.0; traffic[4].x =  0.38; traffic[4].currentPosition = 2;
+        traffic[5].worldZ =  7600.0; traffic[5].x =  0.12; traffic[5].currentPosition = 6;
+        traffic[6].worldZ =  6900.0; traffic[6].x = -0.25; traffic[6].currentPosition = 7;
+    }
+    p.currentPosition = 3;
+    p.raceTime = 14.6;
     window.setShowMainMenu(false);
     p.isAccelerating = true; // Shows Gas Pedal depressed with glowing electric neon aura
     p.lookingLeft = false;
@@ -70,9 +78,39 @@ int main(int argc, char *argv[]) {
     window.render(&pixPedals);
     pixPedals.save("C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/side_mirrors_and_pedals_view.png");
     qDebug() << "Saved side mirrors and pedals screenshot";
+    p.thirdPersonView = true;
+    p.worldZ = 0.0;
+    p.x = 0.25;
+    p.raceTime = 2.4;
+    p.currentPosition = 6;
+    if (traffic.size() >= 7) {
+        traffic[0].worldZ = 3380.0; traffic[0].x = -0.46; traffic[0].currentPosition = 1;
+        traffic[1].worldZ = 2880.0; traffic[1].x =  0.46; traffic[1].currentPosition = 2;
+        traffic[2].worldZ = 2380.0; traffic[2].x = -0.22; traffic[2].currentPosition = 3;
+        traffic[3].worldZ = 1880.0; traffic[3].x =  0.24; traffic[3].currentPosition = 4;
+        traffic[4].worldZ = 1420.0; traffic[4].x = -0.54; traffic[4].currentPosition = 5;
+        for (int k = 5; k < traffic.size(); ++k) {
+            traffic[k].worldZ = -140.0 - (k - 4) * 180.0;
+            traffic[k].currentPosition = k + 2;
+        }
+    }
+    p.boostBar = 0.72;
+    QPixmap pixThird(1280, 720);
+    pixThird.fill(Qt::black);
+    window.render(&pixThird);
+    pixThird.save("C:/Users/aritr/.gemini/antigravity/brain/168d448c-b04b-47bd-9aaa-9cc446db8ad1/third_person_chase_view.png");
+    p.thirdPersonView = false;
     p.isAccelerating = false;
 
     // 1. Capture driving view with super-tall elevated billboard & Infotainment WEB BROWSER
+    if (traffic.size() >= 7) {
+        traffic[0].worldZ = 10450.0; traffic[0].x = -0.32; traffic[0].currentPosition = 1;
+        traffic[4].worldZ =  9950.0; traffic[4].x =  0.38; traffic[4].currentPosition = 2;
+        traffic[5].worldZ =  7600.0; traffic[5].x =  0.12; traffic[5].currentPosition = 6;
+        traffic[6].worldZ =  6900.0; traffic[6].x = -0.25; traffic[6].currentPosition = 7;
+    }
+    p.currentPosition = 3;
+    p.raceTime = 14.6;
     window.setShowMainMenu(false);
     p.lookingLeft = false;
     p.lookingRight = false;
@@ -147,6 +185,14 @@ int main(int argc, char *argv[]) {
     qDebug() << "Saved main menu screenshot to" << path2;
 
     // 5. Capture Realistic Crash Impact with 3D Sparks, Glass Shards, Fishtailing NPC & Skid Smoke
+    if (traffic.size() >= 7) {
+        traffic[0].worldZ = 10450.0; traffic[0].x = -0.32; traffic[0].currentPosition = 1;
+        traffic[4].worldZ =  9950.0; traffic[4].x =  0.38; traffic[4].currentPosition = 2;
+        traffic[5].worldZ =  7600.0; traffic[5].x =  0.12; traffic[5].currentPosition = 6;
+        traffic[6].worldZ =  6900.0; traffic[6].x = -0.25; traffic[6].currentPosition = 7;
+    }
+    p.currentPosition = 3;
+    p.raceTime = 14.6;
     window.setShowMainMenu(false);
     p.worldZ = 5000.0;
     p.x = 0.18;
