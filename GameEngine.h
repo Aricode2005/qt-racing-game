@@ -47,6 +47,11 @@ struct NPCCar {
     bool hazardLights = false;    // Emergency 4-way flashers
     qreal signalWarnTimer = 0;    // Pre-lane-change signal warning duration
     bool isOvertaking = false;
+    QString racerName;
+    int currentPosition = 1;
+    bool hasFinished = false;
+    qreal finishTime = 0.0;
+    qreal accelRate = 48.0;
 };
 
 enum InfotainmentMode {
@@ -114,6 +119,7 @@ struct PlayerCar {
     bool isOffroad = false;
     bool hornActive = false;
     bool lookingBack = false;
+    bool thirdPersonView = false;
 
     // Realistic Car Health & Crash Counter
     int health = 100;              // 0 to 100%
@@ -134,6 +140,22 @@ struct PlayerCar {
     qreal crashTimer = 0;
     qreal impactCameraShake = 0;  // High-frequency crash camera jolt
     qreal lateralRecoil = 0;      // Lateral displacement recoil from collision
+    qreal raceTime = 0.0;
+    qreal finishTime = 0.0;
+    bool raceFinished = false;
+    int currentPosition = 8;
+    int totalRacers = 8;
+    qreal finishLineZ = 48000.0;
+};
+
+struct RaceStandingEntry {
+    int position = 1;
+    QString name;
+    bool isPlayer = false;
+    bool hasFinished = false;
+    qreal finishTime = 0.0;
+    qreal progressZ = 0.0;
+    qreal speed = 0.0;
 };
 
 enum GameDifficulty {
@@ -170,6 +192,9 @@ public:
     void setLookRight(bool active);
     void setHorn(bool active);
     void toggleWipers() { m_player.wipersActive = !m_player.wipersActive; }
+    void toggleCameraView() { m_player.thirdPersonView = !m_player.thirdPersonView; }
+    void setThirdPersonView(bool active) { m_player.thirdPersonView = active; }
+    bool isThirdPersonView() const { return m_player.thirdPersonView; }
 
     // Getters
     const Track& getTrack() const { return m_track; }
@@ -182,6 +207,7 @@ public:
     bool isPaused() const { return m_paused; }
     void togglePause() { m_paused = !m_paused; }
     void resetPlayer();
+    QVector<RaceStandingEntry> getRaceStandings() const;
     void spawnCrashSparks(qreal z, qreal x, int count, bool isHeadOn, qreal severity);
 
     // Infotainment controls

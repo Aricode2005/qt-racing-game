@@ -17,6 +17,11 @@ struct RenderableSprite {
     qreal anchorYRatio = 1.0;
     qreal clipY = 99999.0;
     qreal opacity = 1.0;
+    bool isCar = false;
+    bool showRear = true;
+    bool isBraking = false;
+    QString racerTag;
+    int racerPos = 0;
 };
 
 RasterRenderer::RasterRenderer() {
@@ -89,9 +94,18 @@ void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int scr
             renderNightHeadlights(painter, engine, screenWidth, screenHeight);
         }
 
+        renderSpeedStreaks(painter, engine, screenWidth, screenHeight);
+
         painter.restore(); // Restore frame for interior cockpit
 
-        // Side window glass tint & diagonal reflection highlights
+        if (player.thirdPersonView) {
+            bool updateRear = (!m_mirrorsInitialized || (m_frameCounter % 2 == 0));
+            renderRearviewMirror(painter, engine, screenWidth, screenHeight, updateRear);
+            m_mirrorsInitialized = true;
+            renderThirdPersonPlayerCar(painter, engine, screenWidth, screenHeight);
+            renderThirdPersonHUD(painter, engine, screenWidth, screenHeight);
+        } else {
+            // Side window glass tint & diagonal reflection highlights
         painter.drawImage(QRect(0, 0, screenWidth, screenHeight), RasterAssets::instance().getSideGlassOverlay());
 
         // Adjacent side lane cars passing right outside the side windows!
@@ -122,11 +136,13 @@ void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int scr
         // Windshield Holographic Head-Up Display (HUD)
         renderWindshieldHolographicHUD(painter, engine, screenWidth, screenHeight, rollOffset, pitchOffset);
 
-        renderSteeringWheel(painter, engine, screenWidth, screenHeight);
+            renderSteeringWheel(painter, engine, screenWidth, screenHeight);
+        }
         renderWindshieldEffects(painter, engine, screenWidth, screenHeight);
         renderSportPedals(painter, engine, screenWidth, screenHeight);
     }
 
+    renderPostFX(painter, engine, screenWidth, screenHeight);
     renderHUD(painter, engine, screenWidth, screenHeight);
 }
 
@@ -465,6 +481,31 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     qreal camZ = player.worldZ;
 
     int drawDistance = isMirror ? 24 : 120;
+
+    // Atmospheric perspective: distant road, terrain & markings blend into the horizon haze
+    TrackTheme theme = engine.getCurrentTheme();
+    QColor fogCol;
+    {
+        TimeOfDay fogTod = engine.getTimeOfDay();
+        if (fogTod == TIME_NIGHT) {
+            fogCol = (theme == THEME_NEON_METROPOLIS) ? QColor(36, 18, 58) : QColor(16, 20, 34);
+        } else if (fogTod == TIME_SUNSET) {
+            fogCol = (theme == THEME_RED_ROCK) ? QColor(214, 128, 82) : QColor(206, 120, 96);
+        } else {
+            fogCol = (theme == THEME_RED_ROCK) ? QColor(222, 196, 168) : QColor(176, 200, 226);
+        }
+    }
+    const qreal fogFar = drawDistance * (qreal)segLen;
+    const qreal fogNear = fogFar * 0.06;
+    auto fogAmount = [&](qreal z) {
+        qreal t = qBound(0.0, (z - fogNear) / (fogFar - fogNear), 1.0);
+        return t * (2.0 - t) * 0.92; // ease-out curve, never fully opaque
+    };
+    auto fogMix = [&](const QColor& c, qreal f) {
+        return QColor(c.red() + qRound((fogCol.red() - c.red()) * f),
+                      c.green() + qRound((fogCol.green() - c.green()) * f),
+                      c.blue() + qRound((fogCol.blue() - c.blue()) * f));
+    };
     qreal maxy = h;
 
     qreal x = 0;
@@ -546,7 +587,26 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             }
         }
 
-        p.fillRect(0, s.p2.screenY, w, s.p1.screenY - s.p2.screenY + 1, terrainColor);
+        const qreal fog = fogAmount(s.p1.camZ);
+        p.fillRect(0, s.p2.screenY, w, s.p1.screenY - s.p2.screenY + 1, fogMix(terrainColor, fog));
+
+        // Gravel / dirt shoulder just outside the kerbs (grounds the road into the terrain)
+        {
+            QColor shoulderCol = (tod == TIME_NIGHT) ? QColor(22, 22, 26)
+                               : (theme == THEME_RED_ROCK ? QColor(120, 74, 44) : QColor(86, 80, 66));
+            if (s.index % 2) shoulderCol = shoulderCol.darker(108);
+            qreal o1 = s.p1.screenW * 1.32;
+            qreal o2 = s.p2.screenW * 1.32;
+            QPointF shoulderPts[4] = {
+                QPointF(s.p1.screenX - o1, s.p1.screenY),
+                QPointF(s.p2.screenX - o2, s.p2.screenY),
+                QPointF(s.p2.screenX + o2, s.p2.screenY),
+                QPointF(s.p1.screenX + o1, s.p1.screenY)
+            };
+            p.setPen(Qt::NoPen);
+            p.setBrush(fogMix(shoulderCol, fog));
+            p.drawPolygon(shoulderPts, 4);
+        }
 
         // Rumble Strips (stack array - zero heap allocations)
         qreal r1w = s.p1.screenW * 1.12;
@@ -564,7 +624,7 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             QPointF(s.p2.screenX + r2w, s.p2.screenY),
             QPointF(s.p1.screenX + r1w, s.p1.screenY)
         };
-        p.setBrush(rumbleColor);
+        p.setBrush(fogMix(rumbleColor, fog));
         p.setPen(Qt::NoPen);
         p.drawPolygon(rumblePts, 4);
 
@@ -584,8 +644,27 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             QPointF(s.p2.screenX + s.p2.screenW, s.p2.screenY),
             QPointF(s.p1.screenX + s.p1.screenW, s.p1.screenY)
         };
-        p.setBrush(roadColor);
+        p.setBrush(fogMix(roadColor, fog));
         p.drawPolygon(roadPts, 4);
+
+        // Solid white edge lines along both road edges (real highway marking)
+        {
+            QColor edgeCol = fogMix((tod == TIME_NIGHT) ? QColor(170, 175, 190) : QColor(235, 235, 240), fog);
+            qreal e1 = s.p1.screenW * 0.955;
+            qreal e2 = s.p2.screenW * 0.955;
+            qreal ew1 = qMax(0.6, s.p1.screenW * 0.014);
+            qreal ew2 = qMax(0.6, s.p2.screenW * 0.014);
+            p.setBrush(edgeCol);
+            for (int side = -1; side <= 1; side += 2) {
+                QPointF edgePts[4] = {
+                    QPointF(s.p1.screenX + side * e1 - ew1, s.p1.screenY),
+                    QPointF(s.p2.screenX + side * e2 - ew2, s.p2.screenY),
+                    QPointF(s.p2.screenX + side * e2 + ew2, s.p2.screenY),
+                    QPointF(s.p1.screenX + side * e1 + ew1, s.p1.screenY)
+                };
+                p.drawPolygon(edgePts, 4);
+            }
+        }
 
         // Lane Dividers
         for (int l = 1; l < laneCount; ++l) {
@@ -595,10 +674,10 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             qreal lw1 = qMax(1.0, s.p1.screenW * 0.018);
             qreal lw2 = qMax(1.0, s.p2.screenW * 0.018);
 
-            if (l == 1) {
+            if (false && l == 1) {
                 // Solid Double Yellow Line separating Lane 0 (Oncoming) from Lanes 1-3 (Same-Direction)
                 QColor yellowColor = (tod == TIME_NIGHT) ? QColor(210, 160, 20) : QColor(255, 205, 30);
-                p.setBrush(yellowColor);
+                p.setBrush(fogMix(yellowColor, fog));
 
                 qreal off1 = lw1 * 0.9;
                 qreal off2 = lw2 * 0.9;
@@ -620,7 +699,7 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             } else {
                 // Dashed White dividing lines between same-direction lanes
                 if ((s.index / 2) % 2 == 0) {
-                    p.setBrush((tod == TIME_NIGHT) ? QColor(180, 185, 200) : QColor(245, 245, 250));
+                    p.setBrush(fogMix((tod == TIME_NIGHT) ? QColor(180, 185, 200) : QColor(245, 245, 250), fog));
                     QPointF dashPts[4] = {
                         QPointF(p1lx - lw1, s.p1.screenY),
                         QPointF(p2lx - lw2, s.p2.screenY),
@@ -629,6 +708,143 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
                     };
                     p.drawPolygon(dashPts, 4);
                 }
+            }
+        }
+
+        // Asphalt tire-wear ruts & subtle horizon specular sheen across each lane
+        if (!isMirror && n < 55 && s.p1.screenW > 18) {
+            QColor rutCol = fogMix(roadColor.darker(114), fog);
+            QColor sheenCol = fogMix((tod == TIME_SUNSET) ? QColor(88, 66, 68) :
+                                     (tod == TIME_NIGHT  ? QColor(34, 40, 56) : QColor(70, 74, 82)), fog);
+            for (int l = 0; l < laneCount; ++l) {
+                qreal lc = -1.0 + (2.0 * l + 1.0) / (qreal)laneCount;
+                // Center lane specular highlight strip
+                qreal sw1 = s.p1.screenW * 0.045;
+                qreal sw2 = s.p2.screenW * 0.045;
+                qreal cx1 = s.p1.screenX + s.p1.screenW * lc;
+                qreal cx2 = s.p2.screenX + s.p2.screenW * lc;
+                QPointF sheenPts[4] = {
+                    QPointF(cx1 - sw1, s.p1.screenY),
+                    QPointF(cx2 - sw2, s.p2.screenY),
+                    QPointF(cx2 + sw2, s.p2.screenY),
+                    QPointF(cx1 + sw1, s.p1.screenY)
+                };
+                p.setBrush(sheenCol);
+                p.drawPolygon(sheenPts, 4);
+
+                // Dual wheel-rut wear tracks per lane
+                qreal rw1 = s.p1.screenW * 0.028;
+                qreal rw2 = s.p2.screenW * 0.028;
+                p.setBrush(rutCol);
+                for (int wheel = -1; wheel <= 1; wheel += 2) {
+                    qreal wx1 = cx1 + wheel * s.p1.screenW * 0.11;
+                    qreal wx2 = cx2 + wheel * s.p2.screenW * 0.11;
+                    QPointF rutPts[4] = {
+                        QPointF(wx1 - rw1, s.p1.screenY),
+                        QPointF(wx2 - rw2, s.p2.screenY),
+                        QPointF(wx2 + rw2, s.p2.screenY),
+                        QPointF(wx1 + rw1, s.p1.screenY)
+                    };
+                    p.drawPolygon(rutPts, 4);
+                }
+            }
+        }
+
+        // Retro-reflective Cat's-Eye Road Studs & 3D Highway Steel W-Beam Guardrails
+        if (!isMirror && n < 50 && s.p1.screenW > 22) {
+            if (s.index % 2 == 0) {
+                qreal studR = qBound(1.2, s.p1.screenW * 0.0085, 4.5);
+                // Amber center median reflector stud
+                qreal medX = s.p1.screenX - s.p1.screenW * 0.5;
+                p.setBrush(fogMix(QColor(255, 195, 40), fog * 0.6));
+                p.drawEllipse(QPointF(medX, s.p1.screenY), studR * 1.2, studR * 0.75);
+
+                // White/cyan lane reflector studs
+                p.setBrush(fogMix((tod == TIME_NIGHT) ? QColor(180, 235, 255) : QColor(255, 255, 245), fog * 0.6));
+                p.drawEllipse(QPointF(s.p1.screenX, s.p1.screenY), studR, studR * 0.7);
+                p.drawEllipse(QPointF(s.p1.screenX + s.p1.screenW * 0.5, s.p1.screenY), studR, studR * 0.7);
+
+                // Red right-shoulder & amber left-shoulder edge reflectors
+                p.setBrush(fogMix(QColor(255, 65, 55), fog * 0.6));
+                p.drawEllipse(QPointF(s.p1.screenX + s.p1.screenW * 0.96, s.p1.screenY), studR, studR * 0.7);
+                p.setBrush(fogMix(QColor(255, 185, 35), fog * 0.6));
+                p.drawEllipse(QPointF(s.p1.screenX - s.p1.screenW * 0.96, s.p1.screenY), studR, studR * 0.7);
+            }
+
+            // 3D Galvanized Steel Highway W-Beam Guardrail on both road shoulders
+            qreal railH1 = s.p1.screenW * 0.068;
+            qreal railH2 = s.p2.screenW * 0.068;
+            qreal beamH1 = railH1 * 0.52;
+            qreal beamH2 = railH2 * 0.52;
+            QColor postCol = fogMix((tod == TIME_NIGHT) ? QColor(34, 38, 46) : QColor(78, 84, 94), fog);
+            QColor railLit = fogMix((tod == TIME_NIGHT) ? QColor(78, 86, 104) :
+                                    (tod == TIME_SUNSET ? QColor(210, 175, 160) : QColor(195, 202, 214)), fog);
+            QColor railShd = fogMix((tod == TIME_NIGHT) ? QColor(38, 42, 54) : QColor(112, 118, 130), fog);
+
+            for (int side = -1; side <= 1; side += 2) {
+                qreal gx1 = s.p1.screenX + side * s.p1.screenW * 1.22;
+                qreal gx2 = s.p2.screenX + side * s.p2.screenW * 1.22;
+
+                // Vertical steel I-beam support post every 2 segments
+                if (s.index % 2 == 0) {
+                    qreal pw = qMax(1.5, s.p1.screenW * 0.014);
+                    p.fillRect(QRectF(gx1 - pw * 0.5, s.p1.screenY - railH1, pw, railH1), postCol);
+                }
+
+                // Upper corrugated W-beam strip (lit)
+                QPointF upperBeam[4] = {
+                    QPointF(gx1, s.p1.screenY - railH1),
+                    QPointF(gx2, s.p2.screenY - railH2),
+                    QPointF(gx2, s.p2.screenY - railH2 + beamH2 * 0.55),
+                    QPointF(gx1, s.p1.screenY - railH1 + beamH1 * 0.55)
+                };
+                p.setBrush(railLit);
+                p.drawPolygon(upperBeam, 4);
+
+                // Lower corrugated W-beam recess (shaded)
+                QPointF lowerBeam[4] = {
+                    QPointF(gx1, s.p1.screenY - railH1 + beamH1 * 0.55),
+                    QPointF(gx2, s.p2.screenY - railH2 + beamH2 * 0.55),
+                    QPointF(gx2, s.p2.screenY - railH2 + beamH2),
+                    QPointF(gx1, s.p1.screenY - railH1 + beamH1)
+                };
+                p.setBrush(railShd);
+                p.drawPolygon(lowerBeam, 4);
+            }
+        }
+
+        // Motorsport Starting Grid Boxes & Checkered Start / Finish Line across all 4 lanes
+        int finishSegIdx = (int)(player.finishLineZ / (qreal)segLen) % track.segmentCount();
+        bool isStartLine = (s.index == 5 || s.index == 6 || s.index == 19 || s.index == 20);
+        bool isFinishLine = (s.index == finishSegIdx || s.index == (finishSegIdx + 1) % track.segmentCount());
+        if (isStartLine || isFinishLine) {
+            int numChecks = 16;
+            for (int c = 0; c < numChecks; ++c) {
+                qreal rA = -0.96 + (1.92 * c) / numChecks;
+                qreal rB = -0.96 + (1.92 * (c + 1)) / numChecks;
+                bool isWhite = ((c + s.index) % 2 == 0);
+                p.setBrush(fogMix(isWhite ? QColor(248, 248, 252) : QColor(14, 16, 20), fog * 0.4));
+                QPointF chkPts[4] = {
+                    QPointF(s.p1.screenX + s.p1.screenW * rA, s.p1.screenY),
+                    QPointF(s.p2.screenX + s.p2.screenW * rA, s.p2.screenY),
+                    QPointF(s.p2.screenX + s.p2.screenW * rB, s.p2.screenY),
+                    QPointF(s.p1.screenX + s.p1.screenW * rB, s.p1.screenY)
+                };
+                p.drawPolygon(chkPts, 4);
+            }
+        } else if (s.index >= 7 && s.index <= 18) {
+            // Painted White Motorsport Starting Grid Launch Brackets
+            p.setBrush(fogMix(QColor(240, 244, 250, 210), fog * 0.5));
+            for (int l = 0; l < 4; ++l) {
+                if ((s.index + l) % 2 != 0) continue;
+                qreal lc = -0.75 + l * 0.50;
+                QPointF frontBar[4] = {
+                    QPointF(s.p2.screenX + s.p2.screenW * (lc - 0.16), s.p2.screenY),
+                    QPointF(s.p2.screenX + s.p2.screenW * (lc + 0.16), s.p2.screenY),
+                    QPointF(s.p1.screenX + s.p1.screenW * (lc + 0.16), s.p2.screenY + (s.p1.screenY - s.p2.screenY) * 0.22),
+                    QPointF(s.p1.screenX + s.p1.screenW * (lc - 0.16), s.p2.screenY + (s.p1.screenY - s.p2.screenY) * 0.22)
+                };
+                p.drawPolygon(frontBar, 4);
             }
         }
 
@@ -760,7 +976,7 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
         qreal fraction = qBound(0.0, segPos - idx, 1.0);
 
         const RoadSegment& s = segs[idx];
-        if (s.p1.camZ <= 4.0) continue;
+
 
         // Smoothly interpolate between p1 (start of segment) and p2 (end of segment)
         // This guarantees that roadScreenY is 100% physically on the asphalt!
@@ -817,6 +1033,11 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
                 distFade = qBound(0.0, (5500.0 - relCamZ) / 2000.0, 1.0);
             }
             rs.opacity = distFade;
+            rs.isCar = true;
+            rs.showRear = showRear;
+            rs.isBraking = npc.isBraking;
+            rs.racerTag = npc.racerName;
+            rs.racerPos = npc.currentPosition;
 
             spritesToDraw.append(rs);
         }
@@ -840,8 +1061,57 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
         if (qAbs(s.rotation) > 0.001) {
             p.rotate(s.rotation * 57.2958);
         }
+        // Asphalt contact shadow & tail-light / headlight ground reflection pool
+        if (s.isCar && s.width >= 18) {
+            qreal contactY = s.height * s.anchorYRatio;
+            p.setPen(Qt::NoPen);
+
+            // Deep ambient-occlusion contact shadow directly under the chassis & tires
+            QRadialGradient aoGrad(0, contactY, s.width * 0.52);
+            aoGrad.setColorAt(0.0, QColor(4, 6, 10, 215));
+            aoGrad.setColorAt(0.65, QColor(6, 8, 12, 130));
+            aoGrad.setColorAt(1.0, QColor(6, 8, 12, 0));
+            p.setBrush(aoGrad);
+            p.drawEllipse(QPointF(0, contactY + s.height * 0.015), s.width * 0.48, qMax(3.0, s.height * 0.085));
+
+            // Dual red tail-light or warm-white headlight reflection pools on the tarmac
+            QColor glowCol = s.showRear
+                ? (s.isBraking ? QColor(255, 35, 35, 135) : QColor(235, 30, 35, 80))
+                : QColor(245, 245, 255, 95);
+            qreal poolRx = s.width * (s.isBraking ? 0.24 : 0.18);
+            qreal poolRy = qMax(2.5, s.height * (s.isBraking ? 0.085 : 0.055));
+            qreal poolY  = contactY + s.height * 0.035;
+            for (int side = -1; side <= 1; side += 2) {
+                QPointF poolCenter(side * s.width * 0.26, poolY);
+                QRadialGradient poolGrad(poolCenter, poolRx);
+                poolGrad.setColorAt(0.0, glowCol);
+                QColor mid = glowCol;
+                mid.setAlpha(glowCol.alpha() / 3);
+                poolGrad.setColorAt(0.55, mid);
+                poolGrad.setColorAt(1.0, QColor(0, 0, 0, 0));
+                p.setBrush(poolGrad);
+                p.drawEllipse(poolCenter, poolRx, poolRy);
+            }
+        }
+
         QRect destRect(-s.width / 2, 0, s.width, s.height);
         p.drawImage(destRect, s.sprite);
+
+        // Floating Motorsport Position & Driver Name Tag above Rival Race Cars
+        if (!isMirror && s.isCar && s.width >= 22 && !s.racerTag.isEmpty() && s.racerPos > 0) {
+            int tagW = qBound(78, s.width, 134);
+            int tagH = 16;
+            int roofY = qRound(s.height * 0.31);
+            QRect tagRect(-tagW / 2, roofY - tagH - 3, tagW, tagH);
+            p.setBrush(QColor(10, 14, 22, 220));
+            QColor posCol = (s.racerPos == 1) ? QColor(255, 205, 55)
+                          : (s.racerPos <= 3 ? QColor(0, 230, 255) : QColor(185, 200, 225));
+            p.setPen(QPen(posCol, 1.3));
+            p.drawRoundedRect(tagRect, 4, 4);
+            p.setFont(QFont("Arial", 6, QFont::Bold));
+            p.setPen(posCol);
+            p.drawText(tagRect, Qt::AlignCenter, QString("P%1 • %2").arg(s.racerPos).arg(s.racerTag));
+        }
 
         // Realistic tire skid smoke puffs billowed across asphalt during crashes
         if (s.drawSkidSmoke) {
@@ -856,6 +1126,74 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
             p.drawEllipse(QPointF(s.width * 0.30, s.height * 0.72), smokeRadius, smokeRadius * 0.7);
         }
         p.restore();
+    }
+
+    // 3D Motorsport Start Line & Finish Line Overhead Archway Gantry
+    if (!isMirror) {
+        int finishSegIdx = (int)(player.finishLineZ / (qreal)segLen) % track.segmentCount();
+        for (int n = segs.size() - 1; n >= 0; --n) {
+            const RoadSegment& gs = segs[n];
+            bool isStartArch = (gs.index == 19);
+            bool isFinishArch = (gs.index == finishSegIdx);
+            if ((!isStartArch && !isFinishArch) || gs.p1.camZ <= 20.0 || gs.p1.screenW < 18) continue;
+
+            qreal cx = gs.p1.screenX;
+            qreal by = gs.p1.screenY;
+            qreal rw = gs.p1.screenW;
+            qreal pillarXL = cx - rw * 1.15;
+            qreal pillarXR = cx + rw * 1.15;
+            qreal pillarW = qMax(4.0, rw * 0.09);
+            qreal archH = rw * 0.56;
+            qreal beamH = qMax(14.0, rw * 0.17);
+            qreal topY = by - archH;
+
+            p.save();
+            // Left & Right Checkered Race Pylons
+            p.setBrush(QColor(20, 22, 28));
+            p.setPen(QPen(QColor(218, 175, 92), 1.5));
+            p.drawRect(QRectF(pillarXL - pillarW * 0.5, topY, pillarW, archH));
+            p.drawRect(QRectF(pillarXR - pillarW * 0.5, topY, pillarW, archH));
+
+            // Overhead Carbon & Champagne-Gold Banner Bridge
+            QRectF bannerRect(pillarXL - pillarW * 0.5, topY, (pillarXR - pillarXL) + pillarW, beamH);
+            QLinearGradient bGrad(bannerRect.topLeft(), bannerRect.bottomLeft());
+            bGrad.setColorAt(0.0, QColor(28, 32, 40));
+            bGrad.setColorAt(0.5, QColor(14, 16, 22));
+            bGrad.setColorAt(1.0, QColor(24, 28, 36));
+            p.setBrush(bGrad);
+            p.setPen(QPen(isFinishArch ? QColor(255, 205, 55) : QColor(0, 230, 255), 2.0));
+            p.drawRoundedRect(bannerRect, 4, 4);
+
+            // Checkered strips on left and right ends of overhead bridge
+            if (rw > 70) {
+                int chkW = qMax(4, qRound(beamH * 0.35));
+                for (int r = 0; r < 2; ++r) {
+                    for (int c = 0; c < 4; ++c) {
+                        p.fillRect(QRectF(bannerRect.left() + 4 + c * chkW, topY + 3 + r * chkW, chkW, chkW),
+                                   ((r + c) % 2 == 0) ? Qt::white : Qt::black);
+                        p.fillRect(QRectF(bannerRect.right() - 4 - (c + 1) * chkW, topY + 3 + r * chkW, chkW, chkW),
+                                   ((r + c) % 2 == 0) ? Qt::white : Qt::black);
+                    }
+                }
+            }
+
+            // Banner Title Text & 5 FIA Starting / Finish Gantry Lights
+            int fontPt = qBound(6, qRound(beamH * 0.34), 18);
+            p.setFont(QFont("Arial", fontPt, QFont::Bold));
+            p.setPen(isFinishArch ? QColor(255, 220, 80) : QColor(190, 248, 255));
+            p.drawText(bannerRect, Qt::AlignCenter,
+                       isFinishArch ? QString("🏁  FINISH LINE — GRAND PRIX (%1 CARS)  🏁").arg(player.totalRacers)
+                                    : QString("🏁  START LINE — %1-CAR GRID  🏁").arg(player.totalRacers));
+
+            qreal lightR = qBound(2.0, beamH * 0.14, 7.0);
+            for (int l = -2; l <= 2; ++l) {
+                QPointF lp(cx + l * rw * 0.14, bannerRect.bottom() + lightR + 2);
+                p.setBrush((player.raceTime > 0.2 || isFinishArch) ? QColor(40, 245, 110) : QColor(255, 45, 45));
+                p.setPen(QPen(QColor(20, 24, 30), 1));
+                p.drawEllipse(lp, lightR, lightR);
+            }
+            p.restore();
+        }
     }
 
     // 3D Crash Particles (Glowing friction sparks, crystalline glass shards, expanding smoke puffs)
@@ -1548,9 +1886,11 @@ void RasterRenderer::renderSideMirrors(QPainter& p, const GameEngine& engine, in
             QPolygonF carFlank;
             carFlank << QPointF(mw * 0.82, 0) << QPointF(mw, 0) << QPointF(mw, mh) << QPointF(mw * 0.74, mh);
             QLinearGradient flankGrad(mw * 0.74, 0, mw, 0);
-            flankGrad.setColorAt(0.0, QColor(215, 35, 35));
-            flankGrad.setColorAt(0.65, QColor(155, 20, 20));
-            flankGrad.setColorAt(1.0, QColor(85, 10, 10));
+            flankGrad.setColorAt(0.0, QColor(74, 82, 94));
+            flankGrad.setColorAt(0.65, QColor(44, 50, 58));
+            flankGrad.setColorAt(1.0, QColor(24, 28, 34));
+
+
             lmp.setBrush(flankGrad);
             lmp.setPen(QColor(45, 10, 10));
             lmp.drawPolygon(carFlank);
@@ -1643,9 +1983,11 @@ void RasterRenderer::renderSideMirrors(QPainter& p, const GameEngine& engine, in
             QPolygonF carFlank;
             carFlank << QPointF(0, 0) << QPointF(mw * 0.18, 0) << QPointF(mw * 0.26, mh) << QPointF(0, mh);
             QLinearGradient flankGrad(0, 0, mw * 0.26, 0);
-            flankGrad.setColorAt(0.0, QColor(85, 10, 10));
-            flankGrad.setColorAt(0.35, QColor(155, 20, 20));
-            flankGrad.setColorAt(1.0, QColor(215, 35, 35));
+            flankGrad.setColorAt(0.0, QColor(24, 28, 34));
+            flankGrad.setColorAt(0.35, QColor(44, 50, 58));
+            flankGrad.setColorAt(1.0, QColor(74, 82, 94));
+
+
             rmp.setBrush(flankGrad);
             rmp.setPen(QColor(45, 10, 10));
             rmp.drawPolygon(carFlank);
@@ -1736,6 +2078,22 @@ void RasterRenderer::renderDashboardInstruments(QPainter& p, const GameEngine& e
     int speedY = dashY + qRound(465 * scaleY);
     p.drawImage(QRect(speedX, speedY, dialSize, dialSize), assets.getGaugeDialSpeed(isNight));
 
+    // Active neon arc sweep along speedometer perimeter
+    {
+        qreal speedRatio = qBound(0.0, player.speed / 300.0, 1.0);
+        int spanAngle16 = qRound(-speedRatio * 270.0 * 16.0);
+        int startAngle16 = 225 * 16;
+        qreal pad = 11.0 * dialScale;
+        QRectF arcRect(speedX + pad, speedY + pad, dialSize - 2 * pad, dialSize - 2 * pad);
+        p.save();
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(0, 225, 255, 70), qMax(3.0, 6.0 * dialScale), Qt::SolidLine, Qt::RoundCap));
+        p.drawArc(arcRect, startAngle16, spanAngle16);
+        p.setPen(QPen(QColor(120, 245, 255, 210), qMax(1.5, 2.5 * dialScale), Qt::SolidLine, Qt::RoundCap));
+        p.drawArc(arcRect, startAngle16, spanAngle16);
+        p.restore();
+    }
+
     qreal speedAngle = 135.0 + (qBound(0.0, player.speed, 300.0) / 300.0) * 270.0;
     p.save();
     p.translate(speedX + dialSize / 2.0, speedY + dialSize / 2.0);
@@ -1756,6 +2114,28 @@ void RasterRenderer::renderDashboardInstruments(QPainter& p, const GameEngine& e
     int rpmY = dashY + qRound(465 * scaleY);
     p.drawImage(QRect(rpmX, rpmY, dialSize, dialSize), assets.getGaugeDialRpm(isNight));
 
+    // Active color-shifting LED arc sweep along tachometer perimeter
+    {
+        qreal rpmRatio = qBound(0.0, (player.rpm - 800.0) / 7200.0, 1.0);
+        int spanAngle16 = qRound(-rpmRatio * 270.0 * 16.0);
+        int startAngle16 = 225 * 16;
+        qreal pad = 11.0 * dialScale;
+        QRectF arcRect(rpmX + pad, rpmY + pad, dialSize - 2 * pad, dialSize - 2 * pad);
+        QColor rpmArcCol = (rpmRatio > 0.82) ? QColor(255, 50, 55)
+                         : (rpmRatio > 0.60 ? QColor(255, 185, 30) : QColor(0, 230, 165));
+        p.save();
+        p.setBrush(Qt::NoBrush);
+        QColor glow = rpmArcCol;
+        glow.setAlpha(75);
+        p.setPen(QPen(glow, qMax(3.0, 6.0 * dialScale), Qt::SolidLine, Qt::RoundCap));
+        p.drawArc(arcRect, startAngle16, spanAngle16);
+        QColor core = rpmArcCol.lighter(130);
+        core.setAlpha(220);
+        p.setPen(QPen(core, qMax(1.5, 2.5 * dialScale), Qt::SolidLine, Qt::RoundCap));
+        p.drawArc(arcRect, startAngle16, spanAngle16);
+        p.restore();
+    }
+
     qreal rpmAngle = 135.0 + (qBound(800.0, player.rpm, 8000.0) / 8000.0) * 270.0;
     p.save();
     p.translate(rpmX + dialSize / 2.0, rpmY + dialSize / 2.0);
@@ -1771,6 +2151,19 @@ void RasterRenderer::renderDashboardInstruments(QPainter& p, const GameEngine& e
     p.setFont(numFont);
     p.setPen(isNight ? QColor(255, 160, 40) : QColor(0, 240, 255));
     p.drawText(QRect(rpmX, rpmY + qRound(115 * dialScale), dialSize, qRound(30 * dialScale)), Qt::AlignCenter, gearStr);
+
+    // Convex sapphire glass lens glare over both dials
+    auto drawLensGlare = [&](int gx, int gy) {
+        QLinearGradient lens(gx, gy, gx + dialSize * 0.75, gy + dialSize * 0.75);
+        lens.setColorAt(0.0, QColor(255, 255, 255, 36));
+        lens.setColorAt(0.35, QColor(255, 255, 255, 10));
+        lens.setColorAt(0.55, QColor(255, 255, 255, 0));
+        p.setBrush(lens);
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(QRectF(gx + 6 * dialScale, gy + 6 * dialScale, dialSize - 12 * dialScale, dialSize - 12 * dialScale));
+    };
+    drawLensGlare(speedX, speedY);
+    drawLensGlare(rpmX, rpmY);
 }
 
 void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& engine, const QRect& screenRect) {
@@ -2310,7 +2703,7 @@ void RasterRenderer::renderWindshieldEffects(QPainter& p, const GameEngine& engi
     }
 
     // Windshield Crack on Collision
-    if (player.crashTimer > 0 || player.health < 50) {
+    if (!player.thirdPersonView && (player.crashTimer > 0 || player.health < 50)) {
         const QImage& crack = RasterAssets::instance().getWindshieldCrack();
         qreal crackAlpha = (player.health < 50) ? 0.85 : qMin(1.0, player.crashTimer / 1.0);
         p.setOpacity(crackAlpha);
@@ -2323,7 +2716,7 @@ void RasterRenderer::renderWindshieldEffects(QPainter& p, const GameEngine& engi
     for (const CrashSpark& spk : sparks) {
         if (spk.life <= 0) continue;
         qreal relZ = spk.worldZ - player.worldZ;
-        if (relZ < -150 || relZ > 450) continue; // Close-range collision impact particles
+        if (relZ < -150 || relZ > 1350) continue; // Close-range collision impact particles
 
         qreal progress = 1.0 - (spk.life / spk.maxLife);
         qreal screenX = (w * 0.5) + (spk.x - player.x) * (w * 0.65) + (spk.vx * progress * 600.0);
@@ -2580,6 +2973,41 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
     p.setPen(diffColor);
     p.drawText(diffPill, Qt::AlignCenter, diffText);
 
+    // Interactive Camera View Switch Button: [ 🎥 3RD PERSON [C] ] / [ 🎥 1ST PERSON [C] ]
+    {
+        QRect camBtn(292, 6, 148, 22);
+        QLinearGradient camGrad(camBtn.topLeft(), camBtn.bottomLeft());
+        if (player.thirdPersonView) {
+            camGrad.setColorAt(0.0, QColor(238, 185, 75, 85));
+            camGrad.setColorAt(1.0, QColor(140, 95, 25, 65));
+            p.setPen(QPen(QColor(245, 200, 95), 1.5));
+        } else {
+            camGrad.setColorAt(0.0, QColor(0, 210, 255, 65));
+            camGrad.setColorAt(1.0, QColor(0, 110, 160, 45));
+            p.setPen(QPen(QColor(0, 235, 255), 1.5));
+        }
+        p.setBrush(camGrad);
+        p.drawRoundedRect(camBtn, 5, 5);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(player.thirdPersonView ? QColor(255, 230, 150) : QColor(180, 248, 255));
+        p.drawText(camBtn, Qt::AlignCenter,
+                   player.thirdPersonView ? "🎥 1ST PERSON VIEW [C]" : "🎥 3RD PERSON VIEW [C]");
+
+        // Live Race Position & Finish Line Timer Badge
+        QRect posBadge(292, 30, 148, 17);
+        p.setBrush(QColor(18, 24, 36, 210));
+        p.setPen(QPen(QColor(245, 200, 75, 190), 1));
+        p.drawRoundedRect(posBadge, 4, 4);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(255, 220, 95));
+        qreal dispTime = player.raceFinished ? player.finishTime : player.raceTime;
+        p.drawText(posBadge, Qt::AlignCenter,
+                   QString("🏆 POS %1/%2  •  ⏱ %3s")
+                       .arg(player.currentPosition)
+                       .arg(player.totalRacers)
+                       .arg(QString::number(dispTime, 'f', 1)));
+    }
+
     // Sub-row: Sector + Distance + Mini Track Progress Bar
     QFont subF("Arial", 8, QFont::Normal);
     p.setFont(subF);
@@ -2592,7 +3020,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
     int barW = 152;
     int barY = 34;
     p.fillRect(barX, barY, barW, 6, QColor(25, 32, 45));
-    qreal circuitProg = fmod(player.worldZ, (qreal)engine.getTrack().trackLength()) / (qreal)engine.getTrack().trackLength();
+    qreal circuitProg = qBound(0.0, player.worldZ / qMax(1.0, player.finishLineZ), 1.0);
     p.fillRect(barX, barY, qRound(barW * circuitProg), 6, QColor(0, 240, 255));
     // Sector tick marks
     p.setPen(QColor(50, 65, 90));
@@ -2647,7 +3075,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
     QFont cf("Arial", 7, QFont::Normal);
     p.setFont(cf);
     p.setPen(QColor(135, 155, 180));
-    p.drawText(QRect(cx - 240, 31, 480, 16), Qt::AlignCenter, "WASD or MOUSE: [L-CLICK] GAS  •  [R-CLICK] BRAKE  •  [SPACE] DRIFT  •  [M] MENU");
+    p.drawText(QRect(cx - 255, 31, 510, 16), Qt::AlignCenter, "WASD / MOUSE: [L-CLICK] GAS • [R-CLICK] BRAKE • [SPACE] DRIFT • [C] 1ST/3RD CAM • [M] MENU");
 
     // -------------------------------------------------------------
     // RIGHT POD: SCORE, COMBO, AND VEHICLE INTEGRITY
@@ -2702,6 +3130,843 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
     // Collision tally
     p.setPen(player.crashCount > 0 ? QColor(255, 110, 110) : QColor(140, 170, 205));
     p.drawText(QRect(rx - 65, hpY - 1, 65, 12), Qt::AlignRight | Qt::AlignVCenter, QString("💥 %1 HITS").arg(player.crashCount));
+
+    // -------------------------------------------------------------------------
+    // PROFESSIONAL SIDE PANELS: LEFT LIVE STANDINGS TOWER & RIGHT 2D TRACK MAP
+    // Visible in both 1st-Person and 3rd-Person views!
+    // -------------------------------------------------------------------------
+    if (!player.raceFinished && !player.lookingBack && qAbs(player.povPan) < 0.25) {
+        QVector<RaceStandingEntry> liveStandings = engine.getRaceStandings();
+        qreal finishZ = qMax(1000.0, player.finishLineZ);
+        qreal totalCircuitKm = finishZ / 20000.0;
+        qreal doneCircuitKm  = qBound(0.0, player.worldZ / 20000.0, totalCircuitKm);
+        qreal remCircuitKm   = qMax(0.0, totalCircuitKm - doneCircuitKm);
+
+        // 1. LEFT SIDE PANEL: LIVE 8-CAR STANDINGS TOWER (x = 14, y = 56, w = 208, h = 246)
+        QRect towerRect(14, 56, 208, 246);
+        QLinearGradient tGrad(towerRect.topLeft(), towerRect.bottomRight());
+        tGrad.setColorAt(0.0, QColor(12, 16, 24, 215));
+        tGrad.setColorAt(1.0, QColor(8, 10, 16, 230));
+        p.setBrush(tGrad);
+        p.setPen(QPen(QColor(218, 175, 92, 175), 1.5));
+        p.drawRoundedRect(towerRect, 8, 8);
+
+        // Tower Header
+        QRect tHdr(towerRect.left() + 6, towerRect.top() + 6, towerRect.width() - 12, 22);
+        p.setBrush(QColor(24, 32, 46, 200));
+        p.setPen(QPen(QColor(0, 220, 255, 110), 1));
+        p.drawRoundedRect(tHdr, 4, 4);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(245, 205, 105));
+        p.drawText(tHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignLeft, "🏆 LIVE STANDINGS");
+        p.setPen(QColor(0, 230, 255));
+        p.drawText(tHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignRight,
+                   QString("P%1 / %2").arg(player.currentPosition).arg(player.totalRacers));
+
+        qreal leaderZ = liveStandings.isEmpty() ? player.worldZ : liveStandings[0].progressZ;
+        // Select up to 8 rows: always include P1 (index 0) and a window of 7 rows around the player
+        QVector<int> displayIndices;
+        if (liveStandings.size() <= 8) {
+            for (int i = 0; i < liveStandings.size(); ++i) displayIndices.append(i);
+        } else {
+            displayIndices.append(0);
+            int pIdx = qBound(0, player.currentPosition - 1, (int)liveStandings.size() - 1);
+            int startIdx = qBound(1, pIdx - 3, (int)liveStandings.size() - 7);
+            for (int k = 0; k < 7; ++k) displayIndices.append(startIdx + k);
+        }
+        for (int row = 0; row < displayIndices.size(); ++row) {
+            int i = displayIndices[row];
+            const RaceStandingEntry& e = liveStandings[i];
+            int ry = towerRect.top() + 33 + row * 26;
+            QRect rBox(towerRect.left() + 6, ry, towerRect.width() - 12, 23);
+
+            if (e.isPlayer) {
+                p.setBrush(QColor(0, 220, 255, 58));
+                p.setPen(QPen(QColor(0, 240, 255, 210), 1.3));
+            } else if (i == 0) {
+                p.setBrush(QColor(245, 195, 65, 32));
+                p.setPen(QPen(QColor(245, 195, 65, 90), 1));
+            } else {
+                p.setBrush(QColor(18, 22, 32, 165));
+                p.setPen(Qt::NoPen);
+            }
+            p.drawRoundedRect(rBox, 4, 4);
+
+            // Position badge pill
+            QRect posBadge(rBox.left() + 4, ry + 3, 22, 17);
+            QColor pCol = (i == 0) ? QColor(255, 205, 55) : (i <= 2 ? QColor(0, 225, 255) : QColor(150, 168, 192));
+            p.setBrush(pCol);
+            p.setPen(Qt::NoPen);
+            p.drawRoundedRect(posBadge, 3, 3);
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(10, 14, 20));
+            p.drawText(posBadge, Qt::AlignCenter, QString("P%1").arg(e.position));
+
+            // Driver Name
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(e.isPlayer ? QColor(145, 250, 255) : Qt::white);
+            QString shortName = e.isPlayer ? "YOU • APEX GT" : e.name;
+            p.drawText(QRect(rBox.left() + 31, ry, 108, 23), Qt::AlignVCenter | Qt::AlignLeft, shortName);
+
+            // Live Gap to Leader
+            qreal gapSec = qMax(0.0, (leaderZ - e.progressZ) / 3100.0);
+            QString gapTxt = (i == 0) ? "LEADER" : (e.hasFinished ? "FIN" : QString("+%1s").arg(QString::number(gapSec, 'f', 1)));
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(i == 0 ? QColor(55, 240, 120) : (e.isPlayer ? QColor(255, 215, 90) : QColor(165, 182, 205)));
+            p.drawText(QRect(rBox.right() - 56, ry, 50, 23), Qt::AlignVCenter | Qt::AlignRight, gapTxt);
+        }
+
+        // 2. RIGHT SIDE PANEL: 2D CIRCUIT TRACK MAP & TELEMETRY (x = w - 222, y = 56, w = 208, h = 246)
+        QRect mapCard(w - 222, 56, 208, 246);
+        QLinearGradient mGrad(mapCard.topLeft(), mapCard.bottomRight());
+        mGrad.setColorAt(0.0, QColor(12, 16, 24, 215));
+        mGrad.setColorAt(1.0, QColor(8, 10, 16, 230));
+        p.setBrush(mGrad);
+        p.setPen(QPen(QColor(218, 175, 92, 175), 1.5));
+        p.drawRoundedRect(mapCard, 8, 8);
+
+        // Map Header
+        QRect mHdr(mapCard.left() + 6, mapCard.top() + 6, mapCard.width() - 12, 22);
+        p.setBrush(QColor(24, 32, 46, 200));
+        p.setPen(QPen(QColor(0, 220, 255, 110), 1));
+        p.drawRoundedRect(mHdr, 4, 4);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(245, 205, 105));
+        p.drawText(mHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignLeft, "🗺️ CIRCUIT TRACK MAP");
+        p.setPen(QColor(0, 230, 255));
+        p.drawText(mHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignRight,
+                   QString("SEC %1/4").arg(player.currentSector));
+
+        // Inner Map Viewport Box
+        QRectF mapBox(mapCard.left() + 10, mapCard.top() + 33, mapCard.width() - 20, 152);
+        p.setBrush(QColor(8, 12, 18, 210));
+        p.setPen(QPen(QColor(42, 54, 72), 1));
+        p.drawRoundedRect(mapBox, 6, 6);
+
+        // Subtle telemetry radar grid lines inside map box
+        p.setPen(QPen(QColor(26, 36, 50, 140), 1, Qt::DotLine));
+        for (int gx = 1; gx <= 3; ++gx) {
+            qreal lx = mapBox.left() + (mapBox.width() * gx) / 4.0;
+            p.drawLine(QPointF(lx, mapBox.top() + 4), QPointF(lx, mapBox.bottom() - 4));
+        }
+        for (int gy = 1; gy <= 2; ++gy) {
+            qreal ly = mapBox.top() + (mapBox.height() * gy) / 3.0;
+            p.drawLine(QPointF(mapBox.left() + 4, ly), QPointF(mapBox.right() - 4, ly));
+        }
+
+        // Build 2D Winding Circuit Path from actual Track Curvature (Start Z=0 to Finish Z=finishZ)
+        const int N_SAMPLES = 60;
+        QVector<QPointF> rawPts;
+        rawPts.reserve(N_SAMPLES + 1);
+        qreal cxPt = 0.0, cyPt = 0.0;
+        qreal heading = -M_PI * 0.5; // Start heading upward
+        const Track& trk = engine.getTrack();
+        for (int s = 0; s <= N_SAMPLES; ++s) {
+            rawPts.append(QPointF(cxPt, cyPt));
+            qreal zSample = (finishZ * s) / (qreal)N_SAMPLES;
+            const RoadSegment& rSeg = trk.findSegment(zSample);
+            heading += rSeg.curve * 0.048;
+            cxPt += qCos(heading) * 10.0 + qSin(s * 0.21) * 2.2;
+            cyPt += qSin(heading) * 10.0;
+        }
+
+        qreal minX = rawPts[0].x(), maxX = rawPts[0].x();
+        qreal minY = rawPts[0].y(), maxY = rawPts[0].y();
+        for (const QPointF& pt : rawPts) {
+            minX = qMin(minX, pt.x()); maxX = qMax(maxX, pt.x());
+            minY = qMin(minY, pt.y()); maxY = qMax(maxY, pt.y());
+        }
+        qreal spanX = qMax(1.0, maxX - minX);
+        qreal spanY = qMax(1.0, maxY - minY);
+        QRectF innerMap = mapBox.adjusted(18, 16, -18, -16);
+
+        QVector<QPointF> mapPts(N_SAMPLES + 1);
+        QPainterPath fullCircuitPath;
+        for (int s = 0; s <= N_SAMPLES; ++s) {
+            qreal nx = (rawPts[s].x() - minX) / spanX;
+            qreal ny = (rawPts[s].y() - minY) / spanY;
+            mapPts[s] = QPointF(innerMap.left() + nx * innerMap.width(),
+                                innerMap.top()  + ny * innerMap.height());
+            if (s == 0) fullCircuitPath.moveTo(mapPts[s]);
+            else fullCircuitPath.lineTo(mapPts[s]);
+        }
+
+        auto posOnCircuit = [&](qreal worldZVal) -> QPointF {
+            qreal t = qBound(0.0, worldZVal / finishZ, 1.0) * N_SAMPLES;
+            int idx = qBound(0, (int)t, N_SAMPLES - 1);
+            qreal frac = t - idx;
+            return mapPts[idx] + (mapPts[idx + 1] - mapPts[idx]) * frac;
+        };
+
+        // Draw Circuit Outer Shoulder & Asphalt Ribbon
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(45, 56, 74), 8.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.drawPath(fullCircuitPath);
+        p.setPen(QPen(QColor(22, 28, 38), 5.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.drawPath(fullCircuitPath);
+
+        // Draw Completed Player Route in Glowing Cyan
+        int playerMaxIdx = qBound(0, (int)(circuitProg * N_SAMPLES), N_SAMPLES);
+        if (playerMaxIdx >= 1) {
+            QPainterPath donePath;
+            donePath.moveTo(mapPts[0]);
+            for (int s = 1; s <= playerMaxIdx; ++s) {
+                donePath.lineTo(mapPts[s]);
+            }
+            donePath.lineTo(posOnCircuit(player.worldZ));
+            p.setPen(QPen(QColor(0, 235, 255, 220), 3.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            p.drawPath(donePath);
+        }
+
+        // Start Node [S] & Finish Line Node [FIN]
+        QPointF startPt = mapPts.first();
+        QPointF finPt   = mapPts.last();
+        p.setBrush(QColor(40, 235, 115));
+        p.setPen(QPen(Qt::white, 1.2));
+        p.drawEllipse(startPt, 4.5, 4.5);
+
+        p.setBrush(QColor(255, 205, 55));
+        p.setPen(QPen(Qt::white, 1.4));
+        p.drawEllipse(finPt, 5.5, 5.5);
+        p.setFont(QFont("Arial", 6, QFont::Bold));
+        p.setPen(QColor(255, 220, 85));
+        p.drawText(QRectF(finPt.x() - 22, finPt.y() - 14, 44, 11), Qt::AlignCenter, "🏁 FIN");
+
+        // Plot Rival Race Cars on the 2D Track Map
+        for (const NPCCar& npc : engine.getTraffic()) {
+            QPointF nPt = posOnCircuit(npc.worldZ);
+            QColor nCol = (npc.currentPosition == 1) ? QColor(255, 205, 55)
+                        : (npc.currentPosition <= 3 ? QColor(0, 225, 255) : QColor(255, 85, 85));
+            p.setBrush(nCol);
+            p.setPen(QPen(QColor(12, 16, 22), 1.0));
+            p.drawEllipse(nPt, 3.6, 3.6);
+        }
+
+        // Plot Player Beacon [YOU] on the 2D Track Map with Pulsing Halo
+        QPointF pPt = posOnCircuit(player.worldZ);
+        p.setBrush(QColor(0, 245, 255, 75));
+        p.setPen(QPen(QColor(0, 245, 255, 190), 1.2));
+        p.drawEllipse(pPt, 7.5, 7.5);
+        p.setBrush(QColor(255, 255, 255));
+        p.setPen(QPen(QColor(0, 230, 255), 1.8));
+        p.drawEllipse(pPt, 4.2, 4.2);
+
+        // Track Map Footer: Distance & Finish Progress Telemetry
+        int footY = mapCard.top() + 192;
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(210, 225, 245));
+        p.drawText(QRect(mapCard.left() + 12, footY, mapCard.width() - 24, 14),
+                   Qt::AlignVCenter | Qt::AlignLeft,
+                   QString("DIST: %1 / %2 KM").arg(QString::number(doneCircuitKm, 'f', 1)).arg(QString::number(totalCircuitKm, 'f', 1)));
+        p.setPen(QColor(245, 205, 95));
+        p.drawText(QRect(mapCard.left() + 12, footY, mapCard.width() - 24, 14),
+                   Qt::AlignVCenter | Qt::AlignRight,
+                   QString("%1%").arg(qRound(circuitProg * 100.0)));
+
+        p.setPen(QColor(155, 175, 200));
+        p.drawText(QRect(mapCard.left() + 12, footY + 16, mapCard.width() - 24, 14),
+                   Qt::AlignVCenter | Qt::AlignLeft,
+                   QString("REM TO FINISH: %1 KM").arg(QString::number(remCircuitKm, 'f', 1)));
+
+        QRect progBar(mapCard.left() + 12, footY + 34, mapCard.width() - 24, 8);
+        p.fillRect(progBar, QColor(22, 28, 40));
+        QLinearGradient pGrad(progBar.topLeft(), progBar.topRight());
+        pGrad.setColorAt(0.0, QColor(0, 220, 255));
+        pGrad.setColorAt(1.0, QColor(255, 205, 65));
+        p.fillRect(QRect(progBar.left(), progBar.top(), qRound(progBar.width() * circuitProg), progBar.height()), pGrad);
+    }
+
+    // Championship Final Race Standings Leaderboard Overlay when crossing the Finish Line!
+    if (player.raceFinished) {
+        int bw = 540;
+        int bh = 328;
+        int bx = (w - bw) / 2;
+        int by = (h - bh) / 2 - 10;
+        QRect boardRect(bx, by, bw, bh);
+
+        QLinearGradient bGrad(boardRect.topLeft(), boardRect.bottomRight());
+        bGrad.setColorAt(0.0, QColor(12, 16, 24, 242));
+        bGrad.setColorAt(1.0, QColor(6, 9, 14, 248));
+        p.setBrush(bGrad);
+        p.setPen(QPen(QColor(245, 200, 85), 2.5));
+        p.drawRoundedRect(boardRect, 12, 12);
+
+        // Header Banner
+        QRect hdrRect(bx + 12, by + 12, bw - 24, 38);
+        p.setBrush(QColor(245, 195, 70, 40));
+        p.setPen(QPen(QColor(245, 200, 85, 180), 1));
+        p.drawRoundedRect(hdrRect, 6, 6);
+        p.setFont(QFont("Arial", 13, QFont::Bold));
+        p.setPen(QColor(255, 220, 95));
+        p.drawText(hdrRect, Qt::AlignCenter,
+                   QString("🏁  FINISH LINE — FINAL RACE STANDINGS (YOU: P%1/%2)  🏁")
+                       .arg(player.currentPosition)
+                       .arg(player.totalRacers));
+
+        // Column Headers
+        int rowStartY = by + 58;
+        p.setFont(QFont("Arial", 8, QFont::Bold));
+        p.setPen(QColor(150, 170, 195));
+        p.drawText(bx + 24,  rowStartY, "POS");
+        p.drawText(bx + 85,  rowStartY, "DRIVER / VEHICLE");
+        p.drawText(bx + 320, rowStartY, "FINISH TIME");
+        p.drawText(bx + 435, rowStartY, "GAP");
+
+        QVector<RaceStandingEntry> standings = engine.getRaceStandings();
+        qreal leaderTime = standings.isEmpty() ? player.finishTime : standings[0].finishTime;
+
+        for (int i = 0; i < standings.size() && i < 8; ++i) {
+            const RaceStandingEntry& e = standings[i];
+            int ry = rowStartY + 10 + i * 26;
+            QRect rowRect(bx + 16, ry, bw - 32, 23);
+
+            if (e.isPlayer) {
+                p.setBrush(QColor(0, 225, 255, 55));
+                p.setPen(QPen(QColor(0, 240, 255), 1.5));
+            } else if (i == 0) {
+                p.setBrush(QColor(245, 195, 65, 35));
+                p.setPen(QPen(QColor(245, 200, 80, 110), 1));
+            } else {
+                p.setBrush(QColor(20, 26, 38, 170));
+                p.setPen(Qt::NoPen);
+            }
+            p.drawRoundedRect(rowRect, 4, 4);
+
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(e.isPlayer ? QColor(120, 248, 255) : (i == 0 ? QColor(255, 220, 90) : QColor(220, 230, 245)));
+            p.drawText(QRect(bx + 22, ry, 50, 23), Qt::AlignVCenter | Qt::AlignLeft, QString("P%1").arg(e.position));
+            p.drawText(QRect(bx + 85, ry, 220, 23), Qt::AlignVCenter | Qt::AlignLeft, e.name);
+
+            int mins = (int)(e.finishTime / 60.0);
+            qreal secs = e.finishTime - mins * 60.0;
+            QString timeStr = QString("%1:%2").arg(mins, 2, 10, QChar('0')).arg(QString::number(secs, 'f', 2).rightJustified(5, '0'));
+            p.drawText(QRect(bx + 320, ry, 100, 23), Qt::AlignVCenter | Qt::AlignLeft, timeStr);
+
+            QString gapStr = (i == 0) ? "WINNER" : QString("+%1s").arg(QString::number(qMax(0.01, e.finishTime - leaderTime), 'f', 2));
+            p.setPen(i == 0 ? QColor(60, 240, 120) : QColor(180, 195, 215));
+            p.drawText(QRect(bx + 435, ry, 85, 23), Qt::AlignVCenter | Qt::AlignLeft, gapStr);
+        }
+
+        p.setFont(QFont("Arial", 9, QFont::Bold));
+        p.setPen(QColor(255, 225, 110));
+        p.drawText(QRect(bx, by + bh - 26, bw, 20), Qt::AlignCenter,
+                   "PRESS [R] TO RETURN TO STARTING GRID FOR A NEW RACE  •  PRESS [C] TO SWITCH 1ST/3RD VIEW");
+    }
+
+    p.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Speed streaks: thin motion lines radiating from the vanishing point at speed.
+// Drawn in the world layer (under the cockpit) so they read as wind / motion blur.
+// ---------------------------------------------------------------------------
+void RasterRenderer::renderSpeedStreaks(QPainter& p, const GameEngine& engine, int w, int h) {
+    const PlayerCar& player = engine.getPlayer();
+    if (player.speed < 140.0) return;
+
+    qreal intensity = qBound(0.0, (player.speed - 140.0) / 140.0, 1.0);
+    QPointF vp(w * 0.5, h * 0.42 + player.pitchG * 140.0);
+
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    for (int i = 0; i < 32; ++i) {
+        quint32 hsh = (quint32)(i + 1) * 2654435761u;
+        qreal ang = ((hsh % 3600) / 3600.0) * 2.0 * M_PI;
+        QPointF dir(qCos(ang), qSin(ang) * 0.62);
+
+        // Keep the road surface in front of the car clean
+        if (dir.y() > 0.18 && qAbs(dir.x()) < 0.75) continue;
+
+        qreal speedMul = 1.4 + ((hsh >> 12) % 100) / 70.0;
+        qreal life = fmod(m_rainAnimTime * speedMul + (hsh % 1000) / 1000.0, 1.0);
+        qreal r0 = (0.30 + life * 0.80) * w * 0.5;
+        qreal len = (30.0 + 170.0 * life) * intensity;
+        int alpha = qBound(0, (int)(85.0 * intensity * life * (1.0 - life) * 4.0), 255);
+        if (alpha < 4) continue;
+
+        p.setPen(QPen(QColor(255, 255, 255, alpha), 1.0 + life * 1.6, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(vp + dir * r0, vp + dir * (r0 + len));
+    }
+    p.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Post-processing: cinematic elliptical vignette + per-time-of-day colour grade.
+// The layer is rasterised once into a cached image and only rebuilt on resize
+// or when the time of day / track theme changes, so it costs one blit per frame.
+// ---------------------------------------------------------------------------
+void RasterRenderer::renderPostFX(QPainter& p, const GameEngine& engine, int w, int h) {
+    if (w <= 0 || h <= 0) return;
+    TimeOfDay tod = engine.getTimeOfDay();
+    TrackTheme theme = engine.getCurrentTheme();
+    qint64 key = ((qint64)w << 32) | ((qint64)h << 8) | ((qint64)tod << 4) | (qint64)theme;
+
+    if (key != m_postFxKey || m_postFxOverlay.size() != QSize(w, h)) {
+        m_postFxKey = key;
+        m_postFxOverlay = QImage(w, h, QImage::Format_ARGB32_Premultiplied);
+        m_postFxOverlay.fill(Qt::transparent);
+
+        QPainter fx(&m_postFxOverlay);
+        fx.setRenderHint(QPainter::Antialiasing, true);
+
+        // 1. Subtle colour grade wash
+        QColor grade;
+        if (tod == TIME_NIGHT) {
+            grade = (theme == THEME_NEON_METROPOLIS) ? QColor(60, 20, 110, 20) : QColor(20, 40, 95, 22);
+        } else if (tod == TIME_SUNSET) {
+            grade = QColor(255, 120, 40, 14);
+        } else {
+            grade = QColor(255, 236, 200, 8);
+        }
+        fx.fillRect(0, 0, w, h, grade);
+
+        // 2. Elliptical cinematic vignette (darkens corners, focuses the eye on the road)
+        fx.save();
+        fx.translate(w / 2.0, h * 0.46);
+        fx.scale((qreal)w / (qreal)h, 1.0);
+        QRadialGradient vig(0, 0, h * 0.78);
+        vig.setColorAt(0.0, QColor(0, 0, 0, 0));
+        vig.setColorAt(0.58, QColor(0, 0, 0, 0));
+        vig.setColorAt(0.85, QColor(0, 0, 0, 60));
+        vig.setColorAt(1.0, QColor(0, 0, 0, 140));
+        fx.fillRect(QRectF(-h, -h, 2.0 * h, 2.0 * h), vig);
+        fx.restore();
+
+        // 3. Soft sky glow band near the horizon (sun scatter) for day & sunset
+        if (tod != TIME_NIGHT) {
+            QLinearGradient glow(0, h * 0.20, 0, h * 0.48);
+            QColor gc = (tod == TIME_SUNSET) ? QColor(255, 170, 90) : QColor(255, 250, 235);
+            gc.setAlpha(0);
+            glow.setColorAt(0.0, gc);
+            gc.setAlpha(tod == TIME_SUNSET ? 30 : 18);
+            glow.setColorAt(0.8, gc);
+            gc.setAlpha(0);
+            glow.setColorAt(1.0, gc);
+            fx.fillRect(0, (int)(h * 0.20), w, (int)(h * 0.28), glow);
+        }
+        fx.end();
+    }
+
+    p.drawImage(0, 0, m_postFxOverlay);
+}
+
+void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& engine, int w, int h) {
+    const PlayerCar& player = engine.getPlayer();
+
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    // Dynamic chase-camera suspension, cornering sway & body roll
+    int vibX = (player.vibration > 0) ? (QRandomGenerator::global()->generate() % 3 - 1) : 0;
+    int vibY = (player.vibration > 0) ? (QRandomGenerator::global()->generate() % 3 - 1) : 0;
+    qreal carCenterX = w * 0.5 + player.steerAngle * 52.0 - player.rollG * 28.0 + vibX;
+    qreal carBottomY = h - 34.0 + player.pitchG * 24.0 + vibY;
+    qreal bodyRollDeg = player.steerAngle * 4.2 + player.rollG * 8.0;
+    qreal yawShift = player.steerAngle * 14.0; // Subtle 3D cornering perspective shift
+
+    const qreal W = 316.0;
+    const qreal H = 148.0;
+
+    // 1. Asphalt Tire Skid Marks & Ground Contact Ambient Occlusion (AO) Shadow
+    if (player.isHandbraking || (player.isBraking && player.speed > 110.0) || player.crashTimer > 1.5) {
+        p.setPen(QPen(QColor(10, 12, 16, 155), 14, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(QPointF(carCenterX - W * 0.36 - yawShift * 0.8, carBottomY - 4),
+                   QPointF(carCenterX - W * 0.38 - yawShift * 2.2, h + 15));
+        p.drawLine(QPointF(carCenterX + W * 0.36 - yawShift * 0.8, carBottomY - 4),
+                   QPointF(carCenterX + W * 0.38 - yawShift * 2.2, h + 15));
+    }
+
+    p.translate(carCenterX, carBottomY);
+
+    // Deep multi-layer ground contact AO shadow directly under the chassis & tires
+    {
+        QRadialGradient aoGrad(0, -6, W * 0.58);
+        aoGrad.setColorAt(0.0, QColor(4, 6, 10, 235));
+        aoGrad.setColorAt(0.68, QColor(6, 8, 12, 160));
+        aoGrad.setColorAt(1.0, QColor(6, 8, 12, 0));
+        p.setBrush(aoGrad);
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(QPointF(0, -4), W * 0.56, 24);
+
+        // Dual crimson tail-light / brake-light reflection pools on the tarmac behind the car
+        QColor tailPoolCol = player.isBraking ? QColor(255, 30, 35, 165) : QColor(235, 25, 35, 95);
+        qreal poolRx = player.isBraking ? 78.0 : 54.0;
+        qreal poolRy = player.isBraking ? 22.0 : 14.0;
+        for (int side = -1; side <= 1; side += 2) {
+            QPointF pc(side * W * 0.31, 6);
+            QRadialGradient pg(pc, poolRx);
+            pg.setColorAt(0.0, tailPoolCol);
+            QColor mid = tailPoolCol;
+            mid.setAlpha(tailPoolCol.alpha() / 3);
+            pg.setColorAt(0.55, mid);
+            pg.setColorAt(1.0, QColor(0, 0, 0, 0));
+            p.setBrush(pg);
+            p.drawEllipse(pc, poolRx, poolRy);
+        }
+    }
+
+    // 2. Wide 335mm Rear Performance Tires (Stay planted on tarmac, with spinning tread grooves)
+    {
+        qreal tireW = 54.0;
+        qreal tireH = 48.0;
+        qreal leftTireX = -W * 0.45;
+        qreal rightTireX = W * 0.45 - tireW;
+        qreal tireY = -tireH + 2;
+
+        auto drawRearTire = [&](qreal tx) {
+            QLinearGradient tGrad(tx, tireY, tx + tireW, tireY);
+            tGrad.setColorAt(0.0, QColor(12, 14, 18));
+            tGrad.setColorAt(0.35, QColor(28, 31, 38));
+            tGrad.setColorAt(0.65, QColor(24, 27, 34));
+            tGrad.setColorAt(1.0, QColor(10, 12, 15));
+            p.setBrush(tGrad);
+            p.setPen(QPen(QColor(8, 9, 12), 1.5));
+            p.drawRoundedRect(QRectF(tx, tireY, tireW, tireH), 8, 8);
+
+            // Animated spinning tread sipes
+            p.setPen(QPen(QColor(42, 46, 56, 180), 1.5));
+            int treadOffset = (int)(player.distanceTraveled * 2400.0) % 10;
+            for (int ty = (int)tireY + 6 + treadOffset; ty < (int)(tireY + tireH - 4); ty += 10) {
+                p.drawLine(QPointF(tx + 6, ty), QPointF(tx + tireW - 6, ty));
+            }
+        };
+        drawRearTire(leftTireX);
+        drawRearTire(rightTireX);
+    }
+
+    // Apply dynamic suspension roll to the sprung supercar chassis
+    p.rotate(bodyRollDeg);
+
+    // 3. Underbody Forged-Carbon Venturi Diffuser & Quad Titanium Exhausts
+    {
+        QPolygonF diffuser;
+        diffuser << QPointF(-W * 0.34, -36)
+                 << QPointF( W * 0.34, -36)
+                 << QPointF( W * 0.31, -12)
+                 << QPointF(-W * 0.31, -12);
+        QLinearGradient diffGrad(0, -36, 0, -12);
+        diffGrad.setColorAt(0.0, QColor(24, 27, 32));
+        diffGrad.setColorAt(1.0, QColor(10, 12, 15));
+        p.setBrush(diffGrad);
+        p.setPen(QPen(QColor(68, 74, 84), 1.5));
+        p.drawPolygon(diffuser);
+
+        // 4 Vertical aerodynamic Venturi strakes / fins
+        p.setPen(QPen(QColor(185, 165, 120, 175), 2.0));
+        for (int fin = -2; fin <= 2; ++fin) {
+            if (fin == 0) continue;
+            qreal fx = fin * 30.0;
+            p.drawLine(QPointF(fx, -34), QPointF(fx, -11));
+        }
+
+        // Quad Brushed Titanium Exhaust Tips + Twin-Turbo Blue/Orange Afterburner Flames
+        qreal exCenters[4] = { -88.0, -70.0, 70.0, 88.0 };
+        bool spitFlames = player.isAccelerating && (player.rpm > 5800.0 || player.boostBar > 0.35);
+        for (int e = 0; e < 4; ++e) {
+            QPointF ep(exCenters[e], -22.0);
+            p.setBrush(QColor(155, 150, 140));
+            p.setPen(QPen(QColor(215, 205, 185), 1.5));
+            p.drawEllipse(ep, 7.5, 6.5);
+            p.setBrush(spitFlames ? QColor(255, 150, 40) : QColor(16, 18, 22));
+            p.setPen(Qt::NoPen);
+            p.drawEllipse(ep, 5.2, 4.5);
+
+            if (spitFlames) {
+                qreal flicker = 0.75 + (QRandomGenerator::global()->generateDouble() * 0.55);
+                QRadialGradient flameGrad(ep.x(), ep.y() + 6, 18.0 * flicker);
+                flameGrad.setColorAt(0.0, QColor(220, 245, 255, 240));
+                flameGrad.setColorAt(0.35, QColor(60, 165, 255, 200));
+                flameGrad.setColorAt(0.70, QColor(255, 120, 20, 140));
+                flameGrad.setColorAt(1.0, QColor(255, 40, 10, 0));
+                p.setBrush(flameGrad);
+                p.drawEllipse(QPointF(ep.x(), ep.y() + 5), 11.0 * flicker, 16.0 * flicker);
+            }
+        }
+
+        // Central F1 Rain / Brake Strobe Light in Diffuser
+        QRectF f1Light(-10, -28, 20, 9);
+        p.setBrush(player.isBraking ? QColor(255, 40, 40) : QColor(140, 18, 22));
+        p.setPen(QPen(QColor(55, 60, 70), 1));
+        p.drawRoundedRect(f1Light, 2, 2);
+    }
+
+    // 4. Sculpted Widebody Rear Haunches & Lower Bumper (Liquid Gunmetal Metallic)
+    {
+        QPainterPath lowerBody;
+        lowerBody.moveTo(-W * 0.48, -32);
+        lowerBody.cubicTo(-W * 0.51, -62, -W * 0.47, -86, -W * 0.38 + yawShift * 0.25, -94);
+        lowerBody.lineTo( W * 0.38 + yawShift * 0.25, -94);
+        lowerBody.cubicTo( W * 0.47, -86,  W * 0.51, -62,  W * 0.48, -32);
+        lowerBody.lineTo( W * 0.35, -32);
+        lowerBody.lineTo( W * 0.32, -24);
+        lowerBody.lineTo(-W * 0.32, -24);
+        lowerBody.lineTo(-W * 0.35, -32);
+        lowerBody.closeSubpath();
+
+        QLinearGradient bodyGrad(0, -96, 0, -24);
+        bodyGrad.setColorAt(0.0, QColor(102, 112, 126));
+        bodyGrad.setColorAt(0.28, QColor(64, 72, 84));
+        bodyGrad.setColorAt(0.65, QColor(36, 40, 48));
+        bodyGrad.setColorAt(1.0, QColor(20, 23, 28));
+        p.setBrush(bodyGrad);
+        p.setPen(QPen(QColor(135, 145, 162), 1.5));
+        p.drawPath(lowerBody);
+
+        // Muscular wheel-arch fender flare sky-reflection highlights
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(200, 215, 235, 150), 2.2, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(QPointF(-W * 0.45, -78), QPointF(-W * 0.34, -88));
+        p.drawLine(QPointF( W * 0.45, -78), QPointF( W * 0.34, -88));
+    }
+
+    // 5. Tapered Fastback Cabin, Louvered V8 Engine Cover & Exterior Wing Mirrors
+    {
+        // Left & Right aerodynamic exterior wing mirrors
+        p.setBrush(QColor(38, 42, 50));
+        p.setPen(QPen(QColor(165, 158, 142), 1.2));
+        p.drawRoundedRect(QRectF(-W * 0.41 + yawShift * 0.35, -112, 24, 11), 4, 4);
+        p.drawRoundedRect(QRectF( W * 0.41 - 24 + yawShift * 0.35, -112, 24, 11), 4, 4);
+
+        QPainterPath cabinPath;
+        cabinPath.moveTo(-W * 0.36 + yawShift * 0.25, -92);
+        cabinPath.cubicTo(-W * 0.31 + yawShift * 0.45, -124, -W * 0.23 + yawShift * 0.55, -138, -W * 0.16 + yawShift * 0.6, -140);
+        cabinPath.lineTo( W * 0.16 + yawShift * 0.6, -140);
+        cabinPath.cubicTo( W * 0.23 + yawShift * 0.55, -138,  W * 0.31 + yawShift * 0.45, -124,  W * 0.36 + yawShift * 0.25, -92);
+        cabinPath.closeSubpath();
+
+        QLinearGradient roofGrad(0, -140, 0, -92);
+        roofGrad.setColorAt(0.0, QColor(92, 102, 116));
+        roofGrad.setColorAt(0.45, QColor(52, 58, 68));
+        roofGrad.setColorAt(1.0, QColor(32, 36, 44));
+        p.setBrush(roofGrad);
+        p.setPen(QPen(QColor(145, 155, 172), 1.5));
+        p.drawPath(cabinPath);
+
+        // Twin Satin Champagne-Gold Centre Racing Stripes over Roof & Rear Deck
+        p.setBrush(QColor(228, 182, 86, 215));
+        p.setPen(Qt::NoPen);
+        for (int s = -1; s <= 1; s += 2) {
+            QPolygonF stripe;
+            qreal sxTop = s * 10.0 + yawShift * 0.55;
+            qreal sxBot = s * 13.0 + yawShift * 0.25;
+            stripe << QPointF(sxTop - 4.5, -139) << QPointF(sxTop + 4.5, -139)
+                   << QPointF(sxBot + 6.0,  -86) << QPointF(sxBot - 6.0,  -86);
+            p.drawPolygon(stripe);
+        }
+
+        // Smoked Fastback Engine Bay Glass & Carbon Louvers
+        QPolygonF rearGlass;
+        rearGlass << QPointF(-W * 0.15 + yawShift * 0.55, -132)
+                  << QPointF( W * 0.15 + yawShift * 0.55, -132)
+                  << QPointF( W * 0.22 + yawShift * 0.30,  -95)
+                  << QPointF(-W * 0.22 + yawShift * 0.30,  -95);
+        QLinearGradient glassGrad(0, -132, 0, -95);
+        glassGrad.setColorAt(0.0, QColor(14, 18, 24, 235));
+        glassGrad.setColorAt(1.0, QColor(6, 8, 12, 245));
+        p.setBrush(glassGrad);
+        p.setPen(QPen(QColor(78, 86, 98), 1.2));
+        p.drawPolygon(rearGlass);
+
+        // Twin-Turbo V8 Champagne-Gold Intake Plenum visible under glass louvers
+        p.setBrush(QColor(195, 152, 72, 165));
+        p.setPen(QPen(QColor(240, 198, 105, 180), 1));
+        p.drawRoundedRect(QRectF(-18 + yawShift * 0.42, -124, 15, 22), 3, 3);
+        p.drawRoundedRect(QRectF(  3 + yawShift * 0.42, -124, 15, 22), 3, 3);
+
+        // 5 Horizontal Carbon Engine Bay Louvers + Diagonal Sky Glare
+        p.setPen(QPen(QColor(36, 40, 48), 2.2));
+        for (int lv = 0; lv < 5; ++lv) {
+            qreal ly = -127.0 + lv * 6.8;
+            qreal halfSpan = 42.0 + lv * 4.2;
+            qreal lxShift = yawShift * (0.52 - lv * 0.04);
+            p.drawLine(QPointF(-halfSpan + lxShift, ly), QPointF(halfSpan + lxShift, ly));
+        }
+    }
+
+    // 6. Recessed Carbon Rear Fascia Grill, Dual-Halo LED Lightbars & License Plate
+    {
+        QRectF fasciaRect(-W * 0.43, -84, W * 0.86, 26);
+        p.setBrush(QColor(14, 16, 20));
+        p.setPen(QPen(QColor(62, 68, 78), 1.5));
+        p.drawRoundedRect(fasciaRect, 6, 6);
+
+        // Continuous Crimson LED Lightbar Strip across top of rear fascia
+        p.setPen(QPen(player.isBraking ? QColor(255, 65, 65) : QColor(225, 28, 38), player.isBraking ? 3.5 : 2.2));
+        p.drawLine(QPointF(-W * 0.41, -80), QPointF(W * 0.41, -80));
+
+        // Left & Right Sculpted 3D Dual-Halo Tail-Light Clusters
+        auto drawTailCluster = [&](qreal tx, bool isLeft) {
+            QRectF tl(tx, -79, 76, 17);
+            p.setBrush(player.isBraking ? QColor(255, 35, 35) : QColor(185, 16, 26));
+            p.setPen(QPen(QColor(255, 120, 120), 1.2));
+            p.drawRoundedRect(tl, 4, 4);
+
+            // Inner white-hot LED brake core
+            p.setBrush(player.isBraking ? QColor(255, 225, 200) : QColor(255, 95, 95));
+            p.setPen(Qt::NoPen);
+            p.drawRoundedRect(tl.adjusted(8, 4, -8, -4), 2, 2);
+
+            // Sequential Amber Turn Signal Strip when steering or crashing
+            bool blink = ((int)(m_rainAnimTime * 7.0) % 2 == 0) &&
+                         ((isLeft && player.steerAngle < -0.15) || (!isLeft && player.steerAngle > 0.15) || player.crashTimer > 0);
+            if (blink) {
+                p.setBrush(QColor(255, 190, 25));
+                p.drawRect(QRectF(isLeft ? tx + 2 : tx + 52, -65, 22, 3.5));
+            }
+
+            // Crimson brake-light bloom halo
+            if (player.isBraking) {
+                QRadialGradient bloom(tl.center(), 48);
+                bloom.setColorAt(0.0, QColor(255, 40, 40, 145));
+                bloom.setColorAt(0.55, QColor(255, 20, 25, 55));
+                bloom.setColorAt(1.0, QColor(255, 0, 0, 0));
+                p.setBrush(bloom);
+                p.drawEllipse(tl.center(), 48, 28);
+            }
+        };
+        drawTailCluster(-W * 0.41, true);
+        drawTailCluster( W * 0.41 - 76, false);
+
+        // Center Rear License Plate [APEX GT] & Champagne-Gold Crest
+        QRectF plate(-36, -54, 72, 18);
+        p.setBrush(QColor(22, 25, 32));
+        p.setPen(QPen(QColor(215, 175, 95), 1.5));
+        p.drawRoundedRect(plate, 3, 3);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(245, 210, 130));
+        p.drawText(plate, Qt::AlignCenter, "APEX GT");
+    }
+
+    // 7. Active Carbon-Fiber Swan-Neck GT Rear Wing (Rises with speed & tilts as airbrake!)
+    {
+        qreal aeroLift = qBound(0.0, (player.speed - 80.0) / 180.0, 1.0) * 8.0 + (player.isBraking ? 5.0 : 0.0);
+        qreal wingY = -98.0 - aeroLift;
+
+        // Twin CNC-machined Titanium Swan-Neck Pylons
+        p.setBrush(QColor(155, 148, 135));
+        p.setPen(QPen(QColor(40, 44, 52), 1.2));
+        p.drawRect(QRectF(-56 + yawShift * 0.25, wingY + 4, 7, 14 + aeroLift));
+        p.drawRect(QRectF( 49 + yawShift * 0.25, wingY + 4, 7, 14 + aeroLift));
+
+        // Main Carbon-Fiber Airfoil Blade
+        QPainterPath wingBlade;
+        wingBlade.moveTo(-W * 0.44 + yawShift * 0.25, wingY + 3);
+        wingBlade.quadTo(yawShift * 0.25, wingY - (player.isBraking ? 7.0 : 3.0), W * 0.44 + yawShift * 0.25, wingY + 3);
+        wingBlade.lineTo( W * 0.42 + yawShift * 0.25, wingY + 11);
+        wingBlade.quadTo(yawShift * 0.25, wingY + 7, -W * 0.42 + yawShift * 0.25, wingY + 11);
+        wingBlade.closeSubpath();
+
+        QLinearGradient wingGrad(0, wingY - 5, 0, wingY + 11);
+        wingGrad.setColorAt(0.0, QColor(48, 52, 62));
+        wingGrad.setColorAt(0.5, QColor(22, 25, 30));
+        wingGrad.setColorAt(1.0, QColor(12, 14, 18));
+        p.setBrush(wingGrad);
+        p.setPen(QPen(QColor(218, 175, 92), 1.4));
+        p.drawPath(wingBlade);
+
+        // Carbon Wing Endplates
+        p.setBrush(QColor(24, 27, 34));
+        p.setPen(QPen(QColor(185, 155, 95), 1.2));
+        p.drawRoundedRect(QRectF(-W * 0.45 + yawShift * 0.25, wingY - 2, 7, 18), 2, 2);
+        p.drawRoundedRect(QRectF( W * 0.45 - 7 + yawShift * 0.25, wingY - 2, 7, 18), 2, 2);
+    }
+
+    // 8. Billowing Tire Smoke Clouds during Drift / Handbrake / Hard Braking
+    if (player.isHandbraking || (player.isBraking && player.speed > 125.0) || player.crashTimer > 1.2) {
+        p.setPen(Qt::NoPen);
+        for (int side = -1; side <= 1; side += 2) {
+            for (int puff = 0; puff < 3; ++puff) {
+                qreal px = side * (W * 0.38 + puff * 12.0) + (QRandomGenerator::global()->generate() % 9 - 4);
+                qreal py = -10.0 + puff * 6.0;
+                qreal rad = 22.0 + puff * 9.0;
+                QRadialGradient sg(px, py, rad);
+                sg.setColorAt(0.0, QColor(235, 240, 248, 145 - puff * 35));
+                sg.setColorAt(0.6, QColor(195, 202, 215, 75 - puff * 20));
+                sg.setColorAt(1.0, QColor(160, 168, 180, 0));
+                p.setBrush(sg);
+                p.drawEllipse(QPointF(px, py), rad, rad * 0.65);
+            }
+        }
+    }
+
+    p.restore();
+}
+
+void RasterRenderer::renderThirdPersonHUD(QPainter& p, const GameEngine& engine, int w, int h) {
+    Q_UNUSED(w);
+    const PlayerCar& player = engine.getPlayer();
+
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    // Sleek Bottom-Left Supercar Telemetry Pod (Tachometer Arc + Digital Speed + Gear + Boost)
+    QRect podRect(20, h - 148, 276, 124);
+    QLinearGradient podGrad(podRect.topLeft(), podRect.bottomRight());
+    podGrad.setColorAt(0.0, QColor(16, 18, 24, 225));
+    podGrad.setColorAt(1.0, QColor(8, 10, 14, 240));
+    p.setBrush(podGrad);
+    p.setPen(QPen(QColor(218, 175, 92, 185), 1.8));
+    p.drawRoundedRect(podRect, 12, 12);
+
+    // 1. Circular Tachometer Ring on Left Side of Pod
+    QPointF dialCenter(podRect.left() + 66, podRect.top() + 64);
+    qreal dialR = 48.0;
+    p.setBrush(QColor(10, 12, 16, 230));
+    p.setPen(QPen(QColor(72, 78, 90), 2));
+    p.drawEllipse(dialCenter, dialR, dialR);
+
+    // Active RPM Neon Arc Sweep
+    qreal rpmRatio = qBound(0.0, (player.rpm - 800.0) / 7200.0, 1.0);
+    QRectF arcRect(dialCenter.x() - dialR + 6, dialCenter.y() - dialR + 6, (dialR - 6) * 2, (dialR - 6) * 2);
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(QColor(40, 46, 56), 5.0, Qt::SolidLine, Qt::RoundCap));
+    p.drawArc(arcRect, 225 * 16, -270 * 16);
+
+    QColor rpmCol = (rpmRatio > 0.82) ? QColor(255, 50, 55)
+                  : (rpmRatio > 0.58 ? QColor(245, 188, 65) : QColor(0, 230, 255));
+    p.setPen(QPen(rpmCol, 5.0, Qt::SolidLine, Qt::RoundCap));
+    p.drawArc(arcRect, 225 * 16, qRound(-rpmRatio * 270.0 * 16.0));
+
+    // Gear Indicator in Center of Tachometer Ring
+    QString gearStr = (player.gear == -1) ? "R" : (player.gear == 0 ? "N" : QString("D%1").arg(player.gear));
+    p.setFont(QFont("Arial", 16, QFont::Bold));
+    p.setPen(QColor(245, 205, 115));
+    p.drawText(QRectF(dialCenter.x() - 28, dialCenter.y() - 18, 56, 26), Qt::AlignCenter, gearStr);
+    p.setFont(QFont("Arial", 6, QFont::Bold));
+    p.setPen(QColor(160, 172, 190));
+    p.drawText(QRectF(dialCenter.x() - 32, dialCenter.y() + 8, 64, 14), Qt::AlignCenter,
+               QString("%1 RPM").arg((int)player.rpm));
+
+    // 2. Large Digital Speed Readout & Turbo Boost Bar on Right Side of Pod
+    int rightX = podRect.left() + 128;
+    p.setFont(QFont("Arial", 30, QFont::Bold));
+    p.setPen(Qt::white);
+    p.drawText(QRect(rightX, podRect.top() + 14, 100, 44), Qt::AlignRight | Qt::AlignVCenter,
+               QString::number((int)player.speed));
+    p.setFont(QFont("Arial", 8, QFont::Bold));
+    p.setPen(QColor(228, 182, 86));
+    p.drawText(QRect(rightX + 104, podRect.top() + 30, 38, 20), Qt::AlignLeft | Qt::AlignVCenter, "KM/H");
+
+    // 10-Stage LED Shift Light Bar
+    for (int i = 0; i < 10; ++i) {
+        QRect led(rightX + 6 + i * 13, podRect.top() + 64, 10, 6);
+        bool lit = (i < qRound(rpmRatio * 10));
+        QColor lc = (i < 5) ? QColor(40, 230, 110) : ((i < 8) ? QColor(255, 195, 40) : QColor(255, 45, 50));
+        p.fillRect(led, lit ? lc : QColor(28, 32, 42));
+    }
+
+    // Turbo Boost Bar
+    p.setFont(QFont("Arial", 6, QFont::Bold));
+    p.setPen(QColor(165, 180, 200));
+    p.drawText(rightX + 6, podRect.top() + 86,
+               QString("TURBO BOOST  %1 BAR").arg(QString::number(player.boostBar * 1.6, 'f', 1)));
+    QRect boostTrack(rightX + 6, podRect.top() + 92, 128, 8);
+    p.fillRect(boostTrack, QColor(24, 28, 38));
+    QLinearGradient bg(boostTrack.topLeft(), boostTrack.topRight());
+    bg.setColorAt(0.0, QColor(0, 215, 255));
+    bg.setColorAt(0.65, QColor(245, 190, 65));
+    bg.setColorAt(1.0, QColor(255, 50, 55));
+    p.fillRect(QRect(boostTrack.left(), boostTrack.top(), qRound(boostTrack.width() * player.boostBar), boostTrack.height()), bg);
 
     p.restore();
 }

@@ -120,12 +120,34 @@ void Track::buildSunsetCoast() {
     addCurve(70, -3.2);
     addHill(60, -800);
     addStraight(50);
+    addHillAndCurve(110, -3.4, 1400);
+    addStraight(90);
+    addCurve(100, 3.8);
+    addHill(90, -1400);
+    addStraight(110);
+    addHillAndCurve(120, 2.9, 1100);
+    addCurve(95, -3.6);
+    addHill(85, -1100);
+    addStraight(120);
+    addCurve(85, 2.4);
+    addStraight(95);
     addHillAndCurve(90, -2.8, 1200);
     addCurve(60, 4.0);
     addHill(70, -1200);
     addStraight(80);
     addCurve(60, 2.0);
     addStraight(50);
+    addHillAndCurve(110, -3.4, 1400);
+    addStraight(90);
+    addCurve(100, 3.8);
+    addHill(90, -1400);
+    addStraight(110);
+    addHillAndCurve(120, 2.9, 1100);
+    addCurve(95, -3.6);
+    addHill(85, -1100);
+    addStraight(120);
+    addCurve(85, 2.4);
+    addStraight(95);
 
     int total = m_segments.size();
     int s1 = total * 0.25;
@@ -273,6 +295,14 @@ void Track::buildAlpineClimb() {
     addStraight(40);
     addHillAndCurve(80, 5.0, 2400);
     addHill(70, -5400);
+    addStraight(80);
+    addHillAndCurve(110, 4.2, 2600);
+    addCurve(95, -4.4);
+    addHill(90, -2600);
+    addStraight(100);
+    addHillAndCurve(115, -3.8, 2200);
+    addCurve(90, 4.0);
+    addHill(85, -2200);
     addStraight(60);
 
     int total = m_segments.size();
@@ -413,6 +443,15 @@ void Track::buildNeonMetropolis() {
     addCurve(70, 3.0);
     addStraight(60);
     addCurve(60, -2.0);
+    addStraight(100);
+    addCurve(95, 2.8);
+    addHill(70, 500);
+    addStraight(90);
+    addCurve(105, -3.1);
+    addHill(70, -500);
+    addStraight(110);
+    addCurve(90, 2.5);
+    addStraight(95);
     addStraight(80);
 
     int total = m_segments.size();
@@ -538,6 +577,17 @@ void Track::buildRedRock() {
     m_info.difficulty = 3;
 
     addStraight(50);
+    addHillAndCurve(110, -3.4, 1400);
+    addStraight(90);
+    addCurve(100, 3.8);
+    addHill(90, -1400);
+    addStraight(110);
+    addHillAndCurve(120, 2.9, 1100);
+    addCurve(95, -3.6);
+    addHill(85, -1100);
+    addStraight(120);
+    addCurve(85, 2.4);
+    addStraight(95);
     for (int k = 0; k < 4; ++k) {
         addHill(35, 1200);
         addHill(35, -1200);

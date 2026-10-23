@@ -1,6 +1,7 @@
 #include "GameEngine.h"
 #include <QtMath>
 #include <QRandomGenerator>
+#include <algorithm>
 
 GameEngine::GameEngine(QObject *parent)
     : QObject(parent)
@@ -20,7 +21,11 @@ void GameEngine::setDifficulty(GameDifficulty diff) {
     m_difficulty = diff;
     m_traffic.clear();
     spawnTraffic();
-    QString diffName = (diff == DIFFICULTY_EASY) ? "EASY" : ((diff == DIFFICULTY_PRO) ? "PRO (2.5x SCORE)" : "NORMAL");
+    qreal fullTrackZ = qMax(240000.0, (qreal)m_track.trackLength() - 16000.0);
+    qreal lenScale = (diff == DIFFICULTY_EASY) ? 0.65 : ((diff == DIFFICULTY_PRO) ? 1.0 : 0.82);
+    m_player.finishLineZ = fullTrackZ * lenScale;
+    spawnTraffic();
+    QString diffName = (diff == DIFFICULTY_EASY) ? "LEVEL 1: EASY (6-CAR GRID)" : ((diff == DIFFICULTY_PRO) ? "LEVEL 3: PRO (16-CAR GRID • 2.5x)" : "LEVEL 2: NORMAL (10-CAR GRID • 1.5x)");
     m_player.lastAnnouncement = QString("DIFFICULTY: %1").arg(diffName);
     m_player.announcementTimer = 2.0;
 }
@@ -67,7 +72,24 @@ void GameEngine::resetPlayer() {
     m_player.distanceTraveled = 0;
     m_player.currentSector = 1;
     m_player.lastSectorAnnounced = 1;
-    m_player.lastAnnouncement = "VEHICLE REPAIRED & READY!";
+    m_player.x = 0.25;
+    m_player.accelRate = 95.0;
+    m_player.maxSpeed = 295.0;
+    if (m_player.raceFinished && m_player.currentPosition <= 3) {
+        if (m_difficulty == DIFFICULTY_EASY) {
+            m_difficulty = DIFFICULTY_NORMAL;
+        } else if (m_difficulty == DIFFICULTY_NORMAL) {
+            m_difficulty = DIFFICULTY_PRO;
+        }
+    }
+    m_player.raceTime = 0.0;
+    m_player.finishTime = 0.0;
+    m_player.raceFinished = false;
+    qreal fullTrackZ = qMax(240000.0, (qreal)m_track.trackLength() - 16000.0);
+    qreal lenScale = (m_difficulty == DIFFICULTY_EASY) ? 0.65 : ((m_difficulty == DIFFICULTY_PRO) ? 1.0 : 0.82);
+    m_player.finishLineZ = fullTrackZ * lenScale;
+    spawnTraffic();
+    m_player.lastAnnouncement = "STARTING GRID READY — FLOOR THE THROTTLE!";
     m_player.announcementTimer = 2.0;
     m_player.crashTimer = 0;
 }
@@ -244,7 +266,7 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
         accel = -120.0; // Rapid braking when wrecked
         m_player.boostBar = 0.0;
     } else if (m_player.isAccelerating) {
-        qreal powerFactor = qBound(0.18, 1.0 - (m_player.speed / m_player.maxSpeed), 1.0);
+        qreal powerFactor = qBound(0.45, 1.0 - (m_player.speed / 350.0), 1.0);
         accel = m_player.accelRate * powerFactor;
         m_player.boostBar = qMin(1.0, m_player.boostBar + 1.2 * dt);
     } else {
@@ -268,7 +290,7 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
         accel -= m_player.brakeRate * 1.6;
     }
 
-    qreal drag = 0.0006 * m_player.speed * m_player.speed;
+    qreal drag = 0.00018 * m_player.speed * m_player.speed;
     qreal rollingResistance = 4.0;
     accel -= (drag + rollingResistance);
 
@@ -288,7 +310,14 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
     }
 
     qreal speedBoost = 1.0 + qBound(0.0, (m_player.speed - 60.0) / 300.0, 0.25);
-    qreal worldSpeed = (m_player.speed / 3.6) * 14.0 * speedBoost * dt;
+    qreal absSpd = qAbs(m_player.speed);
+    qreal signSpd = (m_player.speed >= 0.0) ? 1.0 : -1.0;
+    qreal worldSpeed = (absSpd > 0.2)
+        ? signSpd * ((absSpd / 3.6) * 62.0 + 240.0 * qMin(1.0, absSpd / 22.0)) * dt
+        : 0.0;
+    if ((m_player.isAccelerating || absSpd > 0.5 || m_player.worldZ > 15.0) && !m_player.raceFinished) {
+        m_player.raceTime += dt;
+    }
     m_player.worldZ += worldSpeed;
     m_player.distanceTraveled += (m_player.speed / 3600.0) * dt;
 
@@ -418,6 +447,72 @@ void GameEngine::spawnTraffic() {
     m_player.impactCameraShake = 0;
     m_player.lateralRecoil = 0;
 
+    int rivalCount = (m_difficulty == DIFFICULTY_EASY) ? 5 : ((m_difficulty == DIFFICULTY_PRO) ? 15 : 9);
+    int aheadCount = (rivalCount + 1) / 2; // Player starts in the middle of the pack!
+    qreal trackDiffBonus = (m_track.getInfo().difficulty - 2) * 3.0;
+    qreal diffBoost = ((m_difficulty == DIFFICULTY_EASY) ? -16.0 : ((m_difficulty == DIFFICULTY_PRO) ? 12.0 : 0.0)) + trackDiffBonus;
+    qreal accelBoost = (m_difficulty == DIFFICULTY_EASY) ? -4.0 : ((m_difficulty == DIFFICULTY_PRO) ? 5.0 : 0.0);
+
+    struct RacerTemplate {
+        const char* name;
+        VehicleType type;
+        int lane;
+        qreal baseSpd;
+        qreal baseAccel;
+    } roster[15] = {
+        { "VORTEX GT",   VEHICLE_SPORTS_RED,   0, 176.0, 35.0 },
+        { "NITRO RS",    VEHICLE_SEDAN_SILVER, 2, 171.0, 34.5 },
+        { "COBRA V8",    VEHICLE_COMPACT_BLUE, 1, 166.0, 34.0 },
+        { "TITAN GTR",   VEHICLE_SUV_BLACK,    3, 161.0, 33.5 },
+        { "PHANTOM X",   VEHICLE_SPORTS_RED,   0, 156.0, 33.0 },
+        { "FALCON R",    VEHICLE_COMPACT_BLUE, 3, 152.0, 32.5 },
+        { "BLITZ EVO",   VEHICLE_SEDAN_SILVER, 1, 148.0, 32.0 },
+        { "APEX FURY",   VEHICLE_SPORTS_RED,   2, 144.0, 31.5 },
+        { "HYPERION Z",  VEHICLE_SUV_BLACK,    0, 140.0, 31.0 },
+        { "SHADOW M8",   VEHICLE_SEDAN_SILVER, 3, 137.0, 30.5 },
+        { "VALKYRIE S",  VEHICLE_SPORTS_RED,   1, 134.0, 30.0 },
+        { "TEMPEST RS",  VEHICLE_COMPACT_BLUE, 2, 131.0, 29.5 },
+        { "MONARCH V12", VEHICLE_SUV_BLACK,    0, 128.0, 29.0 },
+        { "SPECTRE GT",  VEHICLE_SEDAN_SILVER, 3, 125.0, 28.5 },
+        { "KRAKEN R",    VEHICLE_COMPACT_BLUE, 1, 122.0, 28.0 }
+    };
+
+    for (int i = 0; i < rivalCount; ++i) {
+        NPCCar npc;
+        npc.id = m_nextNpcId++;
+        npc.racerName = QString::fromLatin1(roster[i].name);
+        npc.type = roster[i].type;
+        npc.assignedLane = roster[i].lane;
+        npc.isOncoming = false; // 100% One-Way Motorsport Race Track
+        npc.x = laneCoords[roster[i].lane];
+        npc.targetX = npc.x;
+
+        qreal startZ = 0.0;
+        if (i < aheadCount) {
+            // Staggered rows ahead of the player (furthest is P1 at ~3400)
+            int stepsAhead = aheadCount - i;
+            startZ = 1120.0 + stepsAhead * 290.0;
+            npc.currentPosition = i + 1;
+        } else {
+            // Staggered rows behind the player
+            int stepsBehind = (i - aheadCount) + 1;
+            startZ = -140.0 - stepsBehind * 210.0;
+            npc.currentPosition = i + 2;
+        }
+
+        npc.worldZ = m_player.worldZ + startZ;
+        npc.speed = 0.0;        // Starts stationary on the Starting Grid with the player!
+        npc.maxSpeed = roster[i].baseSpd + diffBoost;
+        npc.accelRate = roster[i].baseAccel + accelBoost;
+        npc.hasFinished = false;
+        npc.finishTime = 0.0;
+        m_traffic.append(npc);
+    }
+    m_player.totalRacers = m_traffic.size() + 1;
+    m_player.currentPosition = aheadCount + 1;
+    if (true) return;
+    m_player.lateralRecoil = 0;
+
     int totalTrafficCount = (m_difficulty == DIFFICULTY_EASY) ? 18 : ((m_difficulty == DIFFICULTY_PRO) ? 28 : 24);
     qreal speedDelta = (m_difficulty == DIFFICULTY_EASY) ? -16.0 : ((m_difficulty == DIFFICULTY_PRO) ? 24.0 : 0.0);
     int totalTrackLen = m_track.trackLength();
@@ -474,7 +569,7 @@ void GameEngine::spawnTraffic() {
         adj1.speed = 112.0 + speedDelta;
         adj1.maxSpeed = adj1.speed;
         adj1.worldZ = m_player.worldZ - 30.0;
-        adj1.isSideLanePacer = true;
+        adj1.isSideLanePacer = false;
         if (adj1.worldZ < 0) adj1.worldZ += totalTrackLen;
         m_traffic.append(adj1);
 
@@ -495,7 +590,7 @@ void GameEngine::spawnTraffic() {
     // 3. Forward Traffic Corridor (+350 to +18,000 units)
     // Distributed across highway horizon with realistic spacing so cars appear far in distance
     int remainingCount = totalTrafficCount - m_traffic.size();
-    qreal curZ = m_player.worldZ + 350.0;
+    qreal curZ = m_player.worldZ + 1250.0;
 
     for (int i = 0; i < remainingCount; ++i) {
         NPCCar npc;
@@ -543,18 +638,241 @@ void GameEngine::spawnTraffic() {
     }
 }
 
+QVector<RaceStandingEntry> GameEngine::getRaceStandings() const {
+    QVector<RaceStandingEntry> list;
+    list.reserve(m_traffic.size() + 1);
+
+    RaceStandingEntry playerEntry;
+    playerEntry.name = "[YOU] APEX GT-R";
+    playerEntry.isPlayer = true;
+    playerEntry.hasFinished = m_player.raceFinished;
+    playerEntry.finishTime = m_player.finishTime;
+    playerEntry.progressZ = m_player.worldZ;
+    playerEntry.speed = m_player.speed;
+    list.append(playerEntry);
+
+    for (const NPCCar& npc : m_traffic) {
+        RaceStandingEntry e;
+        e.name = npc.racerName.isEmpty() ? QString("RACER #%1").arg(npc.id) : npc.racerName;
+        e.isPlayer = false;
+        e.hasFinished = npc.hasFinished;
+        e.finishTime = npc.finishTime;
+        e.progressZ = npc.worldZ;
+        e.speed = npc.speed;
+        list.append(e);
+    }
+
+    std::sort(list.begin(), list.end(), [](const RaceStandingEntry& a, const RaceStandingEntry& b) {
+        if (a.hasFinished && b.hasFinished) {
+            return a.finishTime < b.finishTime;
+        }
+        if (a.hasFinished != b.hasFinished) {
+            return a.hasFinished;
+        }
+        return a.progressZ > b.progressZ;
+    });
+
+    for (int i = 0; i < list.size(); ++i) {
+        list[i].position = i + 1;
+    }
+    return list;
+}
+
 void GameEngine::updateTraffic(qreal dt) {
+  {
+    const qreal laneCoords[4] = { -0.75, -0.25, 0.25, 0.75 };
+    int totalTrackLen = m_track.trackLength();
+    bool raceStarted = m_player.isAccelerating || m_player.speed > 0.5 || m_player.raceTime > 0.0 || m_player.worldZ > 15.0;
+
+    for (int i = 0; i < m_traffic.size(); ++i) {
+        NPCCar& npc = m_traffic[i];
+        npc.isOncoming = false; // Strictly one-sided race cars
+
+        // Post-crash skid, fishtailing & recovery
+        if (npc.isCrashing) {
+            npc.crashRecoveryTimer -= dt;
+            npc.x += npc.lateralVelocity * dt;
+            npc.x = qBound(-1.10, npc.x, 1.10);
+            npc.lateralVelocity *= (1.0 - 2.8 * dt);
+            npc.skidAngle = sin(npc.crashRecoveryTimer * 15.0) * 0.35 * qMax(0.0, npc.crashRecoveryTimer / 2.5);
+            npc.hazardLights = true;
+            npc.isBraking = true;
+            if (npc.crashRecoveryTimer <= 0) {
+                npc.isCrashing = false;
+                npc.hazardLights = false;
+                npc.skidAngle = 0;
+                npc.isBraking = false;
+                npc.targetX = laneCoords[qBound(0, npc.assignedLane, 3)];
+            }
+        } else if (raceStarted) {
+            // Detect lead car in same lane
+            qreal minLeadDist = 99999.0;
+            qreal leadSpeed = npc.maxSpeed;
+            for (int j = 0; j < m_traffic.size(); ++j) {
+                if (i == j) continue;
+                const NPCCar& other = m_traffic[j];
+                if (qAbs(other.x - npc.x) < 0.22) {
+                    qreal dist = other.worldZ - npc.worldZ;
+                    if (dist > 0 && dist < minLeadDist) {
+                        minLeadDist = dist;
+                        leadSpeed = other.speed;
+                    }
+                }
+            }
+
+            // Realistic Motorsport Pack Pacing — ensures player can catch, draft & overtake rivals for P1!
+            qreal relDist = npc.worldZ - m_player.worldZ;
+            qreal targetRaceSpeed = npc.maxSpeed;
+            if (relDist > 1800.0) {
+                // Rivals far ahead pace slightly so player can reel in the lead pack and overtake
+                targetRaceSpeed = qMin(npc.maxSpeed, qMax(95.0, m_player.speed * 0.76));
+            } else if (relDist > 0.0) {
+                // Rivals immediately ahead drive at overtakeable race pace
+                targetRaceSpeed = qMin(npc.maxSpeed, qMax(115.0, m_player.speed * 0.85));
+            } else if (relDist < -300.0 && !npc.hasFinished) {
+                // Overtaken rivals trail cleanly behind without artificial rubber-band cheating
+                targetRaceSpeed = qMin(npc.maxSpeed, qMax(110.0, m_player.speed * 0.84));
+            }
+
+            if (minLeadDist < 220.0 && npc.laneChangeTimer <= 1.2) {
+                npc.isBraking = (npc.speed > leadSpeed + 8.0);
+                qreal followSpd = qMax(90.0, leadSpeed - 4.0);
+                npc.speed += (followSpd - npc.speed) * 3.5 * dt;
+            } else {
+                npc.isBraking = false;
+                if (npc.speed < targetRaceSpeed) {
+                    npc.speed += npc.accelRate * dt;
+                    if (npc.speed > targetRaceSpeed) npc.speed = targetRaceSpeed;
+                } else {
+                    npc.speed -= 28.0 * dt;
+                }
+            }
+
+            // Overtaking AI across all 4 one-way racing lanes (0, 1, 2, 3)
+            npc.laneChangeTimer += dt;
+            if (minLeadDist < 320.0 && npc.laneChangeTimer > 1.2) {
+                npc.laneChangeTimer = 0;
+                int curLane = qBound(0, npc.assignedLane, 3);
+                int bestLane = curLane;
+                for (int cand = 0; cand < 4; ++cand) {
+                    if (cand == curLane || qAbs(cand - curLane) > 1) continue;
+                    bool clear = true;
+                    for (int k = 0; k < m_traffic.size(); ++k) {
+                        if (k == i) continue;
+                        if (qAbs(m_traffic[k].x - laneCoords[cand]) < 0.22 &&
+                            qAbs(m_traffic[k].worldZ - npc.worldZ) < 260.0) {
+                            clear = false;
+                            break;
+                        }
+                    }
+                    if (clear) {
+                        bestLane = cand;
+                        break;
+                    }
+                }
+                npc.assignedLane = bestLane;
+                npc.targetX = laneCoords[bestLane];
+            }
+        }
+
+        // Exact same road-speed formula as the player so relative speeds match 1:1!
+        qreal absSpd = qAbs(npc.speed);
+        qreal worldSpeed = (absSpd > 0.2)
+            ? ((absSpd / 3.6) * 62.0 + 240.0 * qMin(1.0, absSpd / 22.0)) * dt
+            : 0.0;
+        npc.worldZ += worldSpeed;
+
+        // Check if this AI racer crossed the Finish Line
+        if (!npc.hasFinished && npc.worldZ >= m_player.finishLineZ) {
+            npc.hasFinished = true;
+            npc.finishTime = qMax(0.1, m_player.raceTime);
+        }
+
+        // Blinker & lateral lane-change interpolation
+        npc.blinkerTimer += dt;
+        npc.blinkerFlash = (fmod(npc.blinkerTimer, 0.28) < 0.14);
+        if (qAbs(npc.x - npc.targetX) > 0.02) {
+            npc.x += (npc.targetX - npc.x) * 2.8 * dt;
+            if (!npc.hazardLights) {
+                npc.turnLeft = (npc.targetX < npc.x);
+                npc.turnRight = (npc.targetX > npc.x);
+            }
+        } else {
+            npc.x = npc.targetX;
+            if (!npc.hazardLights) {
+                npc.turnLeft = false;
+                npc.turnRight = false;
+            }
+        }
+    }
+
+    // Check if the Player crossed the Finish Line!
+    if (!m_player.raceFinished && m_player.worldZ >= m_player.finishLineZ) {
+        m_player.raceFinished = true;
+        m_player.finishTime = qMax(0.1, m_player.raceTime);
+
+        // Compute projected finish times for any AI racers still behind the finish line
+        for (int i = 0; i < m_traffic.size(); ++i) {
+            NPCCar& npc = m_traffic[i];
+            if (!npc.hasFinished) {
+                qreal remZ = qMax(40.0, m_player.finishLineZ - npc.worldZ);
+                qreal estSpd = qMax(165.0, npc.speed);
+                qreal unitsPerSec = (estSpd / 3.6) * 62.0 + 240.0;
+                npc.finishTime = m_player.finishTime + (remZ / unitsPerSec) + (i * 0.18);
+                npc.hasFinished = true;
+            }
+        }
+    }
+
+    // Update live race positions (1st to 8th) for player and all AI racers
+    int prevPlayerPos = m_player.currentPosition;
+    QVector<RaceStandingEntry> standings = getRaceStandings();
+    for (const RaceStandingEntry& e : standings) {
+        if (e.isPlayer) {
+            m_player.currentPosition = e.position;
+        } else {
+            for (int i = 0; i < m_traffic.size(); ++i) {
+                if (m_traffic[i].racerName == e.name) {
+                    m_traffic[i].currentPosition = e.position;
+                }
+            }
+        }
+    }
+    if (!m_player.raceFinished && m_player.raceTime > 0.3 && m_player.currentPosition < prevPlayerPos) {
+        int gained = prevPlayerPos - m_player.currentPosition;
+        m_player.score += gained * 1000;
+        m_player.lastAnnouncement = (m_player.currentPosition == 1)
+            ? QString("🏆 RACE LEADER! OVERTAKE FOR P1 / %1 (+%2 PTS)").arg(m_player.totalRacers).arg(gained * 1000)
+            : QString("🔥 OVERTAKE! ADVANCED TO P%1 / %2 (+%3 PTS)").arg(m_player.currentPosition).arg(m_player.totalRacers).arg(gained * 1000);
+        m_player.announcementTimer = 2.4;
+    }
+
+    if (m_player.raceFinished && m_player.announcementTimer < 100.0) {
+        m_player.lastAnnouncement = QString("🏁 FINISH LINE! YOU FINISHED P%1 / %2 (%3s) — PRESS [R] TO RACE AGAIN")
+            .arg(m_player.currentPosition)
+            .arg(m_player.totalRacers)
+            .arg(QString::number(m_player.finishTime, 'f', 2));
+        m_player.announcementTimer = 999.0;
+    }
+
+    if (true) return;
+  }
     const qreal laneCoords[4] = { -0.75, -0.25, 0.25, 0.75 };
     int totalTrackLen = m_track.trackLength();
 
     for (int i = 0; i < m_traffic.size(); ++i) {
         NPCCar& npc = m_traffic[i];
 
-        qreal worldSpeed = (npc.speed / 3.6) * 14.0 * dt;
+        qreal worldSpeed = (npc.speed / 3.6) * 24.0 * dt;
 
         if (npc.isOncoming) {
             // Oncoming traffic moves toward player (decreasing Z)
-            npc.worldZ -= worldSpeed;
+            if (npc.isCrashing) {
+                npc.worldZ += ((m_player.speed * 0.85) / 3.6) * 24.0 * dt;
+                if (npc.worldZ >= totalTrackLen) npc.worldZ -= totalTrackLen;
+            } else {
+                npc.worldZ -= worldSpeed;
+            }
             if (npc.worldZ < 0) {
                 npc.worldZ += totalTrackLen;
             }
@@ -746,7 +1064,38 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
         qreal lateralOffset = m_player.x - npc.x; // Positive: player is to right of NPC
 
         // Realistic Multi-Phase Physical Collision
-        if (m_player.collisionCooldown <= 0 && qAbs(relZ) < 70 && lateralDist < 0.22) {
+        // Exact Screen-Space Bumper-Touch Collision Detection:
+        // Project the NPC car's actual screen Y position (accounting for hill elevation & camera pitch)
+        // so a collision ONLY triggers when the two cars visibly touch on screen!
+        bool carsTouchingOnScreen = false;
+        qreal hitLateralWidth = (npc.type == VEHICLE_TRUCK_SEMI) ? 0.185 : 0.165;
+        if (relZ > 60.0 && relZ < 1400.0 && lateralDist < hitLateralWidth) {
+            int segLen = m_track.getInfo().segmentLength;
+            int baseIdx = (int)(m_player.worldZ / segLen);
+            qreal baseElev = m_track.getSegment(baseIdx).elevation;
+            qreal eyeHeight = baseElev + 950.0;
+
+            int npcSegIdx = (int)(npc.worldZ / segLen);
+            qreal npcFrac = qBound(0.0, (npc.worldZ - npcSegIdx * (qreal)segLen) / (qreal)segLen, 1.0);
+            qreal e1 = m_track.getSegment(npcSegIdx).elevation;
+            qreal e2 = m_track.getSegment(npcSegIdx + 1).elevation;
+            qreal npcElev = e1 + (e2 - e1) * npcFrac;
+
+            qreal speedFovBoost = 1.0 + (m_player.speed / 400.0) * 0.15;
+            qreal scale = (0.80 * speedFovBoost) / relZ;
+            qreal horizon720 = 720.0 * 0.42 + m_player.pitchG * 140.0;
+            qreal npcScreenY = horizon720 - (scale * (npcElev - eyeHeight) * 360.0);
+
+            // In 3rd-person view, the player car's front nose is at y = 560..645 (on 720p reference).
+            // In 1st-person view, the player car's front hood edge is at y = 500..570 (on 720p reference).
+            qreal minTouchY = m_player.thirdPersonView ? 558.0 : 502.0;
+            qreal maxTouchY = m_player.thirdPersonView ? 648.0 : 572.0;
+            carsTouchingOnScreen = (npcScreenY >= minTouchY && npcScreenY <= maxTouchY);
+        }
+
+        if (m_player.collisionCooldown <= 0 && carsTouchingOnScreen) {
+            // Rebound the collided vehicle slightly forward from the exact bumper contact point so both cars remain clearly visible!
+            npc.worldZ = fmod(npc.worldZ + 45.0, (qreal)totalTrackLen);
             qreal deltaV = npc.isOncoming ? (m_player.speed + npc.speed) : qAbs(m_player.speed - npc.speed);
             qreal mass = (npc.type == VEHICLE_TRUCK_SEMI) ? 2.8 : ((npc.type == VEHICLE_COMPACT_BLUE) ? 0.75 : 1.0);
             int damageTaken = 0;
@@ -763,6 +1112,7 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
 
                 // NPC knocked backwards and deflected towards shoulder
                 npc.isCrashing = true;
+                npc.speed = qMax(npc.speed, m_player.speed + 28.0);
                 npc.crashRecoveryTimer = 3.2;
                 npc.lateralVelocity = (lateralOffset >= 0 ? -2.6 : 2.6);
                 npc.skidAngle = (lateralOffset >= 0 ? -0.55 : 0.55);
@@ -781,6 +1131,7 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
 
                 // NPC shoved forward by impact momentum
                 npc.isCrashing = true;
+                npc.speed = qMax(npc.speed, m_player.speed + 28.0);
                 npc.crashRecoveryTimer = 2.6;
                 npc.speed = qMin(185.0, npc.speed + 38.0 / mass);
                 npc.lateralVelocity = (lateralOffset >= 0 ? -1.8 : 1.8) / mass;
@@ -798,6 +1149,7 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
 
                 // NPC fishtails from lateral glance
                 npc.isCrashing = true;
+                npc.speed = qMax(npc.speed, m_player.speed + 28.0);
                 npc.crashRecoveryTimer = 1.8;
                 npc.lateralVelocity = (lateralOffset >= 0 ? -1.2 : 1.2);
                 npc.skidAngle = (lateralOffset >= 0 ? -0.22 : 0.22);
@@ -830,7 +1182,7 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
         }
 
         // Near Miss Check
-        if (!npc.nearMissAwarded && relZ < 0 && relZ > -110 && lateralDist < 0.38 && lateralDist > 0.22 && m_player.speed > 80) {
+        if (!npc.nearMissAwarded && relZ < 680 && relZ > 380 && lateralDist < 0.36 && lateralDist >= hitLateralWidth && m_player.speed > 75) {
             npc.nearMissAwarded = true;
             int basePoints = npc.isOncoming ? 450 : 180;
             qreal scoreScale = (m_difficulty == DIFFICULTY_EASY) ? 1.0 : ((m_difficulty == DIFFICULTY_PRO) ? 2.5 : 1.5);

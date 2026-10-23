@@ -155,6 +155,11 @@ void GameWindow::keyPressEvent(QKeyEvent *event) {
         case Qt::Key_Escape:
             m_showMainMenu = !m_showMainMenu;
             break;
+        case Qt::Key_C:
+        case Qt::Key_V:
+            m_engine.toggleCameraView();
+            update();
+            break;
         case Qt::Key_R:
             m_engine.resetPlayer();
             break;
@@ -299,7 +304,15 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
     int sh = qRound(175 * scaleY);
     QRect screenRect(sx, sy, sw, sh);
 
-    if (screenRect.contains(pos)) {
+    // Top HUD Camera View Switch Button: [ 🎥 3RD PERSON (C) ] / [ 🎥 1ST PERSON (C) ]
+    QRect camSwitchBtn(288, 4, 156, 30);
+    if (camSwitchBtn.contains(pos)) {
+        m_engine.toggleCameraView();
+        update();
+        return;
+    }
+
+    if (!m_engine.isThirdPersonView() && screenRect.contains(pos)) {
         int contentY = sy + 24;
 
         // 1. Top Mode Tabs: [WEB] [MUSIC] [GPS] [CAR]
@@ -507,9 +520,9 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         QString desc;
         QColor accent;
     } diffs[] = {
-        { DIFFICULTY_EASY, "🟢 EASY / CASUAL", "18 Cars • High Grip • Relaxed Flow", QColor(40, 225, 90) },
-        { DIFFICULTY_NORMAL, "🟡 NORMAL / HIGHWAY", "24 Cars • Standard Damage • 1.5x Score", QColor(255, 195, 30) },
-        { DIFFICULTY_PRO, "🔴 PRO / INSANE", "28 Cars • Heavy Impacts • 2.5x Score", QColor(255, 45, 65) }
+        { DIFFICULTY_EASY, "🟢 LEVEL 1: EASY / ROOKIE", "6 Cars Grid • Shorter Circuit • Easy Overtakes", QColor(40, 225, 90) },
+        { DIFFICULTY_NORMAL, "🟡 LEVEL 2: NORMAL / CIRCUIT", "10 Cars Grid • Faster Rivals • 1.5x Score", QColor(255, 195, 30) },
+        { DIFFICULTY_PRO, "🔴 LEVEL 3: PRO / CHAMPIONSHIP", "16 Cars Grid • Full Endurance • 2.5x Score", QColor(255, 45, 65) }
     };
 
     GameDifficulty curDiff = m_engine.getDifficulty();

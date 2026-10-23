@@ -34,11 +34,17 @@ private:
     void renderWindshieldHolographicHUD(QPainter& p, const GameEngine& engine, int w, int h, int dashX, int dashY);
     void renderWindshieldEffects(QPainter& p, const GameEngine& engine, int w, int h);
     void renderSportPedals(QPainter& p, const GameEngine& engine, int w, int h);
+    void renderThirdPersonPlayerCar(QPainter& p, const GameEngine& engine, int w, int h);
+    void renderThirdPersonHUD(QPainter& p, const GameEngine& engine, int w, int h);
     void renderHUD(QPainter& p, const GameEngine& engine, int w, int h);
+    void renderSpeedStreaks(QPainter& p, const GameEngine& engine, int w, int h);
+    void renderPostFX(QPainter& p, const GameEngine& engine, int w, int h);
 
     qreal m_cameraHeading = 0;
     qreal m_rainAnimTime = 0;
     quint64 m_frameCounter = 0;
+    QImage m_postFxOverlay;   // cached vignette + colour-grade layer (rebuilt only on resize / time-of-day change)
+    qint64 m_postFxKey = -1;
     QImage m_rearMirrorBuffer;
     QImage m_leftMirrorBuffer;
     QImage m_rightMirrorBuffer;
