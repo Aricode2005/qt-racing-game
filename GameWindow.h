@@ -54,6 +54,7 @@ private:
     bool m_showMainMenu = true;
     QRect m_diffButtons[3];
     QRect m_todButtons[3];
+    QRect m_carButtons[4];
     QRect m_trackCards[4];
     QRect m_resumeBtn;
     QRect m_repairBtn;

@@ -73,8 +73,7 @@ void GameEngine::resetPlayer() {
     m_player.currentSector = 1;
     m_player.lastSectorAnnounced = 1;
     m_player.x = 0.25;
-    m_player.accelRate = 95.0;
-    m_player.maxSpeed = 295.0;
+    setSelectedCar(m_player.selectedCar);
     if (m_player.raceFinished && m_player.currentPosition <= 3) {
         if (m_difficulty == DIFFICULTY_EASY) {
             m_difficulty = DIFFICULTY_NORMAL;
@@ -89,7 +88,83 @@ void GameEngine::resetPlayer() {
     qreal lenScale = (m_difficulty == DIFFICULTY_EASY) ? 0.65 : ((m_difficulty == DIFFICULTY_PRO) ? 1.0 : 0.82);
     m_player.finishLineZ = fullTrackZ * lenScale;
     spawnTraffic();
-    m_player.lastAnnouncement = "STARTING GRID READY — FLOOR THE THROTTLE!";
+    m_player.lastAnnouncement = QString("STARTING GRID READY (%1 CARS • %2) — FLOOR THE THROTTLE!")
+        .arg(m_player.totalRacers)
+        .arg(m_player.carModelName);
+    m_player.announcementTimer = 2.0;
+    m_player.crashTimer = 0;
+}
+
+void GameEngine::setSelectedCar(int carIdx) {
+    m_player.selectedCar = qBound(0, carIdx, 3);
+    switch (m_player.selectedCar) {
+        case 0: // APEX GT-R (Balanced Twin-Turbo Coupe)
+            m_player.carModelName = "APEX GT-R";
+            m_player.maxSpeed = 300.0;
+            m_player.accelRate = 96.0;
+            m_player.armorMultiplier = 1.00;
+            m_player.gripMultiplier = 1.00;
+            break;
+        case 1: // VORTEX V12 (Hypercar Interceptor)
+            m_player.carModelName = "VORTEX V12";
+            m_player.maxSpeed = 345.0;
+            m_player.accelRate = 118.0;
+            m_player.armorMultiplier = 0.85;
+            m_player.gripMultiplier = 0.96;
+            break;
+        case 2: // DRIFT SPEC-R (Touge Track Special)
+            m_player.carModelName = "DRIFT SPEC-R";
+            m_player.maxSpeed = 288.0;
+            m_player.accelRate = 94.0;
+            m_player.armorMultiplier = 0.95;
+            m_player.gripMultiplier = 1.28;
+            break;
+        case 3: // TITAN ENFORCER (Armored Endurance GT)
+            m_player.carModelName = "TITAN ENFORCER";
+            m_player.maxSpeed = 294.0;
+            m_player.accelRate = 92.0;
+            m_player.armorMultiplier = 1.55;
+            m_player.gripMultiplier = 1.04;
+            break;
+    }
+    m_player.lastAnnouncement = QString("🏎️ SUPERCAR SELECTED: %1 (%2 KM/H • %3% ARMOR)")
+        .arg(m_player.carModelName)
+        .arg((int)m_player.maxSpeed)
+        .arg(qRound(m_player.armorMultiplier * 100));
+    m_player.announcementTimer = 2.4;
+}
+
+void GameEngine::toggleAdas() {
+    m_player.adasEnabled = !m_player.adasEnabled;
+    m_player.lastAnnouncement = m_player.adasEnabled
+        ? "🛡️ ADAS STEERING ASSIST: ON (APEX COMPENSATION & LANE STABILITY)"
+        : "⚙️ ADAS STEERING ASSIST: OFF (100% MANUAL CENTRIFUGAL REALISM)";
+    m_player.announcementTimer = 2.4;
+}
+
+void GameEngine::toggleArGuides() {
+    m_player.arGuidesEnabled = !m_player.arGuidesEnabled;
+    m_player.lastAnnouncement = m_player.arGuidesEnabled
+        ? "🎯 3D AR PASSING-GAP TRAJECTORY RAILS & TARGET BRACKETS: ON"
+        : "🎯 3D AR PASSING-GAP TRAJECTORY RAILS: OFF";
+    m_player.announcementTimer = 2.4;
+}
+
+void GameEngine::toggleZBuffer3DMode() {
+    m_player.zBuffer3DMode = !m_player.zBuffer3DMode;
+    m_player.lastAnnouncement = m_player.zBuffer3DMode
+        ? "🧊 FULL-DEPTH 3D Z-BUFFER & LAMBERTIAN SHADING PIPELINE: ON"
+        : "🧊 CLASSIC 2.5D SCANLINE RASTER PIPELINE: ON";
+    m_player.announcementTimer = 2.4;
+}
+
+void GameEngine::fieldRepair() {
+    m_player.health = qMin(100, m_player.health + 50);
+    m_player.isWrecked = false;
+    m_player.crashTimer = 0;
+    m_player.lastAnnouncement = QString("🔧 ON-SPOT FIELD REPAIR COMPLETE (+50% HEALTH → %1%)").arg(m_player.health);
+    m_player.announcementTimer = 2.4;
+
     m_player.announcementTimer = 2.0;
     m_player.crashTimer = 0;
 }
@@ -239,13 +314,14 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
     m_player.steerAngle += (m_player.steerTarget - m_player.steerAngle) * steerInterpolationSpeed * dt;
 
     // Agile and effortless lateral maneuverability for dodging traffic smoothly
-    qreal lateralSpeed = m_player.steerAngle * (qMax(45.0, m_player.speed) / 125.0) * 4.0 * dt;
+    qreal lateralSpeed = m_player.steerAngle * m_player.gripMultiplier * (qMax(45.0, m_player.speed) / 125.0) * 4.0 * dt;
     m_player.x += lateralSpeed;
 
     // Gentle centrifugal curve push so taking corners feels effortless and intuitive
     const RoadSegment& currentSeg = m_track.findSegment(m_player.worldZ);
     const RoadSegment& nextSeg = m_track.findSegment(m_player.worldZ + m_track.getInfo().segmentLength);
-    qreal curveForce = currentSeg.curve * (m_player.speed / 300.0) * 0.32 * dt;
+    qreal adasFactor = m_player.adasEnabled ? 0.22 : 0.48;
+    qreal curveForce = currentSeg.curve * (m_player.speed / 300.0) * adasFactor * dt;
     m_player.x -= curveForce;
 
     // Soft asphalt edge stabilization to prevent sudden spins
@@ -267,7 +343,15 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
         m_player.boostBar = 0.0;
     } else if (m_player.isAccelerating) {
         qreal powerFactor = qBound(0.45, 1.0 - (m_player.speed / 350.0), 1.0);
-        accel = m_player.accelRate * powerFactor;
+        m_player.slipstreamActive = false;
+        for (const NPCCar& npc : m_traffic) {
+            qreal dz = npc.worldZ - m_player.worldZ;
+            if (dz > 120.0 && dz < 950.0 && qAbs(npc.x - m_player.x) < 0.22 && m_player.speed > 75.0) {
+                m_player.slipstreamActive = true;
+                break;
+            }
+        }
+        accel = m_player.accelRate * powerFactor + (m_player.slipstreamActive ? 22.0 : 0.0);
         m_player.boostBar = qMin(1.0, m_player.boostBar + 1.2 * dt);
     } else {
         m_player.boostBar = qMax(0.0, m_player.boostBar - 2.5 * dt);
@@ -325,7 +409,8 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
     m_player.currentSector = currentSeg.sector;
     if (m_player.currentSector != m_player.lastSectorAnnounced && !currentSeg.sectorName.isEmpty()) {
         m_player.lastSectorAnnounced = m_player.currentSector;
-        m_player.lastAnnouncement = QString("ZONE: SECTOR %1 - %2").arg(m_player.currentSector).arg(currentSeg.sectorName);
+        m_player.health = qMin(100, m_player.health + 25);
+        m_player.lastAnnouncement = QString("🔧 CHECKPOINT ARCH: SECTOR %1 - %2 (+25% HEALTH)").arg(m_player.currentSector).arg(currentSeg.sectorName);
         m_player.announcementTimer = 3.5;
         m_player.score += 500;
     }
@@ -643,7 +728,7 @@ QVector<RaceStandingEntry> GameEngine::getRaceStandings() const {
     list.reserve(m_traffic.size() + 1);
 
     RaceStandingEntry playerEntry;
-    playerEntry.name = "[YOU] APEX GT-R";
+    playerEntry.name = QString("[YOU] %1").arg(m_player.carModelName);
     playerEntry.isPlayer = true;
     playerEntry.hasFinished = m_player.raceFinished;
     playerEntry.finishTime = m_player.finishTime;
@@ -1158,7 +1243,7 @@ void GameEngine::checkCollisionsAndNearMisses(qreal dt) {
             }
 
             // Difficulty damage scaling
-            qreal damageScale = (m_difficulty == DIFFICULTY_EASY) ? 0.45 : ((m_difficulty == DIFFICULTY_PRO) ? 1.6 : 1.0);
+            qreal damageScale = ((m_difficulty == DIFFICULTY_EASY) ? 0.45 : ((m_difficulty == DIFFICULTY_PRO) ? 1.6 : 1.0)) / qMax(0.5, m_player.armorMultiplier);
             damageTaken = qMax(3, qRound(damageTaken * damageScale));
 
             m_player.health = qMax(0, m_player.health - damageTaken);

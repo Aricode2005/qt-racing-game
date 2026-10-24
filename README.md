@@ -74,7 +74,22 @@ An arcade and circuit motorsport racing simulator engineered from the ground up 
 
 ---
 
-### 7. Multi-Mirror Reflections, Sideways POV (<kbd>Q</kbd>/<kbd>E</kbd>), Infotainment & Synthwave Audio
+### 7. 4 Selectable Supercars, ADAS Assist, 3D AR Trajectory Rails & On-Spot Repair (Unified Contributor Features)
+- **4 Selectable Supercar Models (<kbd>F1</kbd>–<kbd>F4</kbd> or Main Menu <kbd>M</kbd>)**:
+  1. **`APEX GT-R`** (*Balanced Twin-Turbo Coupe* — `300 km/h`, `100%` Armor, `100%` Grip, Liquid Gunmetal Livery)
+  2. **`VORTEX V12`** (*Hypercar Interceptor* — `345 km/h`, `124%` Accel, `85%` Armor, Rosso Corsa Crimson Livery)
+  3. **`DRIFT SPEC-R`** (*Touge Track Special* — `288 km/h`, `128%` Grip, `95%` Armor, Solar Amber-Gold Livery)
+  4. **`TITAN ENFORCER`** (*Armored Endurance GT* — `294 km/h`, `155%` Armor, `104%` Grip, Tactical Emerald Livery)
+- **Toggleable ADAS Apex & Lane-Keeping Assist (<kbd>G</kbd>)**:
+  - **`ADAS: ON`**: Compensates `55%` of centrifugal cornering force and stabilizes lane position.
+  - **`ADAS: OFF`**: `100%` manual centrifugal cornering realism.
+- **3D AR Bumper Trajectory Rails & Slipstream Drafting (<kbd>F</kbd>)**:
+  - Projects the player car's exact bumper width onto the 3D road ahead (`Green` = Clear Corridor, `Cyan` = Slipstream Drafting `+22 km/h/s`, `Amber` = Tight Squeeze, `Red` = Obstacle in Path).
+- **Full-Depth 3D Z-Buffer & Polygon Shading Toggle (<kbd>Z</kbd> / <kbd>L</kbd>)** and **On-Spot Field & Checkpoint Repair (<kbd>Y</kbd> for `+50%` Health, `+25%` on Sector Checkpoints)**.
+
+---
+
+### 8. Multi-Mirror Reflections, Sideways POV (<kbd>Q</kbd>/<kbd>E</kbd>), Infotainment & Synthwave Audio
 - **3 Real-Time Mirrors**: Top-center rearview mirror (visible in both 1st and 3rd person) plus left and right aerodynamic side wing mirrors reflecting trailing race cars behind you.
 - **75° Sideways Window Glance (<kbd>Q</kbd> / <kbd>E</kbd>)**: Look out the driver or passenger window to inspect rival cars racing door-to-door alongside you.
 - **Interactive Touchscreen Infotainment Console (<kbd>1</kbd>–<kbd>4</kbd> / Mouse Click)**:
@@ -95,6 +110,11 @@ An arcade and circuit motorsport racing simulator engineered from the ground up 
 | <kbd>A</kbd> / <kbd>←</kbd> | **Steer Left** | Responsive turn-in left across the 4 racing lanes |
 | <kbd>D</kbd> / <kbd>→</kbd> | **Steer Right** | Responsive turn-in right across the 4 racing lanes |
 | <kbd>C</kbd> / <kbd>V</kbd> / **HUD Button** | **Switch Camera View** | Toggles between **1st-Person Cockpit** and **3rd-Person Chase** view |
+| <kbd>F1</kbd> / <kbd>F2</kbd> / <kbd>F3</kbd> / <kbd>F4</kbd> | **Select Supercar** | Switches between `APEX GT-R`, `VORTEX V12`, `DRIFT SPEC-R`, and `TITAN ENFORCER` |
+| <kbd>G</kbd> | **Toggle ADAS Assist** | Switches between `ADAS ON` (Apex/Lane Assist) and `ADAS OFF` (Manual Realism) |
+| <kbd>F</kbd> | **Toggle 3D AR Rails** | Toggles projected 3D AR bumper trajectory rails on the road |
+| <kbd>Z</kbd> / <kbd>L</kbd> | **Toggle 3D Z-Buffer** | Toggles Full-Depth 3D Z-Buffer & Polygon Shading mode |
+| <kbd>Y</kbd> | **On-Spot Field Repair** | Restores `+50%` Car Health on the spot without losing race progress |
 | <kbd>Spacebar</kbd> | **Handbrake / Drift** | Initiates rear-wheel drift with billowing tire smoke |
 | <kbd>R</kbd> | **Restart Race / Level Up** | Resets to Starting Grid (auto-promotes to next level after Top-3 finish) |
 | <kbd>M</kbd> / <kbd>T</kbd> / <kbd>Esc</kbd> | **Main Menu** | Opens Command Center: Select Level (6/10/16 Cars), Circuit, Time of Day |

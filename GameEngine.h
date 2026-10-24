@@ -146,6 +146,16 @@ struct PlayerCar {
     int currentPosition = 8;
     int totalRacers = 8;
     qreal finishLineZ = 48000.0;
+
+    // Merged Contributor Features: 4 Selectable Supercars, ADAS Assist, AR Trajectory Guides & 3D Z-Buffer Mode
+    int selectedCar = 0;               // 0: APEX GT-R, 1: VORTEX V12, 2: DRIFT SPEC-R, 3: TITAN ENFORCER
+    QString carModelName = "APEX GT-R";
+    qreal armorMultiplier = 1.0;       // Damage resistance scaling per car model
+    qreal gripMultiplier = 1.0;        // Cornering & steering response scaling per car model
+    bool adasEnabled = true;           // Toggleable ADAS Apex & Lane-Keeping Assist ([G])
+    bool arGuidesEnabled = true;       // Toggleable 3D AR Bumper Trajectory Rails & Passing Brackets ([F])
+    bool zBuffer3DMode = true;         // Toggleable Full-Depth 3D Z-Buffer & Polygon Shading Pipeline ([E]/[L])
+    bool slipstreamActive = false;     // Active aerodynamic drafting lock behind lead car
 };
 
 struct RaceStandingEntry {
@@ -195,6 +205,14 @@ public:
     void toggleCameraView() { m_player.thirdPersonView = !m_player.thirdPersonView; }
     void setThirdPersonView(bool active) { m_player.thirdPersonView = active; }
     bool isThirdPersonView() const { return m_player.thirdPersonView; }
+
+    // Contributor Features: Car Selection, ADAS, AR Trajectory Guides, 3D Z-Buffer Mode & Field Repair
+    void setSelectedCar(int carIdx);
+    void cycleSelectedCar() { setSelectedCar((m_player.selectedCar + 1) % 4); }
+    void toggleAdas();
+    void toggleArGuides();
+    void toggleZBuffer3DMode();
+    void fieldRepair();
 
     // Getters
     const Track& getTrack() const { return m_track; }
