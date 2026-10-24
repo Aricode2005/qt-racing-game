@@ -848,6 +848,28 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             }
         }
 
+        // 3D AR Bumper Trajectory Rails on Road Surface (Merged Contributor Feature)
+        if (!isMirror && player.arGuidesEnabled && n >= 4 && n <= 24 && (n % 2 == 0)) {
+            qreal minLat = 9.9;
+            for (const NPCCar& npc : engine.getTraffic()) {
+                qreal dz = npc.worldZ - player.worldZ;
+                if (dz > 80.0 && dz < 1650.0) {
+                    minLat = qMin(minLat, qAbs(npc.x - player.x));
+                }
+            }
+            int railAlpha = qBound(25, 175 - n * 6, 175);
+            QColor railCol = (minLat < 0.165) ? QColor(255, 50, 60, railAlpha)
+                           : (minLat < 0.27  ? QColor(255, 195, 35, railAlpha)
+                           : (player.slipstreamActive ? QColor(0, 235, 255, railAlpha)
+                                                      : QColor(45, 235, 120, railAlpha)));
+            p.setPen(QPen(railCol, qMax(1.4, s.p1.screenW * 0.006), Qt::SolidLine, Qt::RoundCap));
+            for (int side = -1; side <= 1; side += 2) {
+                qreal rx = player.x + side * 0.155;
+                p.drawLine(QPointF(s.p1.screenX + s.p1.screenW * rx, s.p1.screenY),
+                           QPointF(s.p2.screenX + s.p2.screenW * rx, s.p2.screenY));
+            }
+        }
+
         s.clip = maxy;
         maxy = s.p2.screenY;
     }
@@ -3205,7 +3227,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
             // Driver Name
             p.setFont(QFont("Arial", 7, QFont::Bold));
             p.setPen(e.isPlayer ? QColor(145, 250, 255) : Qt::white);
-            QString shortName = e.isPlayer ? "YOU • APEX GT" : e.name;
+            QString shortName = e.isPlayer ? QString("YOU • %1").arg(player.carModelName) : e.name;
             p.drawText(QRect(rBox.left() + 31, ry, 108, 23), Qt::AlignVCenter | Qt::AlignLeft, shortName);
 
             // Live Gap to Leader
@@ -3368,12 +3390,23 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
                    Qt::AlignVCenter | Qt::AlignLeft,
                    QString("REM TO FINISH: %1 KM").arg(QString::number(remCircuitKm, 'f', 1)));
 
-        QRect progBar(mapCard.left() + 12, footY + 34, mapCard.width() - 24, 8);
+        QRect progBar(mapCard.left() + 12, footY + 32, mapCard.width() - 24, 6);
         p.fillRect(progBar, QColor(22, 28, 40));
         QLinearGradient pGrad(progBar.topLeft(), progBar.topRight());
         pGrad.setColorAt(0.0, QColor(0, 220, 255));
         pGrad.setColorAt(1.0, QColor(255, 205, 65));
         p.fillRect(QRect(progBar.left(), progBar.top(), qRound(progBar.width() * circuitProg), progBar.height()), pGrad);
+
+        // Active Systems Telemetry Footer (ADAS, AR Rails, 3D Z-Buf, Car Model)
+        p.setFont(QFont("Arial", 6, QFont::Bold));
+        p.setPen(player.adasEnabled ? QColor(60, 235, 130) : QColor(245, 185, 65));
+        p.drawText(QRect(mapCard.left() + 10, footY + 40, mapCard.width() - 20, 12),
+                   Qt::AlignVCenter | Qt::AlignLeft,
+                   QString("ADAS:%1[G] • AR:%2[F]").arg(player.adasEnabled ? "ON" : "OFF").arg(player.arGuidesEnabled ? "ON" : "OFF"));
+        p.setPen(QColor(0, 225, 255));
+        p.drawText(QRect(mapCard.left() + 10, footY + 40, mapCard.width() - 20, 12),
+                   Qt::AlignVCenter | Qt::AlignRight,
+                   QString("3D-Z:%1[E]").arg(player.zBuffer3DMode ? "ON" : "OFF"));
     }
 
     // Championship Final Race Standings Leaderboard Overlay when crossing the Finish Line!
@@ -3704,10 +3737,27 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
         lowerBody.closeSubpath();
 
         QLinearGradient bodyGrad(0, -96, 0, -24);
-        bodyGrad.setColorAt(0.0, QColor(102, 112, 126));
-        bodyGrad.setColorAt(0.28, QColor(64, 72, 84));
-        bodyGrad.setColorAt(0.65, QColor(36, 40, 48));
-        bodyGrad.setColorAt(1.0, QColor(20, 23, 28));
+        if (player.selectedCar == 1) { // VORTEX V12 (Rosso Corsa Crimson)
+            bodyGrad.setColorAt(0.0, QColor(215, 38, 48));
+            bodyGrad.setColorAt(0.28, QColor(165, 22, 32));
+            bodyGrad.setColorAt(0.65, QColor(98, 14, 22));
+            bodyGrad.setColorAt(1.0, QColor(42, 8, 12));
+        } else if (player.selectedCar == 2) { // DRIFT SPEC-R (Solar Amber-Gold)
+            bodyGrad.setColorAt(0.0, QColor(235, 168, 38));
+            bodyGrad.setColorAt(0.28, QColor(185, 122, 22));
+            bodyGrad.setColorAt(0.65, QColor(112, 72, 14));
+            bodyGrad.setColorAt(1.0, QColor(48, 30, 8));
+        } else if (player.selectedCar == 3) { // TITAN ENFORCER (Tactical Emerald-Obsidian)
+            bodyGrad.setColorAt(0.0, QColor(48, 138, 98));
+            bodyGrad.setColorAt(0.28, QColor(32, 96, 68));
+            bodyGrad.setColorAt(0.65, QColor(20, 58, 42));
+            bodyGrad.setColorAt(1.0, QColor(12, 30, 22));
+        } else { // APEX GT-R (Liquid Gunmetal Metallic)
+            bodyGrad.setColorAt(0.0, QColor(102, 112, 126));
+            bodyGrad.setColorAt(0.28, QColor(64, 72, 84));
+            bodyGrad.setColorAt(0.65, QColor(36, 40, 48));
+            bodyGrad.setColorAt(1.0, QColor(20, 23, 28));
+        }
         p.setBrush(bodyGrad);
         p.setPen(QPen(QColor(135, 145, 162), 1.5));
         p.drawPath(lowerBody);
@@ -3827,14 +3877,14 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
         drawTailCluster(-W * 0.41, true);
         drawTailCluster( W * 0.41 - 76, false);
 
-        // Center Rear License Plate [APEX GT] & Champagne-Gold Crest
-        QRectF plate(-36, -54, 72, 18);
+        // Center Rear License Plate & Champagne-Gold Crest
+        QRectF plate(-42, -54, 84, 18);
         p.setBrush(QColor(22, 25, 32));
         p.setPen(QPen(QColor(215, 175, 95), 1.5));
         p.drawRoundedRect(plate, 3, 3);
-        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setFont(QFont("Arial", 6, QFont::Bold));
         p.setPen(QColor(245, 210, 130));
-        p.drawText(plate, Qt::AlignCenter, "APEX GT");
+        p.drawText(plate, Qt::AlignCenter, player.carModelName);
     }
 
     // 7. Active Carbon-Fiber Swan-Neck GT Rear Wing (Rises with speed & tilts as airbrake!)

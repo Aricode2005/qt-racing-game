@@ -160,6 +160,39 @@ void GameWindow::keyPressEvent(QKeyEvent *event) {
             m_engine.toggleCameraView();
             update();
             break;
+        case Qt::Key_G:
+            m_engine.toggleAdas();
+            update();
+            break;
+        case Qt::Key_F:
+            m_engine.toggleArGuides();
+            update();
+            break;
+        case Qt::Key_Z:
+        case Qt::Key_L:
+            m_engine.toggleZBuffer3DMode();
+            update();
+            break;
+        case Qt::Key_Y:
+            m_engine.fieldRepair();
+            update();
+            break;
+        case Qt::Key_F1:
+            m_engine.setSelectedCar(0);
+            update();
+            break;
+        case Qt::Key_F2:
+            m_engine.setSelectedCar(1);
+            update();
+            break;
+        case Qt::Key_F3:
+            m_engine.setSelectedCar(2);
+            update();
+            break;
+        case Qt::Key_F4:
+            m_engine.setSelectedCar(3);
+            update();
+            break;
         case Qt::Key_R:
             m_engine.resetPlayer();
             break;
@@ -251,6 +284,15 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
         for (int i = 0; i < 3; ++i) {
             if (m_todButtons[i].contains(pos)) {
                 m_engine.setTimeOfDay(static_cast<TimeOfDay>(i));
+                update();
+                return;
+            }
+        }
+
+        // 2b. Supercar Selection Buttons (4 Selectable Supercars)
+        for (int i = 0; i < 4; ++i) {
+            if (m_carButtons[i].contains(pos)) {
+                m_engine.setSelectedCar(i);
                 update();
                 return;
             }
@@ -558,7 +600,7 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
     // -------------------------------------------------------------
     int todW = 140;
     int todH = 30;
-    int todStartX = (w - (3 * todW + 2 * 14)) / 2;
+    int todStartX = 95;
     int todY = 138;
     TimeOfDay currentTod = m_engine.getTimeOfDay();
 
@@ -584,6 +626,27 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         p.setFont(todf);
         p.setPen(Qt::white);
         p.drawText(m_todButtons[i], Qt::AlignCenter, tods[i].label);
+        if (i == 2) {
+            struct CarOption { QString label; QColor col; } carOpts[4] = {
+                { "🏎️ APEX GT-R [300K]", QColor(0, 215, 255) },
+                { "🔥 VORTEX V12 [345K]", QColor(255, 55, 70) },
+                { "⚡ DRIFT SPEC [GRIP]", QColor(255, 185, 35) },
+                { "🛡️ TITAN GT [ARMOR]", QColor(45, 225, 130) }
+            };
+            int carBtnW = 158;
+            int carStartX = todStartX + 3 * (todW + 14) + 18;
+            int curCar = m_engine.getPlayer().selectedCar;
+            for (int c = 0; c < 4; ++c) {
+                m_carButtons[c] = QRect(carStartX + c * (carBtnW + 8), todY, carBtnW, todH);
+                bool isSel = (curCar == c);
+                p.setBrush(isSel ? QColor(22, 30, 44) : QColor(14, 18, 26));
+                p.setPen(QPen(isSel ? carOpts[c].col : QColor(42, 52, 68), isSel ? 2.0 : 1.0));
+                p.drawRoundedRect(m_carButtons[c], 5, 5);
+                p.setFont(QFont("Arial", 7, QFont::Bold));
+                p.setPen(isSel ? carOpts[c].col : QColor(210, 220, 235));
+                p.drawText(m_carButtons[c], Qt::AlignCenter, carOpts[c].label);
+            }
+        }
     }
 
     // -------------------------------------------------------------
