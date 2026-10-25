@@ -1,39 +1,62 @@
 cmake_minimum_required(VERSION 3.16)
-project(ArgonRacer VERSION 3.0.0 LANGUAGES CXX)
+project(ApexVelocityRacing LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Multimedia)
+# set(CMAKE_PREFIX_PATH "/Users/mukutchatterjee/Qt/6.11.1/macos")
 
-set(CORE_SOURCES
-    framebuffer.cpp
-    spanfill_neon.cpp
-    spanfill_avx2.cpp
-    track.cpp
-    roadrender.cpp
-    sprites.cpp
-    cockpit.cpp
-    vehicle.cpp
-    collision.cpp
-    audio.cpp
-    jobs.cpp
-    highscores.cpp
-    raster3d.cpp
-    game.cpp
-    gamewidget.cpp
-    tests.cpp
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia)
+
+set(PROJECT_SOURCES
     main.cpp
+    GameWindow.h
+    GameWindow.cpp
+    GameEngine.h
+    GameEngine.cpp
+    Track.h
+    Track.cpp
+    RasterAssets.h
+    RasterAssets.cpp
+    RasterRenderer.h
+    RasterRenderer.cpp
+    AudioSynthesizer.h
+    AudioSynthesizer.cpp
 )
 
-add_executable(racer ${CORE_SOURCES})
+add_executable(ApexVelocity ${PROJECT_SOURCES})
 
-target_include_directories(racer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(racer PRIVATE Qt6::Widgets Qt6::Multimedia)
+target_link_libraries(ApexVelocity PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Multimedia
+)
 
-if(MSVC)
-    target_compile_options(racer PRIVATE /O2 /fp:precise /W4)
-else()
-    target_compile_options(racer PRIVATE -O2 -fno-math-errno -Wall -Wextra)
-endif()
+add_executable(capture_screenshots
+    capture_screenshots.cpp
+    GameWindow.h
+    GameWindow.cpp
+    GameEngine.h
+    GameEngine.cpp
+    Track.h
+    Track.cpp
+    RasterAssets.h
+    RasterAssets.cpp
+    RasterRenderer.h
+    RasterRenderer.cpp
+    AudioSynthesizer.h
+    AudioSynthesizer.cpp
+)
+
+target_link_libraries(capture_screenshots PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Multimedia
+)
+

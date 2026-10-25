@@ -1,0 +1,3 @@
+C:\Qt\Tools\CMake_64\bin\cmake.exe -E rm -f CMakeFiles\racer.dir/objects.a
+C:\Qt\Tools\mingw1310_64\bin\ar.exe qc CMakeFiles\racer.dir/objects.a @CMakeFiles\racer.dir\objects1.rsp
+C:\Qt\Tools\mingw1310_64\bin\g++.exe -g -Wl,--whole-archive CMakeFiles\racer.dir/objects.a -Wl,--no-whole-archive -o racer.exe -Wl,--out-implib,libracer.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\racer.dir\linkLibs.rsp
