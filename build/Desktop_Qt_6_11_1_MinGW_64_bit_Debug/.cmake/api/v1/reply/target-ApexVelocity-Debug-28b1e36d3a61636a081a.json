@@ -20,6 +20,7 @@
 			"find_package",
 			"find_dependency",
 			"_qt_internal_find_qt_dependencies",
+			"target_compile_options",
 			"add_compile_definitions",
 			"project"
 		],
@@ -196,20 +197,26 @@
 				"parent" : 27
 			},
 			{
-				"command" : 8,
+				"command" : 7,
+				"file" : 0,
+				"line" : 43,
+				"parent" : 0
+			},
+			{
+				"command" : 9,
 				"file" : 0,
 				"line" : 2,
 				"parent" : 0
 			},
 			{
 				"file" : 13,
-				"parent" : 29
+				"parent" : 30
 			},
 			{
-				"command" : 7,
+				"command" : 8,
 				"file" : 13,
 				"line" : 82,
-				"parent" : 30
+				"parent" : 31
 			}
 		]
 	},
@@ -220,6 +227,18 @@
 			[
 				{
 					"fragment" : "-g -std=gnu++17 -fdiagnostics-color=always"
+				},
+				{
+					"backtrace" : 29,
+					"fragment" : "-O3"
+				},
+				{
+					"backtrace" : 29,
+					"fragment" : "-ffast-math"
+				},
+				{
+					"backtrace" : 29,
+					"fragment" : "-funroll-loops"
 				}
 			],
 			"defines" : 
@@ -245,7 +264,7 @@
 					"define" : "QT_NETWORK_LIB"
 				},
 				{
-					"backtrace" : 31,
+					"backtrace" : 32,
 					"define" : "QT_QML_DEBUG"
 				},
 				{
@@ -345,11 +364,11 @@
 	"dependencies" : 
 	[
 		{
-			"backtrace" : 0,
-			"id" : "ApexVelocity_autogen::@6890427a1f51a3e7e1df"
+			"id" : "ApexVelocity_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
 		},
 		{
-			"id" : "ApexVelocity_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
+			"backtrace" : 0,
+			"id" : "ApexVelocity_autogen::@6890427a1f51a3e7e1df"
 		}
 	],
 	"id" : "ApexVelocity::@6890427a1f51a3e7e1df",
