@@ -1,334 +1,751 @@
-#include "track.h"
-#include "sprites.h"
-#include "mathutil.h"
-#include <cassert>
-#include <cmath>
-#include <cstring>
-#include <algorithm>
+#include "Track.h"
+#include <QtMath>
+#include <QRandomGenerator>
 
-namespace {
-
-const TrackMetadata TRACK_META[NUM_TRACK_PRESETS] = {
-    { "EMERALD COAST",   "SUNLIT COASTAL HIGHWAY",    "NORMAL",   0, 0, 1.00f },
-    { "NEON MIRAGE",     "SYNTHWAVE SUNSET FREEWAY",  "FAST",     1, 0, 1.08f },
-    { "CYBER TOKYO",     "MIDNIGHT EXPRESSWAY",       "HARD",     2, 1, 1.12f },
-    { "ALPINE GLACIER",  "SNOWY MOUNTAIN SWITCHBACKS","EXPERT",   3, 2, 1.05f },
-    { "CRIMSON CANYON",  "DESERT ENDURANCE GAUNTLET", "EXTREME",  4, 0, 1.18f }
-};
-
-} // namespace
-
-const TrackMetadata& getTrackMetadata(int presetIdx) {
-    int idx = ((presetIdx % NUM_TRACK_PRESETS) + NUM_TRACK_PRESETS) % NUM_TRACK_PRESETS;
-    return TRACK_META[idx];
+Track::Track() {
+    buildTrack(THEME_SUNSET_COAST);
 }
 
-TrackBuilder::TrackBuilder(Track& t) : t_(t), lastY_(0.0f) {
-    std::memset(&t_, 0, sizeof(Track));
+void Track::buildTrack(TrackTheme theme) {
+    m_segments.clear();
+    m_currentY = 0;
+    m_info.theme = theme;
+    m_info.segmentLength = 200;
+
+    switch (theme) {
+        case THEME_ALPINE_CLIMB:
+            buildAlpineClimb();
+            break;
+        case THEME_NEON_METROPOLIS:
+            buildNeonMetropolis();
+            break;
+        case THEME_RED_ROCK:
+            buildRedRock();
+            break;
+        case THEME_SUNSET_COAST:
+        default:
+            buildSunsetCoast();
+            break;
+    }
 }
 
-void TrackBuilder::add(float curveVal, float y1) {
-    if (t_.count >= cfg::MAX_SEGMENTS) return;
-    Segment& s = t_.segs[t_.count++];
-    s.y0 = lastY_;
-    s.y1 = y1;
-    s.curve = curveVal;
-    s.sceneryBegin = 0;
-    s.sceneryCount = 0;
-    s.flags = 0;
-    lastY_ = y1;
-    t_.length = static_cast<float>(t_.count) * cfg::SEG_LEN;
+void Track::addStraight(int num) {
+    for (int i = 0; i < num; ++i) {
+        RoadSegment seg;
+        seg.index = m_segments.size();
+        seg.p1.worldZ = seg.index * m_info.segmentLength;
+        seg.p1.worldY = m_currentY;
+        seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
+        seg.p2.worldY = m_currentY;
+        seg.curve = 0;
+        seg.elevation = m_currentY;
+        seg.isRumbleRed = (seg.index / 3) % 2 == 0;
+        m_segments.append(seg);
+    }
 }
 
-void TrackBuilder::straight(int n) {
-    road(n, 0, 0, 0.0f, 0.0f);
+void Track::addCurve(int num, qreal curve) {
+    for (int i = 0; i < num; ++i) {
+        RoadSegment seg;
+        seg.index = m_segments.size();
+        seg.p1.worldZ = seg.index * m_info.segmentLength;
+        seg.p1.worldY = m_currentY;
+        seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
+        seg.p2.worldY = m_currentY;
+        // Ease in / ease out curvature
+        qreal factor = qSin(M_PI * (i / (qreal)num));
+        seg.curve = curve * factor;
+        seg.roadBank = -seg.curve * 0.06;
+        seg.elevation = m_currentY;
+        seg.isRumbleRed = (seg.index / 3) % 2 == 0;
+        m_segments.append(seg);
+    }
 }
 
-void TrackBuilder::road(int enter, int hold, int leave, float curveVal, float dy) {
-    int total = enter + hold + leave;
-    if (total <= 0) return;
-    float startY = lastY_;
-    float endY   = startY + dy;
+void Track::addHill(int num, qreal height) {
+    qreal startY = m_currentY;
+    qreal endY = startY + height;
+    for (int i = 0; i < num; ++i) {
+        RoadSegment seg;
+        seg.index = m_segments.size();
+        seg.p1.worldZ = seg.index * m_info.segmentLength;
+        seg.p1.worldY = m_currentY;
+
+        // Smooth sinusoidal curve for hill profile
+        qreal progress = (i + 1) / (qreal)num;
+        m_currentY = startY + (height / 2.0) * (1.0 - qCos(progress * M_PI));
+
+        seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
+        seg.p2.worldY = m_currentY;
+        seg.curve = 0;
+        seg.elevation = m_currentY;
+        seg.isRumbleRed = (seg.index / 3) % 2 == 0;
+        m_segments.append(seg);
+    }
+}
+
+void Track::addHillAndCurve(int num, qreal curve, qreal height) {
+    qreal startY = m_currentY;
+    for (int i = 0; i < num; ++i) {
+        RoadSegment seg;
+        seg.index = m_segments.size();
+        seg.p1.worldZ = seg.index * m_info.segmentLength;
+        seg.p1.worldY = m_currentY;
+
+        qreal progress = (i + 1) / (qreal)num;
+        m_currentY = startY + (height / 2.0) * (1.0 - qCos(progress * M_PI));
+
+        seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
+        seg.p2.worldY = m_currentY;
+
+        qreal factor = qSin(M_PI * (i / (qreal)num));
+        seg.curve = curve * factor;
+        seg.roadBank = -seg.curve * 0.06;
+        seg.elevation = m_currentY;
+        seg.isRumbleRed = (seg.index / 3) % 2 == 0;
+        m_segments.append(seg);
+    }
+}
+
+void Track::addRollingHills(int num, int waves, qreal amplitude, qreal curve) {
+    if (num <= 0) return;
+    Q_UNUSED(waves);
+    qreal startY = m_currentY;
+    // Clamp amplitude to smooth, gentle highway elevation undulations
+    qreal gentleAmp = qBound(-520.0, amplitude * 0.28, 520.0);
+    for (int i = 0; i < num; ++i) {
+        RoadSegment seg;
+        seg.index = m_segments.size();
+        seg.p1.worldZ = seg.index * m_info.segmentLength;
+        seg.p1.worldY = m_currentY;
+
+        qreal progress = (i + 1) / (qreal)num;
+        qreal waveY = gentleAmp * qSin(progress * 2.0 * M_PI);
+        m_currentY = startY + waveY;
+
+        seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
+        seg.p2.worldY = m_currentY;
+
+        qreal factor = qSin(M_PI * (i / (qreal)num));
+        seg.curve = curve * factor;
+        seg.roadBank = -seg.curve * 0.06;
+        seg.elevation = m_currentY;
+        seg.isRumbleRed = (seg.index / 3) % 2 == 0;
+        m_segments.append(seg);
+    }
+    m_currentY = startY;
+}
+
+void Track::buildSunsetCoast() {
+    m_info.name = "Pacific Coast Highway";
+    m_info.description = "Golden hour oceanfront cruise with gentle coastal hills, banked curves, and 4 distinct zones.";
+    m_info.laneCount = 4;
+    m_info.roadWidth = 2400;
+    m_info.hillRating = 3;
+    m_info.trafficRating = 3;
+    m_info.difficulty = 2;
+
+    addStraight(45);
+    addRollingHills(80, 1, 900, 1.8);
+    addHillAndCurve(90, -2.6, 850);
+    addStraight(50);
+    addCurve(70, -3.0);
+    addHill(75, -850);
+    addRollingHills(75, 1, 800, -1.6);
+    addHillAndCurve(105, -3.0, 1000);
+    addStraight(70);
+    addCurve(90, 3.2);
+    addHill(85, -1000);
+    addRollingHills(80, 1, 850, -1.4);
+    addHillAndCurve(110, 2.6, 900);
+    addCurve(85, -3.2);
+    addHill(80, -900);
+    addStraight(85);
+    addCurve(75, 2.2);
+    addRollingHills(70, 1, 750, -1.4);
+    addHillAndCurve(90, -2.5, 950);
+    addCurve(60, 3.4);
+    addHill(75, -950);
+    addStraight(70);
+    addCurve(60, 2.0);
+    addRollingHills(65, 1, 750, -1.2);
+    addHillAndCurve(100, -3.0, 1000);
+    addStraight(70);
+    addCurve(85, 3.2);
+    addHill(85, -1000);
+    addRollingHills(75, 1, 800, -1.6);
+    addHillAndCurve(105, 2.6, 900);
+    addCurve(85, -3.2);
+    addHill(85, -900);
+    addStraight(75);
+
+    int total = m_segments.size();
+    int s1 = total * 0.25;
+    int s2 = total * 0.50;
+    int s3 = total * 0.75;
 
     for (int i = 0; i < total; ++i) {
-        float c = 0.0f;
-        if (i < enter) {
-            float p = (enter > 0) ? (static_cast<float>(i) / static_cast<float>(enter)) : 1.0f;
-            c = mathutil::easeIn(0.0f, curveVal, p);
-        } else if (i < enter + hold) {
-            c = curveVal;
-        } else {
-            float p = (leave > 0) ? (static_cast<float>(i - enter - hold) / static_cast<float>(leave)) : 1.0f;
-            c = mathutil::easeInOut(curveVal, 0.0f, p);
-        }
-        float py = static_cast<float>(i + 1) / static_cast<float>(total);
-        float y1 = mathutil::easeInOut(startY, endY, py);
-        add(c, y1);
-    }
-}
+        RoadSegment& seg = m_segments[i];
 
-void TrackBuilder::sCurve(float c) {
-    road(20, 20, 20, +c, 0.0f);
-    road(20, 20, 20, -c, 0.0f);
-}
+        if (i < s1) {
+            // SECTOR 1: Coastal Palm Boulevard & Beach Strip
+            seg.sector = 1;
+            seg.sectorName = "COASTAL PALM BOULEVARD";
+            if (i % 8 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_GUARDRAIL;
+                seg.sceneryLeftX = -1.25;
 
-void TrackBuilder::rollingHills(int n, float amp) {
-    if (n <= 0) return;
-    float startY = lastY_;
-    for (int i = 0; i < n; ++i) {
-        float phase = mathutil::TWO_PI * static_cast<float>(i + 1) / static_cast<float>(n);
-        float y1 = startY + amp * std::sin(phase);
-        add(0.0f, y1);
-    }
-    if (t_.count > 0) {
-        t_.segs[t_.count - 1].y1 = startY;
-        lastY_ = startY;
-    }
-}
-
-void TrackBuilder::finish() {
-    float startY = (t_.count > 0) ? t_.segs[0].y0 : 0.0f;
-    if (std::fabs(lastY_ - startY) > 1e-3f) {
-        int closeSegs = 24;
-        road(closeSegs / 3, closeSegs / 3, closeSegs - 2 * (closeSegs / 3), 0.0f, startY - lastY_);
-    }
-    const int mult = 2 * cfg::RUMBLE_LEN;
-    int rem = t_.count % mult;
-    if (rem != 0) {
-        int pad = mult - rem;
-        for (int i = 0; i < pad; ++i) {
-            add(0.0f, startY);
-        }
-    }
-    if (t_.count > 0) {
-        t_.segs[t_.count - 1].y1 = startY;
-        lastY_ = startY;
-        // Start/Finish banner at segment 0, checkpoints at 1/3 and 2/3 of track
-        t_.segs[0].flags |= 0x03;
-        if (t_.count >= 180) {
-            t_.segs[t_.count / 3].flags |= 0x01;
-            t_.segs[(2 * t_.count) / 3].flags |= 0x01;
-        }
-    }
-    t_.length = static_cast<float>(t_.count) * cfg::SEG_LEN;
-    buildTrackGpsSpline(t_);
-}
-
-void buildTrackGpsSpline(Track& t) {
-    if (t.count <= 0) return;
-    const double baseStep = mathutil::TWO_PI / static_cast<double>(t.count);
-    const double curveScale = 0.0085;
-
-    double angle = -0.5 * mathutil::PI; // start pointing North (Up)
-    double curX = 0.0, curY = 0.0;
-
-    for (int i = 0; i < t.count; ++i) {
-        t.mapX[i] = static_cast<float>(curX);
-        t.mapY[i] = static_cast<float>(curY);
-        t.mapHeading[i] = static_cast<float>(angle);
-        double dTheta = baseStep + static_cast<double>(t.segs[i].curve) * curveScale;
-        angle += dTheta;
-        curX  += std::cos(angle);
-        curY  += std::sin(angle);
-    }
-
-    // Distribute endpoint residual linearly so the 2D loop closes seamlessly at segment 0
-    double errX = curX;
-    double errY = curY;
-    float minX = 1e9f, maxX = -1e9f, minY = 1e9f, maxY = -1e9f;
-
-    for (int i = 0; i < t.count; ++i) {
-        double frac = static_cast<double>(i) / static_cast<double>(t.count);
-        t.mapX[i] -= static_cast<float>(errX * frac);
-        t.mapY[i] -= static_cast<float>(errY * frac);
-        minX = std::min(minX, t.mapX[i]);
-        maxX = std::max(maxX, t.mapX[i]);
-        minY = std::min(minY, t.mapY[i]);
-        maxY = std::max(maxY, t.mapY[i]);
-    }
-
-    float cx = 0.5f * (minX + maxX);
-    float cy = 0.5f * (minY + maxY);
-    float span = std::max({ maxX - minX, maxY - minY, 1.0f }) * 0.5f;
-
-    for (int i = 0; i < t.count; ++i) {
-        t.mapX[i] = (t.mapX[i] - cx) / span;
-        t.mapY[i] = (t.mapY[i] - cy) / span;
-    }
-    // Recompute exact tangent heading from closed spline points
-    for (int i = 0; i < t.count; ++i) {
-        int next = (i + 1) % t.count;
-        t.mapHeading[i] = std::atan2(t.mapY[next] - t.mapY[i], t.mapX[next] - t.mapX[i]);
-    }
-}
-
-void scanUpcomingTurn(const Track& t, int baseSeg, float& outPeakCurve, int& outDistSegs, bool& outCrest) {
-    outPeakCurve = 0.0f;
-    outDistSegs  = 0;
-    outCrest     = false;
-    if (t.count <= 0) return;
-
-    float maxAbs = 0.0f;
-    for (int d = 4; d <= 55; ++d) {
-        const Segment& s = t.segs[(baseSeg + d) % t.count];
-        if (std::fabs(s.curve) > maxAbs) {
-            maxAbs       = std::fabs(s.curve);
-            outPeakCurve = s.curve;
-            outDistSegs  = d;
-        }
-        if (d <= 30) {
-            const Segment& sNext = t.segs[(baseSeg + d + 1) % t.count];
-            float slope0 = s.y1 - s.y0;
-            float slope1 = sNext.y1 - sNext.y0;
-            if (slope0 > 12.0f && slope1 < -5.0f) {
-                outCrest = true;
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_PALM_TREE;
+                seg.sceneryRightX = 1.55 + ((i % 16 == 0) ? 0.3 : 0.7);
             }
+            // Roadside utility poles along left shoulder
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.6;
+            }
+            // High billboards and wide highway hoardings
+            if (i % 32 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 64 == 0) ? SCENERY_BILLBOARD_1 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.95;
+            }
+            if (i % 48 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_BILLBOARD_2;
+                seg.sceneryLeftX = -2.05;
+            }
+            if (i == 80) seg.hasGantry = true;
+        } else if (i < s2) {
+            // SECTOR 2: Rocky Ocean Cliffs & Natural Sea Arches
+            seg.sector = 2;
+            seg.sectorName = "OCEAN CLIFFS & SEA ARCHES";
+            if (i % 7 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = (i % 28 == 0) ? SCENERY_ROCK_ARCH : SCENERY_BOULDER;
+                seg.sceneryLeftX = -1.6 - ((i % 14 == 0) ? 0.3 : 0.8);
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_GUARDRAIL;
+                seg.sceneryRightX = 1.25;
+            }
+            if (i % 16 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_UTILITY_POLE;
+                seg.sceneryRightX = 1.65;
+            }
+            if (i % 36 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_HOARDING_NEON;
+                seg.sceneryLeftX = -2.1;
+            }
+            if (i % 18 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_BOULDER;
+                seg.sceneryRightX = 1.7;
+            }
+            if (i == s1 + 80) seg.hasGantry = true;
+        } else if (i < s3) {
+            // SECTOR 3: Coastal Wind Farm Ridge
+            seg.sector = 3;
+            seg.sectorName = "COASTAL WIND RIDGE";
+            if (i % 16 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_WIND_TURBINE;
+                seg.sceneryLeftX = -2.1;
+            }
+            if (i % 14 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_WIND_TURBINE;
+                seg.sceneryRightX = 2.1;
+            }
+            if (i % 12 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.65;
+            }
+            if (i % 38 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_BILLBOARD_1;
+                seg.sceneryRightX = 1.95;
+            }
+            if (i % 8 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_PALM_TREE;
+                seg.sceneryLeftX = -1.5;
+            }
+            if (i == s2 + 80) seg.hasGantry = true;
+        } else {
+            // SECTOR 4: Marina Bay Expressway
+            seg.sector = 4;
+            seg.sectorName = "MARINA BAY EXPRESSWAY";
+            if (i % 10 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_STREETLIGHT;
+                seg.sceneryLeftX = -1.35;
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_STREETLIGHT;
+                seg.sceneryRightX = 1.35;
+            }
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.7;
+            }
+            if (i % 30 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 60 == 0) ? SCENERY_BILLBOARD_2 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.95;
+            }
+            if (i == s3 + 80) seg.hasGantry = true;
         }
     }
 }
 
-void buildStraightTrack(Track& t, int count) {
-    assert(count % (2 * cfg::RUMBLE_LEN) == 0);
-    TrackBuilder b(t);
-    b.straight(count);
-    b.finish();
-}
+void Track::buildAlpineClimb() {
+    m_info.name = "Alpine Summit Ridge";
+    m_info.description = "Hill Climb challenge with extreme gradients, pine valleys, rocky crags and alpine wind farms.";
+    m_info.laneCount = 4;
+    m_info.roadWidth = 2400;
+    m_info.hillRating = 5;
+    m_info.trafficRating = 2;
+    m_info.difficulty = 5;
 
-void buildDemoTrack(Track& t) {
-    buildTrackPreset(t, 0);
-}
+    addStraight(22);
+    addRollingHills(60, 2, 2200, 3.2);
+    addHillAndCurve(90, 4.5, 3200);
+    addHillAndCurve(80, -4.8, 2800);
+    addRollingHills(52, 2, 1800, -2.5);
+    addHill(50, -2500);
+    addCurve(70, 5.2);
+    addHillAndCurve(90, -4.0, 3000);
+    addHill(60, -3500);
+    addRollingHills(64, 3, 2100, 3.0);
+    addHillAndCurve(80, 5.0, 2400);
+    addHill(70, -5400);
+    addRollingHills(72, 2, 1950, -2.8);
+    addHillAndCurve(110, 4.2, 2600);
+    addCurve(95, -4.4);
+    addHill(90, -2600);
+    addRollingHills(80, 3, 2200, 2.4);
+    addHillAndCurve(115, -3.8, 2200);
+    addCurve(90, 4.0);
+    addHill(85, -2200);
+    addStraight(40);
 
-void buildTrackPreset(Track& t, int presetIdx) {
-    int idx = ((presetIdx % NUM_TRACK_PRESETS) + NUM_TRACK_PRESETS) % NUM_TRACK_PRESETS;
-    TrackBuilder b(t);
-    t.presetId = idx;
+    int total = m_segments.size();
+    int s1 = total * 0.25;
+    int s2 = total * 0.50;
+    int s3 = total * 0.75;
 
-    if (idx == 0) {
-        // Track 0: Emerald Coast Highway (Authoritative Demo Track so unit tests match)
-        b.straight(30);
-        b.road(25, 35, 25, +curve::EASY, hill::NONE);
-        b.rollingHills(60, hill::LOW);
-        b.sCurve(curve::MED);
-        b.road(30, 40, 30, -curve::MED, +hill::MED);
-        b.road(20, 30, 20, +curve::HARD, -hill::MED);
-        b.straight(36);
-        b.road(30, 30, 30, +curve::MED, +hill::HIGH);
-        b.road(30, 30, 30, -curve::EASY, -hill::HIGH);
-        b.sCurve(curve::HARD);
-        b.road(25, 25, 25, -curve::MED, +hill::LOW);
-        b.road(20, 14, 20, 0.0f, -hill::LOW);
-        b.finish();
-        populateScenery(t, 0xC0FFEE01u);
-    } else if (idx == 1) {
-        // Track 1: Neon Mirage Speedway (High-speed Synthwave Sunset freeway)
-        b.straight(45);
-        b.road(20, 40, 20, +curve::EASY, +hill::LOW);
-        b.straight(35);
-        b.sCurve(curve::MED);
-        b.sCurve(curve::MED);
-        b.road(25, 50, 25, -curve::HARD, -hill::LOW);
-        b.rollingHills(72, hill::MED);
-        b.straight(40);
-        b.road(30, 45, 30, +curve::MED, +hill::HIGH);
-        b.road(30, 45, 30, -curve::MED, -hill::HIGH);
-        b.sCurve(curve::EASY);
-        b.straight(30);
-        b.finish();
-        populateScenery(t, 0xCAFE2026u);
-    } else if (idx == 2) {
-        // Track 2: Cyber Tokyo Expressway (Tight technical night circuit)
-        b.straight(24);
-        b.sCurve(curve::HARD);
-        b.road(15, 30, 15, +curve::HARD, +hill::MED);
-        b.road(15, 25, 15, -curve::HARD, -hill::MED);
-        b.straight(20);
-        b.sCurve(curve::MED);
-        b.road(20, 40, 20, -curve::HARD, +hill::HIGH);
-        b.road(20, 35, 20, +curve::MED, -hill::HIGH);
-        b.rollingHills(48, hill::LOW);
-        b.sCurve(curve::HARD);
-        b.road(18, 30, 18, +curve::HARD, 0.0f);
-        b.finish();
-        populateScenery(t, 0x708090A0u);
-    } else if (idx == 3) {
-        // Track 3: Alpine Glacier Pass (Steep mountain switchbacks & crests)
-        b.straight(24);
-        b.road(30, 50, 30, +curve::MED, +hill::HIGH);
-        b.road(20, 35, 20, -curve::HARD, +hill::MED);
-        b.rollingHills(60, hill::MED);
-        b.road(20, 40, 20, +curve::HARD, -hill::HIGH);
-        b.sCurve(curve::HARD);
-        b.road(25, 40, 25, -curve::MED, -hill::MED);
-        b.rollingHills(48, hill::LOW);
-        b.road(20, 30, 20, +curve::HARD, +hill::LOW);
-        b.road(20, 20, 20, -curve::EASY, -hill::LOW);
-        b.finish();
-        populateScenery(t, 0x5100ACE5u);
-    } else {
-        // Track 4: Crimson Canyon Gauntlet (Extreme high-speed endurance)
-        b.straight(36);
-        b.road(20, 45, 20, -curve::HARD, +hill::HIGH);
-        b.road(15, 30, 15, +curve::HARD, -hill::HIGH);
-        b.sCurve(curve::HARD);
-        b.rollingHills(72, hill::MED);
-        b.road(25, 50, 25, +curve::HARD, +hill::HIGH);
-        b.sCurve(curve::MED);
-        b.road(25, 50, 25, -curve::HARD, -hill::HIGH);
-        b.sCurve(curve::HARD);
-        b.straight(24);
-        b.finish();
-        populateScenery(t, 0xDEAD10CCu);
+    for (int i = 0; i < total; ++i) {
+        RoadSegment& seg = m_segments[i];
+
+        if (i < s1) {
+            // SECTOR 1: Pine Valley Approach
+            seg.sector = 1;
+            seg.sectorName = "PINE VALLEY APPROACH";
+            if (i % 6 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_PINE_TREE;
+                seg.sceneryLeftX = -1.55 - ((i % 12 == 0) ? 0.3 : 0.1);
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_GUARDRAIL;
+                seg.sceneryRightX = 1.25;
+            }
+            if (i % 12 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_PINE_TREE;
+                seg.sceneryRightX = 1.7;
+            }
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.65;
+            }
+            if (i % 30 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 60 == 0) ? SCENERY_BILLBOARD_1 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.95;
+            }
+            if (i == 70) seg.hasGantry = true;
+        } else if (i < s2) {
+            // SECTOR 2: Granite Gorge & Mountain Crags
+            seg.sector = 2;
+            seg.sectorName = "GRANITE GORGE & CRAGS";
+            if (i % 6 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = (i % 24 == 0) ? SCENERY_ROCK_ARCH : SCENERY_BOULDER;
+                seg.sceneryLeftX = -1.5 - ((i % 12 == 0) ? 0.4 : 0.1);
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_BOULDER;
+                seg.sceneryRightX = 1.5;
+            }
+            if (i % 16 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_UTILITY_POLE;
+                seg.sceneryRightX = 1.6;
+            }
+            if (i % 36 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_BILLBOARD_2;
+                seg.sceneryLeftX = -2.1;
+            }
+            if (i == s1 + 70) seg.hasGantry = true;
+        } else if (i < s3) {
+            // SECTOR 3: High Pass Wind Ridge
+            seg.sector = 3;
+            seg.sectorName = "HIGH PASS WIND RIDGE";
+            if (i % 15 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_WIND_TURBINE;
+                seg.sceneryLeftX = -2.1;
+            }
+            if (i % 18 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_WIND_TURBINE;
+                seg.sceneryRightX = 2.0;
+            }
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.6;
+            }
+            if (i % 34 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.9;
+            }
+            if (i % 7 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_PINE_TREE;
+                seg.sceneryLeftX = -1.5;
+            }
+            if (i == s2 + 70) seg.hasGantry = true;
+        } else {
+            // SECTOR 4: Summit Lookout & Descent
+            seg.sector = 4;
+            seg.sectorName = "SUMMIT LOOKOUT FREEWAY";
+            if (i % 8 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_STREETLIGHT;
+                seg.sceneryLeftX = -1.35;
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_GUARDRAIL;
+                seg.sceneryRightX = 1.25;
+            }
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.65;
+            }
+            if (i % 28 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 56 == 0) ? SCENERY_BILLBOARD_1 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.9;
+            }
+            if (i == s3 + 70) seg.hasGantry = true;
+        }
     }
 }
 
-void populateScenery(Track& t, uint32_t seed) {
-    uint32_t rng = seed ? seed : 0xC0FFEE01u;
-    t.sceneryTotal = 0;
+void Track::buildNeonMetropolis() {
+    m_info.name = "Neo City Expressway";
+    m_info.description = "4-lane wide midnight urban highway with wet asphalt, industrial harbor and skyline flyovers.";
+    m_info.laneCount = 4;
+    m_info.roadWidth = 2600;
+    m_info.hillRating = 1;
+    m_info.trafficRating = 5;
+    m_info.difficulty = 4;
 
-    for (int i = 0; i < t.count; ++i) {
-        Segment& seg = t.segs[i];
-        seg.sceneryBegin = static_cast<uint16_t>(t.sceneryTotal);
-        seg.sceneryCount = 0;
+    addStraight(22);
+    addRollingHills(64, 2, 1450, 2.0);
+    addCurve(60, 2.0);
+    addHill(50, 1600);
+    addRollingHills(60, 2, 1300, -1.8);
+    addCurve(80, -2.5);
+    addHill(50, -1600);
+    addRollingHills(72, 3, 1550, 2.4);
+    addCurve(70, 3.0);
+    addRollingHills(56, 2, 1350, -2.0);
+    addCurve(60, -2.0);
+    addRollingHills(76, 2, 1650, 2.2);
+    addCurve(95, 2.8);
+    addHill(70, 1800);
+    addRollingHills(64, 2, 1400, -2.5);
+    addCurve(105, -3.1);
+    addHill(70, -1800);
+    addRollingHills(80, 3, 1600, 2.5);
+    addCurve(90, 2.5);
+    addRollingHills(68, 2, 1350, -1.8);
+    addStraight(50);
 
-        auto emitScenery = [&](float offset, uint16_t spriteId, uint8_t flip) {
-            if (seg.sceneryCount >= 3) return;
-            if (t.sceneryTotal >= cfg::MAX_SCENERY) return;
-            Scenery& sc = t.scenery[t.sceneryTotal++];
-            sc.offset = offset;
-            sc.spriteId = spriteId;
-            sc.flip = flip;
-            sc.pad = 0;
-            seg.sceneryCount++;
-        };
+    int total = m_segments.size();
+    int s1 = total * 0.25;
+    int s2 = total * 0.50;
+    int s3 = total * 0.75;
 
-        // 1. Lamp posts: both sides at offset = +-1.15, every 12 segments (flip = 1 for left side)
-        if (i % 12 == 0) {
-            emitScenery(-1.15f, SPR_LAMP, 1);
-            emitScenery(+1.15f, SPR_LAMP, 0);
+    for (int i = 0; i < total; ++i) {
+        RoadSegment& seg = m_segments[i];
+
+        if (i < s1) {
+            // SECTOR 1: Downtown Cyber Core
+            seg.sector = 1;
+            seg.sectorName = "DOWNTOWN CYBER CORE";
+            if (i % 8 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_STREETLIGHT;
+                seg.sceneryLeftX = -1.35;
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_STREETLIGHT;
+                seg.sceneryRightX = 1.35;
+            }
+            if (i % 28 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 56 == 0) ? SCENERY_BILLBOARD_2 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.85;
+            }
+            if (i % 42 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_HOARDING_NEON;
+                seg.sceneryLeftX = -1.95;
+            }
+            if (i == 75) seg.hasGantry = true;
+        } else if (i < s2) {
+            // SECTOR 2: Industrial Harbor & Cargo Docks
+            seg.sector = 2;
+            seg.sectorName = "INDUSTRIAL HARBOR & DOCKS";
+            if (i % 16 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_WIND_TURBINE;
+                seg.sceneryLeftX = -2.2;
+            }
+            if (i % 12 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.65;
+            }
+            if (i % 10 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_STREETLIGHT;
+                seg.sceneryLeftX = -1.35;
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_GUARDRAIL;
+                seg.sceneryRightX = 1.25;
+            }
+            if (i % 32 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.95;
+            }
+            if (i == s1 + 75) seg.hasGantry = true;
+        } else if (i < s3) {
+            // SECTOR 3: Skyway Elevated Flyover
+            seg.sector = 3;
+            seg.sectorName = "SKYWAY ELEVATED FLYOVER";
+            if (i % 8 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_GUARDRAIL;
+                seg.sceneryLeftX = -1.25;
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_GUARDRAIL;
+                seg.sceneryRightX = 1.25;
+            }
+            if (i % 16 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_STREETLIGHT;
+                seg.sceneryRightX = 1.4;
+            }
+            if (i % 30 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 60 == 0) ? SCENERY_BILLBOARD_1 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.85;
+            }
+            if (i == s2 + 75) seg.hasGantry = true;
+        } else {
+            // SECTOR 4: Outer Ring Expressway
+            seg.sector = 4;
+            seg.sectorName = "OUTER RING EXPRESSWAY";
+            if (i % 9 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_STREETLIGHT;
+                seg.sceneryLeftX = -1.35;
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_STREETLIGHT;
+                seg.sceneryRightX = 1.35;
+            }
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.65;
+            }
+            if (i % 28 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 56 == 0) ? SCENERY_BILLBOARD_1 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.9;
+            }
+            if (i == s3 + 75) seg.hasGantry = true;
         }
+    }
+}
 
-        // 2. Billboard signs: every 60 segments at offset = +-1.35 (plus checkpoint pillars)
-        if (i % 60 == 30) {
-            float side = ((i / 60) & 1) ? +1.35f : -1.35f;
-            emitScenery(side, SPR_SIGN, (side < 0.0f) ? 1 : 0);
-        }
+void Track::buildRedRock() {
+    m_info.name = "Red Rock Canyon";
+    m_info.description = "High-speed desert sprint with rollercoaster whoops, majestic sandstone arches, and desert wind farms.";
+    m_info.laneCount = 4;
+    m_info.roadWidth = 2400;
+    m_info.hillRating = 3;
+    m_info.trafficRating = 3;
+    m_info.difficulty = 3;
 
-        // 3. Trees / pines: probability 0.18, offset = sign * (1.5 + 2.0 * rand01); at most 3 items/seg
-        if (mathutil::rand01(rng) < 0.18f) {
-            float sign = (mathutil::xorshift32(rng) & 1u) ? +1.0f : -1.0f;
-            float off  = sign * (1.5f + 2.0f * mathutil::rand01(rng));
-            uint16_t spr = (mathutil::xorshift32(rng) & 1u) ? SPR_TREE : SPR_PINE;
-            uint8_t flip = static_cast<uint8_t>(mathutil::xorshift32(rng) & 1u);
-            emitScenery(off, spr, flip);
-        }
+    addStraight(22);
+    addRollingHills(64, 3, 2100, -2.4);
+    addHillAndCurve(110, -3.4, 2600);
+    addRollingHills(60, 2, 1850, 2.8);
+    addCurve(100, 3.8);
+    addHill(90, -2600);
+    addRollingHills(72, 3, 2200, -2.2);
+    addHillAndCurve(120, 2.9, 2200);
+    addCurve(95, -3.6);
+    addHill(85, -2200);
+    addRollingHills(80, 3, 2000, 2.4);
+    addCurve(85, 2.4);
+    addRollingHills(64, 2, 1750, -2.0);
+    for (int k = 0; k < 4; ++k) {
+        addHill(35, 1950);
+        addHill(35, -1950);
+    }
+    addCurve(80, 3.5);
+    addRollingHills(48, 2, 1800, -2.5);
+    addHillAndCurve(90, -4.2, 2400);
+    addHill(60, -2400);
+    addRollingHills(64, 2, 1700, 2.8);
+    addCurve(70, 2.8);
+    addStraight(45);
 
-        // 4. Bushes / rocks: probability 0.08, offset = sign * (1.15 + 0.6 * rand01)
-        if (mathutil::rand01(rng) < 0.08f) {
-            float sign = (mathutil::xorshift32(rng) & 1u) ? +1.0f : -1.0f;
-            float off  = sign * (1.15f + 0.6f * mathutil::rand01(rng));
-            uint16_t spr = (mathutil::xorshift32(rng) & 1u) ? SPR_BUSH : SPR_ROCK;
-            uint8_t flip = static_cast<uint8_t>(mathutil::xorshift32(rng) & 1u);
-            emitScenery(off, spr, flip);
+    int total = m_segments.size();
+    int s1 = total * 0.25;
+    int s2 = total * 0.50;
+    int s3 = total * 0.75;
+
+    for (int i = 0; i < total; ++i) {
+        RoadSegment& seg = m_segments[i];
+
+        if (i < s1) {
+            // SECTOR 1: Saguaro Desert Plains
+            seg.sector = 1;
+            seg.sectorName = "SAGUARO DESERT PLAINS";
+            if (i % 7 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_CACTUS;
+                seg.sceneryLeftX = -1.55 - ((i % 14 == 0) ? 0.3 : 0.6);
+            }
+            if (i % 9 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_CACTUS;
+                seg.sceneryRightX = 1.6 + ((i % 18 == 0) ? 0.4 : 0.1);
+            }
+            // Desert telephone / utility poles along Route 66
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.6;
+            }
+            if (i % 32 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 64 == 0) ? SCENERY_BILLBOARD_1 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.95;
+            }
+            if (i == 80) seg.hasGantry = true;
+        } else if (i < s2) {
+            // SECTOR 2: Monument Valley Sandstone Arches
+            seg.sector = 2;
+            seg.sectorName = "MONUMENT VALLEY ARCHES";
+            if (i % 7 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = (i % 28 == 0) ? SCENERY_ROCK_ARCH : SCENERY_BOULDER;
+                seg.sceneryLeftX = -1.6 - ((i % 14 == 0) ? 0.3 : 0.8);
+            }
+            if (i % 8 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 24 == 0) ? SCENERY_ROCK_ARCH : SCENERY_BOULDER;
+                seg.sceneryRightX = 1.6 + ((i % 16 == 0) ? 0.4 : 0.1);
+            }
+            if (i % 16 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_UTILITY_POLE;
+                seg.sceneryRightX = 1.65;
+            }
+            if (i % 36 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_HOARDING_NEON;
+                seg.sceneryLeftX = -2.1;
+            }
+            if (i == s1 + 80) seg.hasGantry = true;
+        } else if (i < s3) {
+            // SECTOR 3: Mojave Wind Basin
+            seg.sector = 3;
+            seg.sectorName = "MOJAVE WIND BASIN";
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_WIND_TURBINE;
+                seg.sceneryLeftX = -2.1;
+            }
+            if (i % 16 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_WIND_TURBINE;
+                seg.sceneryRightX = 2.1;
+            }
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.6;
+            }
+            if (i % 34 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_BILLBOARD_1;
+                seg.sceneryRightX = 1.95;
+            }
+            if (i % 8 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_CACTUS;
+                seg.sceneryLeftX = -1.5;
+            }
+            if (i == s2 + 80) seg.hasGantry = true;
+        } else {
+            // SECTOR 4: Red Rock Canyon Gorge
+            seg.sector = 4;
+            seg.sectorName = "RED ROCK CANYON GORGE";
+            if (i % 7 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_BOULDER;
+                seg.sceneryLeftX = -1.5;
+
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = SCENERY_GUARDRAIL;
+                seg.sceneryRightX = 1.25;
+            }
+            if (i % 14 == 0) {
+                seg.hasSceneryLeft = true;
+                seg.sceneryLeft = SCENERY_UTILITY_POLE;
+                seg.sceneryLeftX = -1.65;
+            }
+            if (i % 28 == 0) {
+                seg.hasSceneryRight = true;
+                seg.sceneryRight = (i % 56 == 0) ? SCENERY_BILLBOARD_2 : SCENERY_HOARDING_NEON;
+                seg.sceneryRightX = 1.9;
+            }
+            if (i == s3 + 80) seg.hasGantry = true;
         }
     }
 }

@@ -1,0 +1,8 @@
+C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/CMakeFiles/ApexVelocity.dir
+C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/CMakeFiles/capture_screenshots.dir
+C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/CMakeFiles/edit_cache.dir
+C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/CMakeFiles/rebuild_cache.dir
+C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/CMakeFiles/ApexVelocity_autogen_timestamp_deps.dir
+C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/CMakeFiles/ApexVelocity_autogen.dir
+C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/CMakeFiles/capture_screenshots_autogen_timestamp_deps.dir
+C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/CMakeFiles/capture_screenshots_autogen.dir
