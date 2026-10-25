@@ -68,8 +68,22 @@ void GameWindow::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter painter(this);
 
-    // Render pure raster 3D game scene
-    m_renderer.render(painter, m_engine, width(), height(), m_lastDt);
+    int pSize = m_engine.getPlayer().pixelSize;
+    if (pSize > 1 && !m_showMainMenu) {
+        QImage fullImg(width(), height(), QImage::Format_RGB32);
+        {
+            QPainter fp(&fullImg);
+            m_renderer.render(fp, m_engine, width(), height(), m_lastDt);
+        }
+        int lowW = qMax(64, width() / pSize);
+        int lowH = qMax(36, height() / pSize);
+        QImage lowImg = fullImg.scaled(lowW, lowH, Qt::IgnoreAspectRatio, Qt::FastTransformation);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+        painter.drawImage(rect(), lowImg);
+    } else {
+        // Render pure raster 3D game scene
+        m_renderer.render(painter, m_engine, width(), height(), m_lastDt);
+    }
 
     // Render Main Menu & Difficulty Overlay if open
     if (m_showMainMenu) {
@@ -124,16 +138,20 @@ void GameWindow::keyPressEvent(QKeyEvent *event) {
             m_engine.cycleTimeOfDay(); // Instant Day / Sunset / Night switch
             break;
         case Qt::Key_1:
-            m_engine.setInfotainmentMode(INFO_MODE_WEB);
+            m_engine.toggleZBuffer3DMode();
+            update();
             break;
         case Qt::Key_2:
-            m_engine.setInfotainmentMode(INFO_MODE_MUSIC);
+            m_engine.toggleAdas();
+            update();
             break;
         case Qt::Key_3:
-            m_engine.setInfotainmentMode(INFO_MODE_RADAR);
+            m_engine.toggleArGuides();
+            update();
             break;
         case Qt::Key_4:
-            m_engine.setInfotainmentMode(INFO_MODE_CAR);
+            m_engine.cyclePixelSize(1);
+            update();
             break;
         case Qt::Key_P:
             m_engine.toggleMusicPlay();
@@ -171,6 +189,34 @@ void GameWindow::keyPressEvent(QKeyEvent *event) {
         case Qt::Key_Z:
         case Qt::Key_L:
             m_engine.toggleZBuffer3DMode();
+            update();
+            break;
+        case Qt::Key_J:
+            m_engine.cyclePixelSize(1);
+            update();
+            break;
+        case Qt::Key_K:
+            m_engine.toggleCrtScanlines();
+            update();
+            break;
+        case Qt::Key_5:
+            m_engine.setPixelSizePreset(0);
+            update();
+            break;
+        case Qt::Key_6:
+            m_engine.setPixelSizePreset(1);
+            update();
+            break;
+        case Qt::Key_7:
+            m_engine.setPixelSizePreset(2);
+            update();
+            break;
+        case Qt::Key_8:
+            m_engine.setPixelSizePreset(3);
+            update();
+            break;
+        case Qt::Key_9:
+            m_engine.setPixelSizePreset(4);
             update();
             break;
         case Qt::Key_Y:
@@ -352,6 +398,25 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
         m_engine.toggleCameraView();
         update();
         return;
+    }
+
+    // Top-Center Interactive Feature Pills: [1] 3D MESH, [2] ADAS, [3] AR GAP, [4] PIXEL
+    {
+        int btnW = 132, btnH = 22, btnGap = 8;
+        int totalW = 4 * btnW + 3 * btnGap;
+        int startX = (w / 2) - totalW / 2;
+        int btnY = 50;
+        for (int i = 0; i < 4; ++i) {
+            QRect r(startX + i * (btnW + btnGap), btnY, btnW, btnH);
+            if (r.contains(pos)) {
+                if (i == 0) m_engine.toggleZBuffer3DMode();
+                else if (i == 1) m_engine.toggleAdas();
+                else if (i == 2) m_engine.toggleArGuides();
+                else if (i == 3) m_engine.cyclePixelSize(1);
+                update();
+                return;
+            }
+        }
     }
 
     if (!m_engine.isThirdPersonView() && screenRect.contains(pos)) {
@@ -789,7 +854,8 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
     p.setPen(QColor(135, 155, 180));
     QFont hf("Arial", 8, QFont::Normal);
     p.setFont(hf);
-    p.drawText(QRect(0, bottomY, w, 22), Qt::AlignCenter, "CONTROLS:  [W/S] or [MOUSE L/R CLICK / PEDALS] Gas & Brake  •  [A/D] Steer  •  [SPACE] Handbrake  •  [Q/E] Look  •  [B] Rear  •  [M] Menu");
+    p.drawText(QRect(0, bottomY, w, 22), Qt::AlignCenter,
+               "CONTROLS: [W/S] Gas/Brake • [A/D] Steer • [C] 1st/3rd Cam • [F1-F4] Car • [G] ADAS • [F] AR-Gap • [Z] 3D-Z • [J/5-9] Pixel(1-6px) • [K] CRT • [Y] Repair");
 
     p.restore();
 }

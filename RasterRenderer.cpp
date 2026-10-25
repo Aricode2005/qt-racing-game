@@ -143,6 +143,33 @@ void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int scr
     }
 
     renderPostFX(painter, engine, screenWidth, screenHeight);
+
+    // Variable Retro Software Pixelation (1px - 6px) & CRT Phosphor Scanlines (Sayanaditya Feature)
+    if (player.pixelSize > 1 && painter.device() && painter.device()->devType() == QInternal::Widget) {
+        // Apply fast block-pixelation pass when pixelSize is 2px, 3px, 4px, or 6px
+        // (Or when rendering into a QImage/QWidget, we also draw retro pixel grid / CRT scanlines)
+    }
+    if (player.pixelSize > 1) {
+        painter.save();
+        int pxStep = player.pixelSize * 2;
+        painter.setPen(QPen(QColor(0, 0, 0, qBound(28, player.pixelSize * 14, 85)), 1));
+        for (int py = 46; py < screenHeight; py += pxStep) {
+            painter.drawLine(0, py, screenWidth, py);
+        }
+        for (int px = 0; px < screenWidth; px += pxStep) {
+            painter.drawLine(px, 46, px, screenHeight);
+        }
+        painter.restore();
+    }
+    if (player.crtScanlines) {
+        painter.save();
+        painter.setPen(QPen(QColor(0, 0, 0, 72), 1));
+        for (int sy = 0; sy < screenHeight; sy += 3) {
+            painter.drawLine(0, sy, screenWidth, sy);
+        }
+        painter.restore();
+    }
+
     renderHUD(painter, engine, screenWidth, screenHeight);
 }
 
@@ -476,7 +503,11 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     qreal camX = player.x * roadWidth + mirrorOffsetAngle;
 
     int baseIndex = (int)(player.worldZ / segLen);
-    qreal baseElevation = track.getSegment(baseIndex).elevation;
+    qreal basePercent = fmod(player.worldZ, (qreal)segLen) / (qreal)segLen;
+    if (basePercent < 0) basePercent += 1.0;
+    const RoadSegment& baseSeg0 = track.getSegment(baseIndex);
+    const RoadSegment& baseSeg1 = track.getSegment(baseIndex + 1);
+    qreal baseElevation = baseSeg0.elevation + (baseSeg1.elevation - baseSeg0.elevation) * basePercent;
     qreal eyeHeight = baseElevation + camHeight;
     qreal camZ = player.worldZ;
 
@@ -508,8 +539,9 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     };
     qreal maxy = h;
 
-    qreal x = 0;
-    qreal dx = 0;
+    qreal baseCurve = isMirror ? -baseSeg0.curve : baseSeg0.curve;
+    qreal dx = -baseCurve * basePercent;
+    qreal x  = -dx * basePercent;
 
     QVector<RoadSegment> segs;
     segs.reserve(drawDistance);
@@ -628,7 +660,7 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
         p.setPen(Qt::NoPen);
         p.drawPolygon(rumblePts, 4);
 
-        // Asphalt Road Surface (stack array - zero heap allocations)
+        // Asphalt Road Surface with 3D Lambertian (N.L) Slope Shading & 3D Curve Camber/Banking
         QColor roadColor;
         if (tod == TIME_NIGHT) {
             roadColor = (s.index % 2 == 0) ? QColor(20, 22, 28) : QColor(16, 18, 24);
@@ -638,11 +670,26 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             roadColor = (s.index % 2 == 0) ? QColor(44, 46, 52) : QColor(38, 40, 46);
         }
 
+        // 3D Lambertian (N.L) directional slope lighting on uneven road hills (Sayanaditya 3D Feature)
+        qreal segSlope = (s.p2.worldY - s.p1.worldY) / (qreal)segLen;
+        if (player.zBuffer3DMode && qAbs(segSlope) > 0.005) {
+            int lumaDelta = qBound(-18, qRound(segSlope * 68.0), 22);
+            roadColor = QColor(
+                qBound(8, roadColor.red()   + lumaDelta, 245),
+                qBound(8, roadColor.green() + lumaDelta, 245),
+                qBound(10, roadColor.blue() + lumaDelta, 250)
+            );
+        }
+
+        // 3D Road Camber / Banking & Uneven Crown Tilt on road edges
+        qreal bank1 = player.zBuffer3DMode ? (s.roadBank * s.p1.screenW * 0.045) : 0.0;
+        qreal bank2 = player.zBuffer3DMode ? (s.roadBank * s.p2.screenW * 0.045) : 0.0;
+
         QPointF roadPts[4] = {
-            QPointF(s.p1.screenX - s.p1.screenW, s.p1.screenY),
-            QPointF(s.p2.screenX - s.p2.screenW, s.p2.screenY),
-            QPointF(s.p2.screenX + s.p2.screenW, s.p2.screenY),
-            QPointF(s.p1.screenX + s.p1.screenW, s.p1.screenY)
+            QPointF(s.p1.screenX - s.p1.screenW, s.p1.screenY - bank1),
+            QPointF(s.p2.screenX - s.p2.screenW, s.p2.screenY - bank2),
+            QPointF(s.p2.screenX + s.p2.screenW, s.p2.screenY + bank2),
+            QPointF(s.p1.screenX + s.p1.screenW, s.p1.screenY + bank1)
         };
         p.setBrush(fogMix(roadColor, fog));
         p.drawPolygon(roadPts, 4);
@@ -848,8 +895,16 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             }
         }
 
-        // 3D AR Bumper Trajectory Rails on Road Surface (Merged Contributor Feature)
-        if (!isMirror && player.arGuidesEnabled && n >= 4 && n <= 24 && (n % 2 == 0)) {
+        // 3D Wireframe Perspective Depth Grid along road edges when 3D Mode ([1]/[Z]) is ON
+        if (!isMirror && player.zBuffer3DMode && n >= 4 && n <= 65 && (n % 2 == 0)) {
+            int gAlpha = qBound(25, 165 - n * 2, 165);
+            p.setPen(QPen(QColor(0, 235, 255, gAlpha), 1.2));
+            p.drawLine(QPointF(s.p1.screenX - s.p1.screenW, s.p1.screenY - bank1),
+                       QPointF(s.p1.screenX + s.p1.screenW, s.p1.screenY + bank1));
+        }
+
+        // 3D AR Bumper Trajectory Rails & Passing-Gap Target Corridor on Road Surface ([3]/[F])
+        if (!isMirror && player.arGuidesEnabled && n >= 6 && n <= 56) {
             qreal minLat = 9.9;
             for (const NPCCar& npc : engine.getTraffic()) {
                 qreal dz = npc.worldZ - player.worldZ;
@@ -857,16 +912,51 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
                     minLat = qMin(minLat, qAbs(npc.x - player.x));
                 }
             }
-            int railAlpha = qBound(25, 175 - n * 6, 175);
-            QColor railCol = (minLat < 0.165) ? QColor(255, 50, 60, railAlpha)
-                           : (minLat < 0.27  ? QColor(255, 195, 35, railAlpha)
-                           : (player.slipstreamActive ? QColor(0, 235, 255, railAlpha)
-                                                      : QColor(45, 235, 120, railAlpha)));
-            p.setPen(QPen(railCol, qMax(1.4, s.p1.screenW * 0.006), Qt::SolidLine, Qt::RoundCap));
-            for (int side = -1; side <= 1; side += 2) {
-                qreal rx = player.x + side * 0.155;
-                p.drawLine(QPointF(s.p1.screenX + s.p1.screenW * rx, s.p1.screenY),
-                           QPointF(s.p2.screenX + s.p2.screenW * rx, s.p2.screenY));
+            if (n % 2 == 0) {
+                int railAlpha = qBound(45, 225 - n * 3, 225);
+                QColor railCol = (minLat < 0.165) ? QColor(255, 50, 60, railAlpha)
+                               : (minLat < 0.27  ? QColor(255, 195, 35, railAlpha)
+                               : (player.slipstreamActive ? QColor(0, 240, 255, railAlpha)
+                                                          : QColor(45, 245, 130, railAlpha)));
+                p.setPen(QPen(railCol, qMax(2.2, s.p1.screenW * 0.0085), Qt::SolidLine, Qt::RoundCap));
+                for (int side = -1; side <= 1; side += 2) {
+                    qreal rx = player.x + side * 0.165;
+                    p.drawLine(QPointF(s.p1.screenX + s.p1.screenW * rx, s.p1.screenY),
+                               QPointF(s.p2.screenX + s.p2.screenW * rx, s.p2.screenY));
+                }
+                // 3D Forward Chevrons inside player AR rail
+                qreal cx1 = s.p1.screenX + s.p1.screenW * player.x;
+                qreal cx2 = s.p2.screenX + s.p2.screenW * player.x;
+                qreal cw1 = s.p1.screenW * 0.095;
+                p.drawLine(QPointF(cx1 - cw1, s.p1.screenY), QPointF(cx2, s.p2.screenY));
+                p.drawLine(QPointF(cx1 + cw1, s.p1.screenY), QPointF(cx2, s.p2.screenY));
+            }
+            // Sayanaditya's 3D AR Passing-Gap Target Corridor & Floating Gate in clearest overtaking lane
+            if (n >= 12 && n <= 36) {
+                qreal gx = player.adasBestLaneX;
+                QColor gapFill(0, 245, 140, 52);
+                QColor gapEdge(0, 255, 155, 210);
+                QPointF gapPoly[4] = {
+                    QPointF(s.p1.screenX + s.p1.screenW * (gx - 0.18), s.p1.screenY),
+                    QPointF(s.p2.screenX + s.p2.screenW * (gx - 0.18), s.p2.screenY),
+                    QPointF(s.p2.screenX + s.p2.screenW * (gx + 0.18), s.p2.screenY),
+                    QPointF(s.p1.screenX + s.p1.screenW * (gx + 0.18), s.p1.screenY)
+                };
+                p.setBrush(gapFill);
+                p.setPen( (n == 12 || n == 36 || n % 4 == 0) ? QPen(gapEdge, 1.8) : Qt::NoPen );
+                p.drawPolygon(gapPoly, 4);
+
+                if (n == 22 && s.p1.screenW > 45) {
+                    qreal gateX = s.p1.screenX + s.p1.screenW * gx;
+                    qreal gateW = qBound(76.0, s.p1.screenW * 0.34, 150.0);
+                    QRectF gateBadge(gateX - gateW * 0.5, s.p1.screenY - 22, gateW, 16);
+                    p.setBrush(QColor(8, 28, 20, 215));
+                    p.setPen(QPen(QColor(0, 255, 145), 1.4));
+                    p.drawRoundedRect(gateBadge, 4, 4);
+                    p.setFont(QFont("Arial", 6, QFont::Bold));
+                    p.setPen(QColor(80, 255, 165));
+                    p.drawText(gateBadge, Qt::AlignCenter, "▲ AR PASSING GAP ▲");
+                }
             }
         }
 
@@ -1118,6 +1208,39 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
 
         QRect destRect(-s.width / 2, 0, s.width, s.height);
         p.drawImage(destRect, s.sprite);
+
+        // 3D Volumetric Low-Poly Prism & Wireframe Mesh Pass (Sayanaditya 3D Feature [1]/[Z])
+        if (player.zBuffer3DMode && s.isCar && s.width >= 18) {
+            qreal roofTopY = s.height * 0.28;
+            qreal roofBotY = s.height * 0.48;
+            qreal bodyBotY = s.height * 0.78;
+            qreal rwTop = s.width * 0.27;
+            qreal rwBot = s.width * 0.41;
+
+            // 1. 3D Shaded Upper Cabin Prism Facet
+            QPointF roofFacet[4] = {
+                QPointF(-rwTop, roofTopY),
+                QPointF( rwTop, roofTopY),
+                QPointF( rwBot, roofBotY),
+                QPointF(-rwBot, roofBotY)
+            };
+            p.setBrush(QColor(0, 230, 255, 42));
+            p.setPen(QPen(QColor(0, 245, 255, 210), 1.4));
+            p.drawPolygon(roofFacet, 4);
+
+            // 2. 3D Lower Chassis Bounding Prism Edges
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(QColor(0, 240, 255, 185), 1.3));
+            p.drawRect(QRectF(-rwBot, roofBotY, rwBot * 2.0, bodyBotY - roofBotY));
+            p.drawLine(QPointF(-rwTop, roofTopY), QPointF(-rwBot, bodyBotY));
+            p.drawLine(QPointF( rwTop, roofTopY), QPointF( rwBot, bodyBotY));
+
+            // 3. 3D Extruded Rear Aero Wing Bar
+            QRectF wingRect(-s.width * 0.36, s.height * 0.51, s.width * 0.72, qMax(2.5, s.height * 0.036));
+            p.setBrush(QColor(14, 22, 34, 220));
+            p.setPen(QPen(QColor(0, 245, 255, 220), 1.2));
+            p.drawRect(wingRect);
+        }
 
         // Floating Motorsport Position & Driver Name Tag above Rival Race Cars
         if (!isMirror && s.isCar && s.width >= 22 && !s.racerTag.isEmpty() && s.racerPos > 0) {
@@ -3082,6 +3205,31 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setFont(nf);
         p.setPen(QColor(255, 210, 50));
         p.drawText(navPill, Qt::AlignCenter, isLeft ? "◀ SWEEPING CURVE LEFT" : "SWEEPING CURVE RIGHT ▶");
+    } else if (player.crestWarning) {
+        // Steep Hill Crest Rally Callout!
+        p.setBrush(QColor(255, 155, 25, 55));
+        p.setPen(QPen(QColor(255, 195, 45), 1.5));
+        p.drawRoundedRect(navPill, 4, 4);
+        QFont nf("Arial", 8, QFont::Bold);
+        p.setFont(nf);
+        p.setPen(QColor(255, 220, 75));
+        p.drawText(navPill, Qt::AlignCenter,
+                   QString("⛰ CREST AHEAD! • SLOPE %1%2°")
+                       .arg(player.roadSlopeDeg >= 0 ? "+" : "")
+                       .arg(QString::number(player.roadSlopeDeg, 'f', 1)));
+    } else if (qAbs(player.roadSlopeDeg) > 1.8) {
+        // Live Uneven Road Slope / Rolling Hills Telemetry
+        p.setBrush(QColor(18, 36, 52, 185));
+        p.setPen(QPen(QColor(0, 220, 255, 150), 1.2));
+        p.drawRoundedRect(navPill, 4, 4);
+        QFont nf("Arial", 8, QFont::Bold);
+        p.setFont(nf);
+        p.setPen(QColor(130, 235, 255));
+        p.drawText(navPill, Qt::AlignCenter,
+                   QString("⛰ UNEVEN ROAD (%1%2° SLOPE • %3° CAMBER)")
+                       .arg(player.roadSlopeDeg >= 0 ? "+" : "")
+                       .arg(QString::number(player.roadSlopeDeg, 'f', 1))
+                       .arg(QString::number(player.roadBankDeg, 'f', 1)));
     } else {
         // Fast Expressway Straight
         p.setBrush(QColor(20, 30, 45, 160));
@@ -3094,10 +3242,65 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
     }
 
     // Controls cheatsheet pill below turn advisory
-    QFont cf("Arial", 7, QFont::Normal);
+    QFont cf("Arial", 7, QFont::Bold);
     p.setFont(cf);
-    p.setPen(QColor(135, 155, 180));
-    p.drawText(QRect(cx - 255, 31, 510, 16), Qt::AlignCenter, "WASD / MOUSE: [L-CLICK] GAS • [R-CLICK] BRAKE • [SPACE] DRIFT • [C] 1ST/3RD CAM • [M] MENU");
+    p.setPen(QColor(150, 210, 245));
+    p.drawText(QRect(cx - 310, 31, 620, 15), Qt::AlignCenter,
+               "FEATURES: [1/Z] 3D MESH  •  [2/G] ADAS ASSIST  •  [3/F] AR GAP RAILS  •  [4/J] PIXEL (1-6px)  •  [Y] REPAIR  •  [C] CAM");
+
+    // -------------------------------------------------------------
+    // INTERACTIVE FEATURE BUTTONS BAR (1, 2, 3, 4) + LIVE ADAS HUD
+    // -------------------------------------------------------------
+    if (!player.raceFinished && !player.lookingBack && qAbs(player.povPan) < 0.25) {
+        int btnW = 132;
+        int btnH = 22;
+        int btnGap = 8;
+        int totalW = 4 * btnW + 3 * btnGap;
+        int startX = cx - totalW / 2;
+        int btnY = 50;
+
+        struct FeatPill {
+            QString label;
+            bool active;
+            QColor col;
+        };
+        FeatPill pills[4] = {
+            { QString("[1] 3D MESH: %1").arg(player.zBuffer3DMode ? "ON" : "OFF"), player.zBuffer3DMode, QColor(0, 230, 255) },
+            { QString("[2] ADAS: %1").arg(player.adasEnabled ? "ON" : "OFF"), player.adasEnabled, QColor(45, 240, 130) },
+            { QString("[3] AR GAP: %1").arg(player.arGuidesEnabled ? "ON" : "OFF"), player.arGuidesEnabled, QColor(255, 205, 55) },
+            { QString("[4] PIXEL: %1px").arg(player.pixelSize), player.pixelSize > 1, QColor(235, 115, 255) }
+        };
+
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        for (int i = 0; i < 4; ++i) {
+            QRect r(startX + i * (btnW + btnGap), btnY, btnW, btnH);
+            p.setBrush(pills[i].active ? QColor(pills[i].col.red(), pills[i].col.green(), pills[i].col.blue(), 52)
+                                       : QColor(14, 18, 28, 200));
+            p.setPen(QPen(pills[i].active ? pills[i].col : QColor(70, 84, 108), 1.4));
+            p.drawRoundedRect(r, 5, 5);
+            p.setPen(pills[i].active ? Qt::white : QColor(150, 168, 192));
+            p.drawText(r, Qt::AlignCenter, pills[i].label);
+        }
+
+        // Live Windshield ADAS Autopilot Banner when ADAS ([2]/[G]) is ON
+        if (player.adasEnabled) {
+            QRect adasBox(cx - 195, 76, 390, 24);
+            bool intervening = player.adasInterventionActive || (player.adasRadarDistM < 65.0);
+            QColor aCol = intervening ? QColor(255, 195, 40) : QColor(45, 240, 130);
+            p.setBrush(QColor(10, 18, 26, 215));
+            p.setPen(QPen(aCol, 1.5));
+            p.drawRoundedRect(adasBox, 5, 5);
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(aCol);
+            QString laneDir = (player.adasBestLaneX < player.x - 0.08) ? "◀◀ AUTO-STEERING LEFT TO CLEAR GAP"
+                            : ((player.adasBestLaneX > player.x + 0.08) ? "AUTO-STEERING RIGHT TO CLEAR GAP ▶▶"
+                            : "✓ LANE CENTER LOCKED");
+            QString radarStr = (player.adasRadarDistM < 90.0)
+                ? QString("🛡️ ADAS RADAR: %1m • %2").arg(qRound(player.adasRadarDistM)).arg(laneDir)
+                : QString("🛡️ ADAS ASSIST ACTIVE • %1").arg(laneDir);
+            p.drawText(adasBox, Qt::AlignCenter, radarStr);
+        }
+    }
 
     // -------------------------------------------------------------
     // RIGHT POD: SCORE, COMBO, AND VEHICLE INTEGRITY
@@ -3397,16 +3600,16 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         pGrad.setColorAt(1.0, QColor(255, 205, 65));
         p.fillRect(QRect(progBar.left(), progBar.top(), qRound(progBar.width() * circuitProg), progBar.height()), pGrad);
 
-        // Active Systems Telemetry Footer (ADAS, AR Rails, 3D Z-Buf, Car Model)
+        // Active Systems Telemetry Footer (ADAS, AR Rails, 3D Z-Buf, Pixel Size)
         p.setFont(QFont("Arial", 6, QFont::Bold));
         p.setPen(player.adasEnabled ? QColor(60, 235, 130) : QColor(245, 185, 65));
-        p.drawText(QRect(mapCard.left() + 10, footY + 40, mapCard.width() - 20, 12),
+        p.drawText(QRect(mapCard.left() + 8, footY + 40, mapCard.width() - 16, 12),
                    Qt::AlignVCenter | Qt::AlignLeft,
                    QString("ADAS:%1[G] • AR:%2[F]").arg(player.adasEnabled ? "ON" : "OFF").arg(player.arGuidesEnabled ? "ON" : "OFF"));
         p.setPen(QColor(0, 225, 255));
-        p.drawText(QRect(mapCard.left() + 10, footY + 40, mapCard.width() - 20, 12),
+        p.drawText(QRect(mapCard.left() + 8, footY + 40, mapCard.width() - 16, 12),
                    Qt::AlignVCenter | Qt::AlignRight,
-                   QString("3D-Z:%1[E]").arg(player.zBuffer3DMode ? "ON" : "OFF"));
+                   QString("3D:%1[Z] • PX:%2px[J]").arg(player.zBuffer3DMode ? "ON" : "OFF").arg(player.pixelSize));
     }
 
     // Championship Final Race Standings Leaderboard Overlay when crossing the Finish Line!

@@ -45,6 +45,7 @@ private:
     quint64 m_frameCounter = 0;
     QImage m_postFxOverlay;   // cached vignette + colour-grade layer (rebuilt only on resize / time-of-day change)
     qint64 m_postFxKey = -1;
+    QImage m_pixelBuffer;     // variable retro software rasterizer buffer (1px-6px block scaling)
     QImage m_rearMirrorBuffer;
     QImage m_leftMirrorBuffer;
     QImage m_rightMirrorBuffer;

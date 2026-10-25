@@ -55,6 +55,7 @@ void Track::addCurve(int num, qreal curve) {
         // Ease in / ease out curvature
         qreal factor = qSin(M_PI * (i / (qreal)num));
         seg.curve = curve * factor;
+        seg.roadBank = -seg.curve * 0.06;
         seg.elevation = m_currentY;
         seg.isRumbleRed = (seg.index / 3) % 2 == 0;
         m_segments.append(seg);
@@ -99,55 +100,84 @@ void Track::addHillAndCurve(int num, qreal curve, qreal height) {
 
         qreal factor = qSin(M_PI * (i / (qreal)num));
         seg.curve = curve * factor;
+        seg.roadBank = -seg.curve * 0.06;
         seg.elevation = m_currentY;
         seg.isRumbleRed = (seg.index / 3) % 2 == 0;
         m_segments.append(seg);
     }
 }
 
+void Track::addRollingHills(int num, int waves, qreal amplitude, qreal curve) {
+    if (num <= 0) return;
+    Q_UNUSED(waves);
+    qreal startY = m_currentY;
+    // Clamp amplitude to smooth, gentle highway elevation undulations
+    qreal gentleAmp = qBound(-520.0, amplitude * 0.28, 520.0);
+    for (int i = 0; i < num; ++i) {
+        RoadSegment seg;
+        seg.index = m_segments.size();
+        seg.p1.worldZ = seg.index * m_info.segmentLength;
+        seg.p1.worldY = m_currentY;
+
+        qreal progress = (i + 1) / (qreal)num;
+        qreal waveY = gentleAmp * qSin(progress * 2.0 * M_PI);
+        m_currentY = startY + waveY;
+
+        seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
+        seg.p2.worldY = m_currentY;
+
+        qreal factor = qSin(M_PI * (i / (qreal)num));
+        seg.curve = curve * factor;
+        seg.roadBank = -seg.curve * 0.06;
+        seg.elevation = m_currentY;
+        seg.isRumbleRed = (seg.index / 3) % 2 == 0;
+        m_segments.append(seg);
+    }
+    m_currentY = startY;
+}
+
 void Track::buildSunsetCoast() {
     m_info.name = "Pacific Coast Highway";
-    m_info.description = "Golden hour oceanfront cruise with dynamic scenery transitioning through 4 distinct zones.";
+    m_info.description = "Golden hour oceanfront cruise with gentle coastal hills, banked curves, and 4 distinct zones.";
     m_info.laneCount = 4;
     m_info.roadWidth = 2400;
-    m_info.hillRating = 2;
+    m_info.hillRating = 3;
     m_info.trafficRating = 3;
     m_info.difficulty = 2;
 
-    addStraight(60);
-    addHillAndCurve(80, 2.5, 800);
-    addStraight(40);
-    addCurve(70, -3.2);
-    addHill(60, -800);
+    addStraight(45);
+    addRollingHills(80, 1, 900, 1.8);
+    addHillAndCurve(90, -2.6, 850);
     addStraight(50);
-    addHillAndCurve(110, -3.4, 1400);
-    addStraight(90);
-    addCurve(100, 3.8);
-    addHill(90, -1400);
-    addStraight(110);
-    addHillAndCurve(120, 2.9, 1100);
-    addCurve(95, -3.6);
-    addHill(85, -1100);
-    addStraight(120);
-    addCurve(85, 2.4);
-    addStraight(95);
-    addHillAndCurve(90, -2.8, 1200);
-    addCurve(60, 4.0);
-    addHill(70, -1200);
-    addStraight(80);
+    addCurve(70, -3.0);
+    addHill(75, -850);
+    addRollingHills(75, 1, 800, -1.6);
+    addHillAndCurve(105, -3.0, 1000);
+    addStraight(70);
+    addCurve(90, 3.2);
+    addHill(85, -1000);
+    addRollingHills(80, 1, 850, -1.4);
+    addHillAndCurve(110, 2.6, 900);
+    addCurve(85, -3.2);
+    addHill(80, -900);
+    addStraight(85);
+    addCurve(75, 2.2);
+    addRollingHills(70, 1, 750, -1.4);
+    addHillAndCurve(90, -2.5, 950);
+    addCurve(60, 3.4);
+    addHill(75, -950);
+    addStraight(70);
     addCurve(60, 2.0);
-    addStraight(50);
-    addHillAndCurve(110, -3.4, 1400);
-    addStraight(90);
-    addCurve(100, 3.8);
-    addHill(90, -1400);
-    addStraight(110);
-    addHillAndCurve(120, 2.9, 1100);
-    addCurve(95, -3.6);
-    addHill(85, -1100);
-    addStraight(120);
-    addCurve(85, 2.4);
-    addStraight(95);
+    addRollingHills(65, 1, 750, -1.2);
+    addHillAndCurve(100, -3.0, 1000);
+    addStraight(70);
+    addCurve(85, 3.2);
+    addHill(85, -1000);
+    addRollingHills(75, 1, 800, -1.6);
+    addHillAndCurve(105, 2.6, 900);
+    addCurve(85, -3.2);
+    addHill(85, -900);
+    addStraight(75);
 
     int total = m_segments.size();
     int s1 = total * 0.25;
@@ -284,26 +314,27 @@ void Track::buildAlpineClimb() {
     m_info.trafficRating = 2;
     m_info.difficulty = 5;
 
-    addStraight(40);
+    addStraight(22);
+    addRollingHills(60, 2, 2200, 3.2);
     addHillAndCurve(90, 4.5, 3200);
     addHillAndCurve(80, -4.8, 2800);
-    addStraight(30);
+    addRollingHills(52, 2, 1800, -2.5);
     addHill(50, -2500);
     addCurve(70, 5.2);
     addHillAndCurve(90, -4.0, 3000);
     addHill(60, -3500);
-    addStraight(40);
+    addRollingHills(64, 3, 2100, 3.0);
     addHillAndCurve(80, 5.0, 2400);
     addHill(70, -5400);
-    addStraight(80);
+    addRollingHills(72, 2, 1950, -2.8);
     addHillAndCurve(110, 4.2, 2600);
     addCurve(95, -4.4);
     addHill(90, -2600);
-    addStraight(100);
+    addRollingHills(80, 3, 2200, 2.4);
     addHillAndCurve(115, -3.8, 2200);
     addCurve(90, 4.0);
     addHill(85, -2200);
-    addStraight(60);
+    addStraight(40);
 
     int total = m_segments.size();
     int s1 = total * 0.25;
@@ -433,26 +464,27 @@ void Track::buildNeonMetropolis() {
     m_info.trafficRating = 5;
     m_info.difficulty = 4;
 
-    addStraight(80);
+    addStraight(22);
+    addRollingHills(64, 2, 1450, 2.0);
     addCurve(60, 2.0);
-    addHill(50, 400);
-    addStraight(70);
+    addHill(50, 1600);
+    addRollingHills(60, 2, 1300, -1.8);
     addCurve(80, -2.5);
-    addHill(50, -400);
-    addStraight(90);
+    addHill(50, -1600);
+    addRollingHills(72, 3, 1550, 2.4);
     addCurve(70, 3.0);
-    addStraight(60);
+    addRollingHills(56, 2, 1350, -2.0);
     addCurve(60, -2.0);
-    addStraight(100);
+    addRollingHills(76, 2, 1650, 2.2);
     addCurve(95, 2.8);
-    addHill(70, 500);
-    addStraight(90);
+    addHill(70, 1800);
+    addRollingHills(64, 2, 1400, -2.5);
     addCurve(105, -3.1);
-    addHill(70, -500);
-    addStraight(110);
+    addHill(70, -1800);
+    addRollingHills(80, 3, 1600, 2.5);
     addCurve(90, 2.5);
-    addStraight(95);
-    addStraight(80);
+    addRollingHills(68, 2, 1350, -1.8);
+    addStraight(50);
 
     int total = m_segments.size();
     int s1 = total * 0.25;
@@ -576,29 +608,30 @@ void Track::buildRedRock() {
     m_info.trafficRating = 3;
     m_info.difficulty = 3;
 
-    addStraight(50);
-    addHillAndCurve(110, -3.4, 1400);
-    addStraight(90);
+    addStraight(22);
+    addRollingHills(64, 3, 2100, -2.4);
+    addHillAndCurve(110, -3.4, 2600);
+    addRollingHills(60, 2, 1850, 2.8);
     addCurve(100, 3.8);
-    addHill(90, -1400);
-    addStraight(110);
-    addHillAndCurve(120, 2.9, 1100);
+    addHill(90, -2600);
+    addRollingHills(72, 3, 2200, -2.2);
+    addHillAndCurve(120, 2.9, 2200);
     addCurve(95, -3.6);
-    addHill(85, -1100);
-    addStraight(120);
+    addHill(85, -2200);
+    addRollingHills(80, 3, 2000, 2.4);
     addCurve(85, 2.4);
-    addStraight(95);
+    addRollingHills(64, 2, 1750, -2.0);
     for (int k = 0; k < 4; ++k) {
-        addHill(35, 1200);
-        addHill(35, -1200);
+        addHill(35, 1950);
+        addHill(35, -1950);
     }
     addCurve(80, 3.5);
-    addStraight(40);
-    addHillAndCurve(90, -4.2, 1600);
-    addHill(60, -1600);
-    addStraight(80);
+    addRollingHills(48, 2, 1800, -2.5);
+    addHillAndCurve(90, -4.2, 2400);
+    addHill(60, -2400);
+    addRollingHills(64, 2, 1700, 2.8);
     addCurve(70, 2.8);
-    addStraight(60);
+    addStraight(45);
 
     int total = m_segments.size();
     int s1 = total * 0.25;

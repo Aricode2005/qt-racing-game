@@ -158,6 +158,38 @@ void GameEngine::toggleZBuffer3DMode() {
     m_player.announcementTimer = 2.4;
 }
 
+void GameEngine::setPixelSizePreset(int presetIdx) {
+    static const int kPresets[5] = { 1, 2, 3, 4, 6 };
+    int idx = qBound(0, presetIdx, 4);
+    m_player.pixelSize = kPresets[idx];
+    m_player.lastAnnouncement = QString("👾 RETRO PIXEL RASTERIZER: %1px (%2x%3 INTERNAL BUFFER)")
+        .arg(m_player.pixelSize)
+        .arg(1280 / m_player.pixelSize)
+        .arg(720 / m_player.pixelSize);
+    m_player.announcementTimer = 2.4;
+}
+
+void GameEngine::cyclePixelSize(int dir) {
+    static const int kPresets[5] = { 1, 2, 3, 4, 6 };
+    int curIdx = 0;
+    for (int i = 0; i < 5; ++i) {
+        if (kPresets[i] == m_player.pixelSize) {
+            curIdx = i;
+            break;
+        }
+    }
+    int nextIdx = (curIdx + dir + 5) % 5;
+    setPixelSizePreset(nextIdx);
+}
+
+void GameEngine::toggleCrtScanlines() {
+    m_player.crtScanlines = !m_player.crtScanlines;
+    m_player.lastAnnouncement = m_player.crtScanlines
+        ? "📺 RETRO CRT PHOSPHOR SCANLINES: ON"
+        : "📺 RETRO CRT PHOSPHOR SCANLINES: OFF";
+    m_player.announcementTimer = 2.2;
+}
+
 void GameEngine::fieldRepair() {
     m_player.health = qMin(100, m_player.health + 50);
     m_player.isWrecked = false;
@@ -320,9 +352,55 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
     // Gentle centrifugal curve push so taking corners feels effortless and intuitive
     const RoadSegment& currentSeg = m_track.findSegment(m_player.worldZ);
     const RoadSegment& nextSeg = m_track.findSegment(m_player.worldZ + m_track.getInfo().segmentLength);
-    qreal adasFactor = m_player.adasEnabled ? 0.22 : 0.48;
+    qreal adasFactor = m_player.adasEnabled ? 0.18 : 0.48;
     qreal curveForce = currentSeg.curve * (m_player.speed / 300.0) * adasFactor * dt;
     m_player.x -= curveForce;
+
+    // Forward Ultrasonic Radar & ADAS Passing-Gap / Obstacle Avoidance Assist (Sayanaditya Feature)
+    m_player.adasRadarDistM = 99.0;
+    m_player.adasInterventionActive = false;
+    static const qreal kLaneCenters[4] = { -0.75, -0.25, 0.25, 0.75 };
+    qreal laneClearDist[4] = { 2600.0, 2600.0, 2600.0, 2600.0 };
+    for (const NPCCar& npc : m_traffic) {
+        qreal dz = npc.worldZ - m_player.worldZ;
+        if (dz > 20.0 && dz < 2400.0) {
+            if (qAbs(npc.x - m_player.x) < 0.23) {
+                m_player.adasRadarDistM = qMin(m_player.adasRadarDistM, dz / 20.0);
+            }
+            for (int l = 0; l < 4; ++l) {
+                if (qAbs(npc.x - kLaneCenters[l]) < 0.23) {
+                    laneClearDist[l] = qMin(laneClearDist[l], dz);
+                }
+            }
+        }
+    }
+    int bestLane = 1;
+    qreal bestScore = -1e9;
+    for (int l = 0; l < 4; ++l) {
+        qreal score = laneClearDist[l] - qAbs(kLaneCenters[l] - m_player.x) * 320.0;
+        if (score > bestScore) {
+            bestScore = score;
+            bestLane = l;
+        }
+    }
+    m_player.adasBestLaneX = kLaneCenters[bestLane];
+
+    if (m_player.adasEnabled) {
+        // Active lane-keep shoulder recovery (prevents accidental off-road drift)
+        if (qAbs(m_player.x) > 0.88 && m_player.steerTarget == 0) {
+            m_player.x += (m_player.x > 0 ? -1.0 : 1.0) * 0.55 * dt;
+            m_player.adasInterventionActive = true;
+        }
+        // Gentle obstacle-avoidance nudge only after clearing starting grid and when very close to a car ahead
+        if (m_player.worldZ > 4200.0 && m_player.adasRadarDistM < 26.0 && m_player.speed > 65.0 && m_player.steerTarget == 0) {
+            qreal laneDelta = m_player.adasBestLaneX - m_player.x;
+            if (qAbs(laneDelta) > 0.04) {
+                qreal autoSteer = qBound(-1.0, laneDelta * 2.2, 1.0);
+                m_player.x += autoSteer * 0.45 * dt;
+                m_player.adasInterventionActive = true;
+            }
+        }
+    }
 
     // Soft asphalt edge stabilization to prevent sudden spins
     if (qAbs(m_player.x) > 0.98) {
@@ -357,10 +435,31 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
         m_player.boostBar = qMax(0.0, m_player.boostBar - 2.5 * dt);
     }
 
-    // Hill elevation slope effect (Gravity)
-    qreal slope = (nextSeg.elevation - currentSeg.elevation) / (qreal)m_track.getInfo().segmentLength;
+    // Hill elevation slope effect (Gravity & Uneven Road Telemetry)
+    qreal segLen = (qreal)m_track.getInfo().segmentLength;
+    qreal slope = (nextSeg.elevation - currentSeg.elevation) / segLen;
+    m_player.roadSlopeDeg = qAtan(slope) * 57.2958;
+    m_player.roadBankDeg  = currentSeg.roadBank * 42.0;
+
+    // Scan ahead 18 segments for steep hill crests (Rally Crest Warning)
+    m_player.crestWarning = false;
+    for (int d = 3; d <= 18; ++d) {
+        const RoadSegment& sA = m_track.findSegment(m_player.worldZ + d * segLen);
+        const RoadSegment& sB = m_track.findSegment(m_player.worldZ + (d + 2) * segLen);
+        qreal slA = (sA.p2.worldY - sA.p1.worldY);
+        qreal slB = (sB.p2.worldY - sB.p1.worldY);
+        if (slA > 35.0 && slB < -15.0) {
+            m_player.crestWarning = true;
+            break;
+        }
+    }
+
     qreal gravityForce = -slope * 35.0;
     accel += gravityForce;
+    if (m_player.adasEnabled && m_player.adasRadarDistM < 18.0 && m_player.speed > 110.0) {
+        accel -= 55.0; // ADAS Emergency Collision-Mitigation Braking
+        m_player.adasInterventionActive = true;
+    }
 
     if (m_player.isBraking) {
         if (m_player.speed > 5) {

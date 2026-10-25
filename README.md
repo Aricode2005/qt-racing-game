@@ -111,9 +111,11 @@ An arcade and circuit motorsport racing simulator engineered from the ground up 
 | <kbd>D</kbd> / <kbd>→</kbd> | **Steer Right** | Responsive turn-in right across the 4 racing lanes |
 | <kbd>C</kbd> / <kbd>V</kbd> / **HUD Button** | **Switch Camera View** | Toggles between **1st-Person Cockpit** and **3rd-Person Chase** view |
 | <kbd>F1</kbd> / <kbd>F2</kbd> / <kbd>F3</kbd> / <kbd>F4</kbd> | **Select Supercar** | Switches between `APEX GT-R`, `VORTEX V12`, `DRIFT SPEC-R`, and `TITAN ENFORCER` |
-| <kbd>G</kbd> | **Toggle ADAS Assist** | Switches between `ADAS ON` (Apex/Lane Assist) and `ADAS OFF` (Manual Realism) |
-| <kbd>F</kbd> | **Toggle 3D AR Rails** | Toggles projected 3D AR bumper trajectory rails on the road |
-| <kbd>Z</kbd> / <kbd>L</kbd> | **Toggle 3D Z-Buffer** | Toggles Full-Depth 3D Z-Buffer & Polygon Shading mode |
+| <kbd>G</kbd> | **Toggle ADAS Assist** | Switches between `ADAS ON` (Apex/Lane/Obstacle Assist) and `ADAS OFF` (Manual Realism) |
+| <kbd>F</kbd> | **Toggle 3D AR Rails & Passing Gap** | Toggles projected 3D AR bumper trajectory chevrons & green passing-gap corridor |
+| <kbd>Z</kbd> / <kbd>L</kbd> | **Toggle 3D Z-Buffer & Lambertian Shading** | Toggles Full-Depth 3D Z-Buffer, 3D road camber/banking & Lambertian `(N·L)` mesh facets |
+| <kbd>J</kbd> / <kbd>5</kbd>–<kbd>9</kbd> | **Variable Pixel Size (`1px`–`6px`)** | Cycles or selects software pixelation presets (`1px`, `2px`, `3px`, `4px`, `6px`) |
+| <kbd>K</kbd> | **Toggle CRT Scanlines** | Toggles retro CRT phosphor scanline filter |
 | <kbd>Y</kbd> | **On-Spot Field Repair** | Restores `+50%` Car Health on the spot without losing race progress |
 | <kbd>Spacebar</kbd> | **Handbrake / Drift** | Initiates rear-wheel drift with billowing tire smoke |
 | <kbd>R</kbd> | **Restart Race / Level Up** | Resets to Starting Grid (auto-promotes to next level after Top-3 finish) |

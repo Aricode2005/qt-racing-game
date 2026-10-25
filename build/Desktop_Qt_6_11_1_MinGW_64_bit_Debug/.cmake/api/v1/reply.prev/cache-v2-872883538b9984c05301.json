@@ -1050,7 +1050,7 @@
 					"value" : "No help, variable specified on the command line."
 				}
 			],
-			"type" : "PATH",
+			"type" : "UNINITIALIZED",
 			"value" : "C:/Qt/6.11.1/mingw_64"
 		},
 		{

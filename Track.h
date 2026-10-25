@@ -27,6 +27,7 @@ struct RoadSegment {
 
     qreal curve = 0;      // Horizontal curvature
     qreal elevation = 0;  // Height Y in world space
+    qreal roadBank = 0;   // 3D lateral road camber / uneven crown tilt
     qreal clip = 0;       // Screen clipping plane for hill occlusions
 
     int sector = 1;
@@ -83,6 +84,7 @@ private:
     void addCurve(int num, qreal curve);
     void addHill(int num, qreal height);
     void addHillAndCurve(int num, qreal curve, qreal height);
+    void addRollingHills(int num, int waves, qreal amplitude, qreal curve = 0);
 
     void buildSunsetCoast();
     void buildAlpineClimb();

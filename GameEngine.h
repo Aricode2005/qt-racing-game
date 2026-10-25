@@ -152,10 +152,18 @@ struct PlayerCar {
     QString carModelName = "APEX GT-R";
     qreal armorMultiplier = 1.0;       // Damage resistance scaling per car model
     qreal gripMultiplier = 1.0;        // Cornering & steering response scaling per car model
-    bool adasEnabled = true;           // Toggleable ADAS Apex & Lane-Keeping Assist ([G])
+    bool adasEnabled = false;          // OFF by default so car drives straight unless ADAS ([2]/[G]) is enabled
     bool arGuidesEnabled = true;       // Toggleable 3D AR Bumper Trajectory Rails & Passing Brackets ([F])
-    bool zBuffer3DMode = true;         // Toggleable Full-Depth 3D Z-Buffer & Polygon Shading Pipeline ([E]/[L])
+    bool zBuffer3DMode = true;         // Toggleable Full-Depth 3D Z-Buffer & Polygon Shading Pipeline ([Z]/[L])
     bool slipstreamActive = false;     // Active aerodynamic drafting lock behind lead car
+    int pixelSize = 1;                 // Variable Retro Software Pixelation: 1px, 2px, 3px, 4px, 6px ([J] / [5]-[9])
+    bool crtScanlines = false;         // Retro CRT Phosphor Scanline Toggle ([K])
+    qreal roadSlopeDeg = 0.0;          // Live uneven road vertical pitch/slope in degrees
+    qreal roadBankDeg = 0.0;           // Live 3D road camber/banking angle in degrees
+    bool crestWarning = false;         // True when approaching a steep hill crest
+    qreal adasRadarDistM = 99.0;       // Ultrasonic forward radar distance in meters
+    qreal adasBestLaneX = 0.25;        // Clearest passing lane center (-0.75, -0.25, +0.25, +0.75)
+    bool adasInterventionActive = false; // True when ADAS obstacle-avoidance steer/brake assist is active
 };
 
 struct RaceStandingEntry {
@@ -206,12 +214,15 @@ public:
     void setThirdPersonView(bool active) { m_player.thirdPersonView = active; }
     bool isThirdPersonView() const { return m_player.thirdPersonView; }
 
-    // Contributor Features: Car Selection, ADAS, AR Trajectory Guides, 3D Z-Buffer Mode & Field Repair
+    // Contributor Features: Car Selection, ADAS, AR Trajectory Guides, 3D Z-Buffer Mode, Pixelation & Field Repair
     void setSelectedCar(int carIdx);
     void cycleSelectedCar() { setSelectedCar((m_player.selectedCar + 1) % 4); }
     void toggleAdas();
     void toggleArGuides();
     void toggleZBuffer3DMode();
+    void setPixelSizePreset(int presetIdx);
+    void cyclePixelSize(int dir = 1);
+    void toggleCrtScanlines();
     void fieldRepair();
 
     // Getters
