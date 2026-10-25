@@ -28,8 +28,9 @@ RasterRenderer::RasterRenderer() {
 }
 
 void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int screenWidth, int screenHeight, qreal dt) {
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    // Fast render hints for road & world (zero CPU antialiasing overhead on 3D meshes/polygons)
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
 
     const PlayerCar& player = engine.getPlayer();
 
@@ -144,32 +145,17 @@ void RasterRenderer::render(QPainter& painter, const GameEngine& engine, int scr
 
     renderPostFX(painter, engine, screenWidth, screenHeight);
 
-    // Variable Retro Software Pixelation (1px - 6px) & CRT Phosphor Scanlines (Sayanaditya Feature)
-    if (player.pixelSize > 1 && painter.device() && painter.device()->devType() == QInternal::Widget) {
-        // Apply fast block-pixelation pass when pixelSize is 2px, 3px, 4px, or 6px
-        // (Or when rendering into a QImage/QWidget, we also draw retro pixel grid / CRT scanlines)
-    }
-    if (player.pixelSize > 1) {
-        painter.save();
-        int pxStep = player.pixelSize * 2;
-        painter.setPen(QPen(QColor(0, 0, 0, qBound(28, player.pixelSize * 14, 85)), 1));
-        for (int py = 46; py < screenHeight; py += pxStep) {
-            painter.drawLine(0, py, screenWidth, py);
-        }
-        for (int px = 0; px < screenWidth; px += pxStep) {
-            painter.drawLine(px, 46, px, screenHeight);
-        }
-        painter.restore();
-    }
     if (player.crtScanlines) {
         painter.save();
-        painter.setPen(QPen(QColor(0, 0, 0, 72), 1));
+        painter.setPen(QPen(QColor(0, 0, 0, 60), 1));
         for (int sy = 0; sy < screenHeight; sy += 3) {
             painter.drawLine(0, sy, screenWidth, sy);
         }
         painter.restore();
     }
 
+    // Enable high-quality anti-aliasing specifically for HUD text and instruments
+    painter.setRenderHint(QPainter::Antialiasing, true);
     renderHUD(painter, engine, screenWidth, screenHeight);
 }
 
@@ -511,7 +497,7 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     qreal eyeHeight = baseElevation + camHeight;
     qreal camZ = player.worldZ;
 
-    int drawDistance = isMirror ? 24 : 120;
+    int drawDistance = isMirror ? 16 : 80;
 
     // Atmospheric perspective: distant road, terrain & markings blend into the horizon haze
     TrackTheme theme = engine.getCurrentTheme();
@@ -592,6 +578,17 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     }
 
     TimeOfDay tod = engine.getTimeOfDay();
+
+    // Pre-calculate nearest traffic lateral distance once per frame (hoisted out of road segment loop)
+    qreal arMinLat = 9.9;
+    if (!isMirror && player.arGuidesEnabled) {
+        for (const NPCCar& npc : engine.getTraffic()) {
+            qreal dz = npc.worldZ - player.worldZ;
+            if (dz > 80.0 && dz < 1650.0) {
+                arMinLat = qMin(arMinLat, qAbs(npc.x - player.x));
+            }
+        }
+    }
 
     for (int n = 0; n < segs.size(); ++n) {
         RoadSegment& s = segs[n];
@@ -758,8 +755,8 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             }
         }
 
-        // Asphalt tire-wear ruts & subtle horizon specular sheen across each lane
-        if (!isMirror && n < 55 && s.p1.screenW > 18) {
+        // Asphalt tire-wear ruts & subtle horizon specular sheen across each lane (optimized)
+        if (!isMirror && n < 22 && (n % 2 == 0) && s.p1.screenW > 35) {
             QColor rutCol = fogMix(roadColor.darker(114), fog);
             QColor sheenCol = fogMix((tod == TIME_SUNSET) ? QColor(88, 66, 68) :
                                      (tod == TIME_NIGHT  ? QColor(34, 40, 56) : QColor(70, 74, 82)), fog);
@@ -797,8 +794,8 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             }
         }
 
-        // Retro-reflective Cat's-Eye Road Studs & 3D Highway Steel W-Beam Guardrails
-        if (!isMirror && n < 50 && s.p1.screenW > 22) {
+        // Retro-reflective Cat's-Eye Road Studs & 3D Highway Steel W-Beam Guardrails (optimized near-range)
+        if (!isMirror && n < 26 && s.p1.screenW > 30) {
             if (s.index % 2 == 0) {
                 qreal studR = qBound(1.2, s.p1.screenW * 0.0085, 4.5);
                 // Amber center median reflector stud
@@ -904,21 +901,14 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
         }
 
         // 3D AR Bumper Trajectory Rails & Passing-Gap Target Corridor on Road Surface ([3]/[F])
-        if (!isMirror && player.arGuidesEnabled && n >= 6 && n <= 56) {
-            qreal minLat = 9.9;
-            for (const NPCCar& npc : engine.getTraffic()) {
-                qreal dz = npc.worldZ - player.worldZ;
-                if (dz > 80.0 && dz < 1650.0) {
-                    minLat = qMin(minLat, qAbs(npc.x - player.x));
-                }
-            }
+        if (!isMirror && player.arGuidesEnabled && n >= 6 && n <= 42) {
             if (n % 2 == 0) {
-                int railAlpha = qBound(45, 225 - n * 3, 225);
-                QColor railCol = (minLat < 0.165) ? QColor(255, 50, 60, railAlpha)
-                               : (minLat < 0.27  ? QColor(255, 195, 35, railAlpha)
+                int railAlpha = qBound(45, 210 - n * 4, 210);
+                QColor railCol = (arMinLat < 0.165) ? QColor(255, 50, 60, railAlpha)
+                               : (arMinLat < 0.27  ? QColor(255, 195, 35, railAlpha)
                                : (player.slipstreamActive ? QColor(0, 240, 255, railAlpha)
                                                           : QColor(45, 245, 130, railAlpha)));
-                p.setPen(QPen(railCol, qMax(2.2, s.p1.screenW * 0.0085), Qt::SolidLine, Qt::RoundCap));
+                p.setPen(QPen(railCol, qMax(1.8, s.p1.screenW * 0.0075)));
                 for (int side = -1; side <= 1; side += 2) {
                     qreal rx = player.x + side * 0.165;
                     p.drawLine(QPointF(s.p1.screenX + s.p1.screenW * rx, s.p1.screenY),
@@ -1173,37 +1163,25 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
         if (qAbs(s.rotation) > 0.001) {
             p.rotate(s.rotation * 57.2958);
         }
-        // Asphalt contact shadow & tail-light / headlight ground reflection pool
+        // Asphalt contact shadow & tail-light ground reflection pool (optimized)
         if (s.isCar && s.width >= 18) {
             qreal contactY = s.height * s.anchorYRatio;
             p.setPen(Qt::NoPen);
 
-            // Deep ambient-occlusion contact shadow directly under the chassis & tires
-            QRadialGradient aoGrad(0, contactY, s.width * 0.52);
-            aoGrad.setColorAt(0.0, QColor(4, 6, 10, 215));
-            aoGrad.setColorAt(0.65, QColor(6, 8, 12, 130));
-            aoGrad.setColorAt(1.0, QColor(6, 8, 12, 0));
-            p.setBrush(aoGrad);
-            p.drawEllipse(QPointF(0, contactY + s.height * 0.015), s.width * 0.48, qMax(3.0, s.height * 0.085));
+            // Fast contact shadow
+            p.setBrush(QColor(4, 6, 10, 160));
+            p.drawEllipse(QPointF(0, contactY + s.height * 0.015), s.width * 0.46, qMax(2.5, s.height * 0.075));
 
-            // Dual red tail-light or warm-white headlight reflection pools on the tarmac
+            // Fast tail-light reflection pool
             QColor glowCol = s.showRear
-                ? (s.isBraking ? QColor(255, 35, 35, 135) : QColor(235, 30, 35, 80))
-                : QColor(245, 245, 255, 95);
-            qreal poolRx = s.width * (s.isBraking ? 0.24 : 0.18);
-            qreal poolRy = qMax(2.5, s.height * (s.isBraking ? 0.085 : 0.055));
+                ? (s.isBraking ? QColor(255, 35, 35, 110) : QColor(235, 30, 35, 60))
+                : QColor(245, 245, 255, 75);
+            qreal poolRx = s.width * (s.isBraking ? 0.22 : 0.16);
+            qreal poolRy = qMax(2.0, s.height * 0.055);
             qreal poolY  = contactY + s.height * 0.035;
-            for (int side = -1; side <= 1; side += 2) {
-                QPointF poolCenter(side * s.width * 0.26, poolY);
-                QRadialGradient poolGrad(poolCenter, poolRx);
-                poolGrad.setColorAt(0.0, glowCol);
-                QColor mid = glowCol;
-                mid.setAlpha(glowCol.alpha() / 3);
-                poolGrad.setColorAt(0.55, mid);
-                poolGrad.setColorAt(1.0, QColor(0, 0, 0, 0));
-                p.setBrush(poolGrad);
-                p.drawEllipse(poolCenter, poolRx, poolRy);
-            }
+            p.setBrush(glowCol);
+            p.drawEllipse(QPointF(-s.width * 0.26, poolY), poolRx, poolRy);
+            p.drawEllipse(QPointF( s.width * 0.26, poolY), poolRx, poolRy);
         }
 
         QRect destRect(-s.width / 2, 0, s.width, s.height);

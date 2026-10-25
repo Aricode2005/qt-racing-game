@@ -30,36 +30,47 @@ void Track::buildTrack(TrackTheme theme) {
 }
 
 void Track::addStraight(int num) {
+    qreal baseY = m_currentY;
     for (int i = 0; i < num; ++i) {
         RoadSegment seg;
         seg.index = m_segments.size();
         seg.p1.worldZ = seg.index * m_info.segmentLength;
         seg.p1.worldY = m_currentY;
+        if (seg.index > 20) {
+            qreal p = (i + 1) / (qreal)qMax(1, num);
+            m_currentY = baseY + 220.0 * qSin(p * 2.0 * M_PI) + 65.0 * qSin(seg.index * 0.18);
+        }
         seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
         seg.p2.worldY = m_currentY;
         seg.curve = 0;
+        seg.roadBank = (seg.index > 20) ? (0.022 * qSin(seg.index * 0.15)) : 0.0;
         seg.elevation = m_currentY;
         seg.isRumbleRed = (seg.index / 3) % 2 == 0;
         m_segments.append(seg);
     }
+    m_currentY = baseY;
 }
 
 void Track::addCurve(int num, qreal curve) {
+    qreal baseY = m_currentY;
     for (int i = 0; i < num; ++i) {
         RoadSegment seg;
         seg.index = m_segments.size();
         seg.p1.worldZ = seg.index * m_info.segmentLength;
         seg.p1.worldY = m_currentY;
+        qreal p = (i + 1) / (qreal)qMax(1, num);
+        m_currentY = baseY + 260.0 * qSin(p * 2.0 * M_PI) + 70.0 * qSin(seg.index * 0.16);
         seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
         seg.p2.worldY = m_currentY;
         // Ease in / ease out curvature
         qreal factor = qSin(M_PI * (i / (qreal)num));
         seg.curve = curve * factor;
-        seg.roadBank = -seg.curve * 0.06;
+        seg.roadBank = -seg.curve * 0.11 + 0.025 * qSin(seg.index * 0.16);
         seg.elevation = m_currentY;
         seg.isRumbleRed = (seg.index / 3) % 2 == 0;
         m_segments.append(seg);
     }
+    m_currentY = baseY;
 }
 
 void Track::addHill(int num, qreal height) {
@@ -100,7 +111,7 @@ void Track::addHillAndCurve(int num, qreal curve, qreal height) {
 
         qreal factor = qSin(M_PI * (i / (qreal)num));
         seg.curve = curve * factor;
-        seg.roadBank = -seg.curve * 0.06;
+        seg.roadBank = -seg.curve * 0.11 + 0.025 * qSin(seg.index * 0.16);
         seg.elevation = m_currentY;
         seg.isRumbleRed = (seg.index / 3) % 2 == 0;
         m_segments.append(seg);
@@ -109,10 +120,9 @@ void Track::addHillAndCurve(int num, qreal curve, qreal height) {
 
 void Track::addRollingHills(int num, int waves, qreal amplitude, qreal curve) {
     if (num <= 0) return;
-    Q_UNUSED(waves);
     qreal startY = m_currentY;
-    // Clamp amplitude to smooth, gentle highway elevation undulations
-    qreal gentleAmp = qBound(-520.0, amplitude * 0.28, 520.0);
+    int wCount = qBound(1, waves, 2);
+    qreal hillAmp = qBound(-1150.0, amplitude * 0.65, 1150.0);
     for (int i = 0; i < num; ++i) {
         RoadSegment seg;
         seg.index = m_segments.size();
@@ -120,7 +130,8 @@ void Track::addRollingHills(int num, int waves, qreal amplitude, qreal curve) {
         seg.p1.worldY = m_currentY;
 
         qreal progress = (i + 1) / (qreal)num;
-        qreal waveY = gentleAmp * qSin(progress * 2.0 * M_PI);
+        qreal waveY = hillAmp * qSin(progress * wCount * 2.0 * M_PI)
+                    + (hillAmp * 0.16) * qSin(progress * (wCount * 2) * 2.0 * M_PI);
         m_currentY = startY + waveY;
 
         seg.p2.worldZ = (seg.index + 1) * m_info.segmentLength;
@@ -128,7 +139,7 @@ void Track::addRollingHills(int num, int waves, qreal amplitude, qreal curve) {
 
         qreal factor = qSin(M_PI * (i / (qreal)num));
         seg.curve = curve * factor;
-        seg.roadBank = -seg.curve * 0.06;
+        seg.roadBank = -seg.curve * 0.11 + 0.032 * qSin(progress * wCount * 4.0 * M_PI);
         seg.elevation = m_currentY;
         seg.isRumbleRed = (seg.index / 3) % 2 == 0;
         m_segments.append(seg);
@@ -138,46 +149,47 @@ void Track::addRollingHills(int num, int waves, qreal amplitude, qreal curve) {
 
 void Track::buildSunsetCoast() {
     m_info.name = "Pacific Coast Highway";
-    m_info.description = "Golden hour oceanfront cruise with gentle coastal hills, banked curves, and 4 distinct zones.";
+    m_info.description = "Golden hour oceanfront cruise with rolling coastal hills, banked curves, and 4 distinct zones.";
     m_info.laneCount = 4;
     m_info.roadWidth = 2400;
     m_info.hillRating = 3;
     m_info.trafficRating = 3;
     m_info.difficulty = 2;
 
-    addStraight(45);
-    addRollingHills(80, 1, 900, 1.8);
-    addHillAndCurve(90, -2.6, 850);
-    addStraight(50);
+    addStraight(22);
+    addRollingHills(68, 2, 1450, 1.8);
+    addHillAndCurve(85, -2.6, 1450);
+    addRollingHills(56, 1, 1100, 1.4);
     addCurve(70, -3.0);
-    addHill(75, -850);
-    addRollingHills(75, 1, 800, -1.6);
-    addHillAndCurve(105, -3.0, 1000);
-    addStraight(70);
-    addCurve(90, 3.2);
-    addHill(85, -1000);
-    addRollingHills(80, 1, 850, -1.4);
-    addHillAndCurve(110, 2.6, 900);
-    addCurve(85, -3.2);
-    addHill(80, -900);
-    addStraight(85);
-    addCurve(75, 2.2);
-    addRollingHills(70, 1, 750, -1.4);
-    addHillAndCurve(90, -2.5, 950);
-    addCurve(60, 3.4);
-    addHill(75, -950);
-    addStraight(70);
-    addCurve(60, 2.0);
-    addRollingHills(65, 1, 750, -1.2);
-    addHillAndCurve(100, -3.0, 1000);
-    addStraight(70);
+    addHill(75, -1450);
+    addRollingHills(68, 2, 1350, -1.6);
+    addHillAndCurve(100, -3.0, 1600);
+    addRollingHills(60, 1, 1150, 1.8);
     addCurve(85, 3.2);
-    addHill(85, -1000);
-    addRollingHills(75, 1, 800, -1.6);
-    addHillAndCurve(105, 2.6, 900);
+    addHill(80, -1600);
+    addRollingHills(72, 2, 1400, -1.4);
+    addHillAndCurve(105, 2.6, 1500);
     addCurve(85, -3.2);
-    addHill(85, -900);
-    addStraight(75);
+    addHill(80, -1500);
+    addRollingHills(70, 2, 1300, 2.0);
+    addCurve(75, 2.2);
+    addRollingHills(65, 1, 1150, -1.4);
+    addHillAndCurve(88, -2.5, 1500);
+    addCurve(60, 3.4);
+    addHill(75, -1500);
+    addRollingHills(64, 2, 1300, 1.8);
+    addCurve(60, 2.0);
+    addRollingHills(60, 1, 1100, -1.2);
+    addHillAndCurve(95, -3.0, 1550);
+    addRollingHills(64, 2, 1250, 1.8);
+    addCurve(85, 3.2);
+    addHill(85, -1550);
+    addRollingHills(72, 2, 1350, -1.6);
+    addHillAndCurve(100, 2.6, 1450);
+    addCurve(85, -3.2);
+    addHill(85, -1450);
+    addRollingHills(68, 2, 1300, 1.8);
+    addStraight(50);
 
     int total = m_segments.size();
     int s1 = total * 0.25;

@@ -37,6 +37,12 @@ target_link_libraries(ApexVelocity PRIVATE
     Qt6::Multimedia
 )
 
+if(MSVC)
+    target_compile_options(ApexVelocity PRIVATE /O2 /fp:fast)
+else()
+    target_compile_options(ApexVelocity PRIVATE -O3 -ffast-math -funroll-loops)
+endif()
+
 add_executable(capture_screenshots
     capture_screenshots.cpp
     GameWindow.h

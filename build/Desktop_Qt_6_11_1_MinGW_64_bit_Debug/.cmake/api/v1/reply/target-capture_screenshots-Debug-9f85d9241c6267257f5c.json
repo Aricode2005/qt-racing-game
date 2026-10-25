@@ -48,13 +48,13 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 40,
+				"line" : 46,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 56,
+				"line" : 62,
 				"parent" : 0
 			},
 			{
@@ -345,11 +345,11 @@
 	"dependencies" : 
 	[
 		{
-			"id" : "capture_screenshots_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
-		},
-		{
 			"backtrace" : 0,
 			"id" : "capture_screenshots_autogen::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "capture_screenshots_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
 		}
 	],
 	"id" : "capture_screenshots::@6890427a1f51a3e7e1df",

@@ -2,10 +2,10 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "capture_screenshots.exe"
+			"path" : "ApexVelocity.exe"
 		},
 		{
-			"path" : "capture_screenshots.pdb"
+			"path" : "ApexVelocity.pdb"
 		}
 	],
 	"backtrace" : 1,
@@ -20,6 +20,7 @@
 			"find_package",
 			"find_dependency",
 			"_qt_internal_find_qt_dependencies",
+			"target_compile_options",
 			"add_compile_definitions",
 			"project"
 		],
@@ -48,13 +49,13 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 40,
+				"line" : 31,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 56,
+				"line" : 33,
 				"parent" : 0
 			},
 			{
@@ -196,20 +197,26 @@
 				"parent" : 27
 			},
 			{
-				"command" : 8,
+				"command" : 7,
+				"file" : 0,
+				"line" : 43,
+				"parent" : 0
+			},
+			{
+				"command" : 9,
 				"file" : 0,
 				"line" : 2,
 				"parent" : 0
 			},
 			{
 				"file" : 13,
-				"parent" : 29
+				"parent" : 30
 			},
 			{
-				"command" : 7,
+				"command" : 8,
 				"file" : 13,
 				"line" : 82,
-				"parent" : 30
+				"parent" : 31
 			}
 		]
 	},
@@ -220,6 +227,18 @@
 			[
 				{
 					"fragment" : "-g -std=gnu++17 -fdiagnostics-color=always"
+				},
+				{
+					"backtrace" : 29,
+					"fragment" : "-O3"
+				},
+				{
+					"backtrace" : 29,
+					"fragment" : "-ffast-math"
+				},
+				{
+					"backtrace" : 29,
+					"fragment" : "-funroll-loops"
 				}
 			],
 			"defines" : 
@@ -245,7 +264,7 @@
 					"define" : "QT_NETWORK_LIB"
 				},
 				{
-					"backtrace" : 31,
+					"backtrace" : 32,
 					"define" : "QT_QML_DEBUG"
 				},
 				{
@@ -281,7 +300,7 @@
 			[
 				{
 					"backtrace" : 0,
-					"path" : "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/capture_screenshots_autogen/include"
+					"path" : "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/ApexVelocity_autogen/include"
 				},
 				{
 					"backtrace" : 2,
@@ -345,14 +364,14 @@
 	"dependencies" : 
 	[
 		{
-			"id" : "capture_screenshots_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
+			"backtrace" : 0,
+			"id" : "ApexVelocity_autogen::@6890427a1f51a3e7e1df"
 		},
 		{
-			"backtrace" : 0,
-			"id" : "capture_screenshots_autogen::@6890427a1f51a3e7e1df"
+			"id" : "ApexVelocity_autogen_timestamp_deps::@6890427a1f51a3e7e1df"
 		}
 	],
-	"id" : "capture_screenshots::@6890427a1f51a3e7e1df",
+	"id" : "ApexVelocity::@6890427a1f51a3e7e1df",
 	"link" : 
 	{
 		"commandFragments" : 
@@ -432,8 +451,8 @@
 		],
 		"language" : "CXX"
 	},
-	"name" : "capture_screenshots",
-	"nameOnDisk" : "capture_screenshots.exe",
+	"name" : "ApexVelocity",
+	"nameOnDisk" : "ApexVelocity.exe",
 	"paths" : 
 	{
 		"build" : ".",
@@ -488,13 +507,13 @@
 			"backtrace" : 0,
 			"compileGroupIndex" : 0,
 			"isGenerated" : true,
-			"path" : "build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/capture_screenshots_autogen/mocs_compilation.cpp",
+			"path" : "build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/ApexVelocity_autogen/mocs_compilation.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "capture_screenshots.cpp",
+			"path" : "main.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
@@ -566,13 +585,13 @@
 		{
 			"backtrace" : 0,
 			"isGenerated" : true,
-			"path" : "build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/capture_screenshots_autogen/timestamp",
+			"path" : "build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/ApexVelocity_autogen/timestamp",
 			"sourceGroupIndex" : 2
 		},
 		{
 			"backtrace" : 0,
 			"isGenerated" : true,
-			"path" : "build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/capture_screenshots_autogen/timestamp.rule",
+			"path" : "build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/ApexVelocity_autogen/timestamp.rule",
 			"sourceGroupIndex" : 3
 		}
 	],
