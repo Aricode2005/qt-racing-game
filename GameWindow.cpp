@@ -70,16 +70,19 @@ void GameWindow::paintEvent(QPaintEvent *event) {
 
     int pSize = m_engine.getPlayer().pixelSize;
     if (pSize > 1 && !m_showMainMenu) {
-        QImage fullImg(width(), height(), QImage::Format_RGB32);
-        {
-            QPainter fp(&fullImg);
-            m_renderer.render(fp, m_engine, width(), height(), m_lastDt);
+        // High-speed low-res raster render directly at target pixel size
+        int lowW = qMax(160, width() / pSize);
+        int lowH = qMax(90, height() / pSize);
+        static QImage s_lowImg;
+        if (s_lowImg.size() != QSize(lowW, lowH)) {
+            s_lowImg = QImage(lowW, lowH, QImage::Format_RGB32);
         }
-        int lowW = qMax(64, width() / pSize);
-        int lowH = qMax(36, height() / pSize);
-        QImage lowImg = fullImg.scaled(lowW, lowH, Qt::IgnoreAspectRatio, Qt::FastTransformation);
+        {
+            QPainter lp(&s_lowImg);
+            m_renderer.render(lp, m_engine, lowW, lowH, m_lastDt);
+        }
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-        painter.drawImage(rect(), lowImg);
+        painter.drawImage(rect(), s_lowImg);
     } else {
         // Render pure raster 3D game scene
         m_renderer.render(painter, m_engine, width(), height(), m_lastDt);
