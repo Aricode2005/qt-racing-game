@@ -1,97 +1,82 @@
-#ifndef TRACK_H
-#define TRACK_H
+#pragma once
+#include <cstdint>
+#include "config.h"
 
-#include "RasterAssets.h"
-#include <QVector>
-#include <QString>
+namespace curve {
+inline constexpr float NONE = 0.0f;
+inline constexpr float EASY = 0.6f;
+inline constexpr float MED  = 1.5f;
+inline constexpr float HARD = 3.0f;
+} // namespace curve
 
-struct ProjectedPoint {
-    qreal worldX = 0;
-    qreal worldY = 0;
-    qreal worldZ = 0;
+namespace hill {
+inline constexpr float NONE = 0.0f;
+inline constexpr float LOW  = 600.0f;
+inline constexpr float MED  = 1200.0f;
+inline constexpr float HIGH = 2400.0f;
+} // namespace hill
 
-    qreal camX = 0;
-    qreal camY = 0;
-    qreal camZ = 0;
+inline constexpr int NUM_TRACK_PRESETS = 5;
 
-    qreal screenX = 0;
-    qreal screenY = 0;
-    qreal screenW = 0;
-    qreal scale = 0;
+struct TrackMetadata {
+    const char* name;
+    const char* subtitle;
+    const char* difficulty;
+    int         defaultTheme;
+    int         defaultWeather; // 0 = Clear, 1 = Rain, 2 = Snow
+    float       trafficSpeedMult;
 };
 
-struct RoadSegment {
-    int index = 0;
-    ProjectedPoint p1;
-    ProjectedPoint p2;
+const TrackMetadata& getTrackMetadata(int presetIdx);
 
-    qreal curve = 0;      // Horizontal curvature
-    qreal elevation = 0;  // Height Y in world space
-    qreal clip = 0;       // Screen clipping plane for hill occlusions
+struct alignas(16) Segment {            // 16 bytes: 4 per cache line
+    float    y0 = 0.0f;                 // world elevation at start
+    float    y1 = 0.0f;                 // world elevation at end
+    float    curve = 0.0f;              // lateral acceleration
+    uint16_t sceneryBegin = 0;          // index into Track::scenery
+    uint8_t  sceneryCount = 0;
+    uint8_t  flags = 0;                 // bit 0: checkpoint, bit 1: start/finish banner
+};
+static_assert(sizeof(Segment) == 16, "Segment must be exactly 16 bytes");
 
-    int sector = 1;
-    QString sectorName;
-    bool hasGantry = false;
+struct Scenery {                        // 8 bytes, stored sorted by segment in Track::scenery[]
+    float    offset = 0.0f;             // normalised lateral: +-1 = road edge
+    uint16_t spriteId = 0;
+    uint8_t  flip = 0;
+    uint8_t  pad = 0;
+};
+static_assert(sizeof(Scenery) == 8, "Scenery must be 8 bytes");
 
-    SceneryType sceneryLeft = SCENERY_PALM_TREE;
-    bool hasSceneryLeft = false;
-    qreal sceneryLeftX = -1.6;
-
-    SceneryType sceneryRight = SCENERY_PALM_TREE;
-    bool hasSceneryRight = false;
-    qreal sceneryRightX = 1.6;
-
-    bool isRumbleRed = false; // Checkerboard rumble strips (red/white)
+struct Track {
+    alignas(64) Segment segs[cfg::MAX_SEGMENTS];
+    alignas(64) Scenery scenery[cfg::MAX_SCENERY];
+    // Precomputed 2D GPS spline coordinates (normalized in [-1, 1]) & heading (radians)
+    alignas(64) float   mapX[cfg::MAX_SEGMENTS];
+    alignas(64) float   mapY[cfg::MAX_SEGMENTS];
+    alignas(64) float   mapHeading[cfg::MAX_SEGMENTS];
+    int   count = 0;                    // must be a multiple of 2 * RUMBLE_LEN
+    float length = 0.0f;                // count * SEG_LEN
+    int   sceneryTotal = 0;
+    int   presetId = 0;
 };
 
-struct TrackInfo {
-    TrackTheme theme = THEME_SUNSET_COAST;
-    QString name;
-    QString description;
-    int laneCount = 3;
-    qreal roadWidth = 2200;
-    int totalSegments = 1600;
-    int segmentLength = 200;
-    int hillRating = 2;       // 1 - 5 stars
-    int trafficRating = 3;    // 1 - 5 stars
-    int difficulty = 2;       // 1 - 5 stars
-};
-
-class Track {
+class TrackBuilder {
 public:
-    Track();
-    void buildTrack(TrackTheme theme);
-
-    const TrackInfo& getInfo() const { return m_info; }
-    const QVector<RoadSegment>& getSegments() const { return m_segments; }
-    int segmentCount() const { return m_segments.size(); }
-    int trackLength() const { return m_segments.size() * m_info.segmentLength; }
-
-    const RoadSegment& getSegment(int index) const {
-        int idx = (index % m_segments.size() + m_segments.size()) % m_segments.size();
-        return m_segments[idx];
-    }
-
-    const RoadSegment& findSegment(qreal worldZ) const {
-        int idx = (int)(worldZ / m_info.segmentLength) % m_segments.size();
-        if (idx < 0) idx += m_segments.size();
-        return m_segments[idx];
-    }
-
+    explicit TrackBuilder(Track& t);
+    void straight(int n);
+    void road(int enter, int hold, int leave, float curveVal, float dy);
+    void sCurve(float c);
+    void rollingHills(int n, float amp);
+    void finish();
 private:
-    void addStraight(int num);
-    void addCurve(int num, qreal curve);
-    void addHill(int num, qreal height);
-    void addHillAndCurve(int num, qreal curve, qreal height);
-
-    void buildSunsetCoast();
-    void buildAlpineClimb();
-    void buildNeonMetropolis();
-    void buildRedRock();
-
-    TrackInfo m_info;
-    QVector<RoadSegment> m_segments;
-    qreal m_currentY = 0;
+    Track& t_;
+    float  lastY_ = 0.0f;
+    void add(float curveVal, float y1);
 };
 
-#endif // TRACK_H
+void buildStraightTrack(Track& t, int count);
+void buildDemoTrack(Track& t);
+void buildTrackPreset(Track& t, int presetIdx);
+void populateScenery(Track& t, uint32_t seed = 0xC0FFEE01u);
+void buildTrackGpsSpline(Track& t);
+void scanUpcomingTurn(const Track& t, int baseSeg, float& outPeakCurve, int& outDistSegs, bool& outCrest);
