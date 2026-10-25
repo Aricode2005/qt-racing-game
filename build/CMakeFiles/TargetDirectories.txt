@@ -1,8 +1,0 @@
-/Users/mukutchatterjee/Downloads/qt-racing-game/build/CMakeFiles/ApexVelocity.dir
-/Users/mukutchatterjee/Downloads/qt-racing-game/build/CMakeFiles/capture_screenshots.dir
-/Users/mukutchatterjee/Downloads/qt-racing-game/build/CMakeFiles/edit_cache.dir
-/Users/mukutchatterjee/Downloads/qt-racing-game/build/CMakeFiles/rebuild_cache.dir
-/Users/mukutchatterjee/Downloads/qt-racing-game/build/CMakeFiles/ApexVelocity_autogen_timestamp_deps.dir
-/Users/mukutchatterjee/Downloads/qt-racing-game/build/CMakeFiles/ApexVelocity_autogen.dir
-/Users/mukutchatterjee/Downloads/qt-racing-game/build/CMakeFiles/capture_screenshots_autogen_timestamp_deps.dir
-/Users/mukutchatterjee/Downloads/qt-racing-game/build/CMakeFiles/capture_screenshots_autogen.dir

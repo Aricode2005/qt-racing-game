@@ -1,3 +1,0 @@
-C:\Qt\Tools\CMake_64\bin\cmake.exe -E rm -f CMakeFiles\ApexVelocity.dir/objects.a
-C:\Qt\Tools\mingw1310_64\bin\ar.exe qc CMakeFiles\ApexVelocity.dir/objects.a @CMakeFiles\ApexVelocity.dir\objects1.rsp
-C:\Qt\Tools\mingw1310_64\bin\g++.exe -g -Wl,--whole-archive CMakeFiles\ApexVelocity.dir/objects.a -Wl,--no-whole-archive -o ApexVelocity.exe -Wl,--out-implib,libApexVelocity.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\ApexVelocity.dir\linkLibs.rsp
