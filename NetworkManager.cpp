@@ -731,9 +731,10 @@ void NetworkManager::update(qreal dt, GameEngine& engine) {
                     remoteCar.finishTime = tgt.finishTime;
 
                     switch (tgt.carModel) {
-                        case 1: remoteCar.type = VEHICLE_SPORTS_RED; break;
-                        case 2: remoteCar.type = VEHICLE_COMPACT_BLUE; break;
-                        case 3: remoteCar.type = VEHICLE_SUV_BLACK; break;
+                        case 0: remoteCar.type = VEHICLE_SEDAN_SILVER; break;  // APEX GT-R (Gunmetal Titanium, Swan-Neck Wing, Gold Stripes)
+                        case 1: remoteCar.type = VEHICLE_SPORTS_RED;   break;  // VORTEX V12 (Rosso Corsa Crimson, Le Mans Shark Fin, Jet Exhausts)
+                        case 2: remoteCar.type = VEHICLE_COMPACT_BLUE; break;  // DRIFT SPEC-R (Solar Amber-Gold, High Drift Wing, Blast Pipes, Underglow)
+                        case 3: remoteCar.type = VEHICLE_SUV_BLACK;    break;  // TITAN ENFORCER (Tactical Interceptor, Roof Strobe, Window Louvers)
                         default: remoteCar.type = VEHICLE_SEDAN_SILVER; break;
                     }
 

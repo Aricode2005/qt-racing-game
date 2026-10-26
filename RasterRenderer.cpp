@@ -2798,6 +2798,28 @@ void RasterRenderer::renderSteeringWheel(QPainter& p, const GameEngine& engine, 
     p.translate(wheelCenterX, wheelCenterY);
     p.rotate(wheelRot);
     p.drawImage(-wheel.width() / 2, -wheel.height() / 2, wheel);
+
+    // 12 o'clock motorsport centering stripe (matches selected car color)
+    QColor stripeCol = (player.selectedCar == 1) ? QColor(255, 40, 50) :
+                       ((player.selectedCar == 2) ? QColor(245, 185, 45) :
+                       ((player.selectedCar == 3) ? QColor(45, 220, 110) : QColor(228, 182, 86)));
+    p.setBrush(stripeCol);
+    p.setPen(Qt::NoPen);
+    p.drawRoundedRect(QRectF(-6, -wheel.height() / 2 + 8, 12, 16), 2, 2);
+
+    // Center Hub Badge & Supercar Emblem
+    QRectF hubBadge(-26, -26, 52, 52);
+    p.setBrush(QColor(16, 20, 26, 235));
+    p.setPen(QPen(stripeCol, 1.8));
+    p.drawEllipse(hubBadge);
+
+    p.setFont(QFont("Arial", 7, QFont::Bold));
+    p.setPen(stripeCol);
+    QString crestText = (player.selectedCar == 1) ? "V12" :
+                        ((player.selectedCar == 2) ? "SPEC-R" :
+                        ((player.selectedCar == 3) ? "ENFORCE" : "GT-R"));
+    p.drawText(hubBadge, Qt::AlignCenter, crestText);
+
     p.restore();
 }
 
@@ -3927,71 +3949,207 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
     // Apply dynamic suspension roll to the sprung supercar chassis
     p.rotate(bodyRollDeg);
 
-    // 3. Underbody Forged-Carbon Venturi Diffuser & Quad Titanium Exhausts
+    int carModel = player.selectedCar;
+
+    // 2b. Underglow Lighting (Special JDM feature on DRIFT SPEC-R)
+    if (carModel == 2) {
+        QRadialGradient underglow(0, 0, W * 0.48);
+        underglow.setColorAt(0.0, QColor(0, 240, 255, 175));
+        underglow.setColorAt(0.5, QColor(0, 200, 255, 75));
+        underglow.setColorAt(1.0, QColor(0, 180, 255, 0));
+        p.setBrush(underglow);
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(QPointF(0, 4), W * 0.46, 22);
+    }
+
+    // 3. Underbody Diffuser & Supercar Exhausts (Customized per Car Model)
     {
-        QPolygonF diffuser;
-        diffuser << QPointF(-W * 0.34, -36)
-                 << QPointF( W * 0.34, -36)
-                 << QPointF( W * 0.31, -12)
-                 << QPointF(-W * 0.31, -12);
-        QLinearGradient diffGrad(0, -36, 0, -12);
-        diffGrad.setColorAt(0.0, QColor(24, 27, 32));
-        diffGrad.setColorAt(1.0, QColor(10, 12, 15));
-        p.setBrush(diffGrad);
-        p.setPen(QPen(QColor(68, 74, 84), 1.5));
-        p.drawPolygon(diffuser);
-
-        // 4 Vertical aerodynamic Venturi strakes / fins
-        p.setPen(QPen(QColor(185, 165, 120, 175), 2.0));
-        for (int fin = -2; fin <= 2; ++fin) {
-            if (fin == 0) continue;
-            qreal fx = fin * 30.0;
-            p.drawLine(QPointF(fx, -34), QPointF(fx, -11));
-        }
-
-        // Quad Brushed Titanium Exhaust Tips + Twin-Turbo Blue/Orange Afterburner Flames
-        qreal exCenters[4] = { -88.0, -70.0, 70.0, 88.0 };
         bool spitFlames = player.isAccelerating && (player.rpm > 5800.0 || player.boostBar > 0.35);
-        for (int e = 0; e < 4; ++e) {
-            QPointF ep(exCenters[e], -22.0);
-            p.setBrush(QColor(155, 150, 140));
-            p.setPen(QPen(QColor(215, 205, 185), 1.5));
-            p.drawEllipse(ep, 7.5, 6.5);
-            p.setBrush(spitFlames ? QColor(255, 150, 40) : QColor(16, 18, 22));
-            p.setPen(Qt::NoPen);
-            p.drawEllipse(ep, 5.2, 4.5);
 
-            if (spitFlames) {
-                qreal flicker = 0.75 + (QRandomGenerator::global()->generateDouble() * 0.55);
-                QRadialGradient flameGrad(ep.x(), ep.y() + 6, 18.0 * flicker);
-                flameGrad.setColorAt(0.0, QColor(220, 245, 255, 240));
-                flameGrad.setColorAt(0.35, QColor(60, 165, 255, 200));
-                flameGrad.setColorAt(0.70, QColor(255, 120, 20, 140));
-                flameGrad.setColorAt(1.0, QColor(255, 40, 10, 0));
-                p.setBrush(flameGrad);
-                p.drawEllipse(QPointF(ep.x(), ep.y() + 5), 11.0 * flicker, 16.0 * flicker);
+        if (carModel == 1) {
+            // VORTEX V12: Double-Deck Le Mans Diffuser + Center Triple-Jet Exhaust Cluster
+            QPolygonF diffuser;
+            diffuser << QPointF(-W * 0.38, -38) << QPointF(W * 0.38, -38)
+                     << QPointF(W * 0.34, -10)  << QPointF(-W * 0.34, -10);
+            p.setBrush(QColor(18, 20, 24));
+            p.setPen(QPen(QColor(215, 38, 48), 1.5));
+            p.drawPolygon(diffuser);
+            // 6 Aerodynamic Red Strakes
+            p.setPen(QPen(QColor(215, 38, 48), 2.0));
+            for (int s = -3; s <= 3; ++s) {
+                if (s == 0) continue;
+                p.drawLine(QPointF(s * 22.0, -36), QPointF(s * 20.0, -10));
             }
-        }
 
-        // Central F1 Rain / Brake Strobe Light in Diffuser
-        QRectF f1Light(-10, -28, 20, 9);
-        p.setBrush(player.isBraking ? QColor(255, 40, 40) : QColor(140, 18, 22));
-        p.setPen(QPen(QColor(55, 60, 70), 1));
-        p.drawRoundedRect(f1Light, 2, 2);
+            // High-Mounted Center Triple-Jet Cluster (/\ configuration)
+            QPointF triTips[3] = { QPointF(0.0, -48.0), QPointF(-16.0, -34.0), QPointF(16.0, -34.0) };
+            for (int t = 0; t < 3; ++t) {
+                p.setBrush(QColor(160, 165, 175));
+                p.setPen(QPen(QColor(240, 245, 255), 1.5));
+                p.drawEllipse(triTips[t], 8.5, 8.0);
+                p.setBrush(spitFlames ? QColor(255, 220, 100) : QColor(14, 16, 20));
+                p.setPen(Qt::NoPen);
+                p.drawEllipse(triTips[t], 6.0, 5.5);
+                if (spitFlames) {
+                    qreal flicker = 0.75 + (QRandomGenerator::global()->generateDouble() * 0.55);
+                    QRadialGradient flameGrad(triTips[t].x(), triTips[t].y() + 6, 22.0 * flicker);
+                    flameGrad.setColorAt(0.0, QColor(255, 255, 255, 245));
+                    flameGrad.setColorAt(0.35, QColor(0, 230, 255, 220));
+                    flameGrad.setColorAt(0.70, QColor(255, 80, 20, 160));
+                    flameGrad.setColorAt(1.0, QColor(255, 30, 10, 0));
+                    p.setBrush(flameGrad);
+                    p.drawEllipse(QPointF(triTips[t].x(), triTips[t].y() + 6), 13.0 * flicker, 20.0 * flicker);
+                }
+            }
+        } else if (carModel == 2) {
+            // DRIFT SPEC-R: Angled Dual JDM Blast Pipes on Left Rear Bumper
+            QPolygonF diffuser;
+            diffuser << QPointF(-W * 0.35, -34) << QPointF(W * 0.35, -34)
+                     << QPointF(W * 0.31, -12)  << QPointF(-W * 0.31, -12);
+            p.setBrush(QColor(16, 18, 22));
+            p.setPen(QPen(QColor(235, 168, 38), 1.5));
+            p.drawPolygon(diffuser);
+
+            // Dual Jumbo Slash-Cut Blast Pipes angled out to the left
+            QPointF blastTips[2] = { QPointF(-94.0, -22.0), QPointF(-72.0, -22.0) };
+            for (int b = 0; b < 2; ++b) {
+                p.setBrush(QColor(175, 160, 130));
+                p.setPen(QPen(QColor(245, 215, 150), 1.8));
+                p.drawEllipse(blastTips[b], 11.0, 9.0);
+                p.setBrush(spitFlames ? QColor(255, 140, 20) : QColor(12, 14, 18));
+                p.setPen(Qt::NoPen);
+                p.drawEllipse(blastTips[b], 8.0, 6.5);
+                if (spitFlames) {
+                    qreal flicker = 0.8 + (QRandomGenerator::global()->generateDouble() * 0.5);
+                    QRadialGradient flameGrad(blastTips[b].x() - 4, blastTips[b].y() + 8, 24.0 * flicker);
+                    flameGrad.setColorAt(0.0, QColor(255, 240, 180, 240));
+                    flameGrad.setColorAt(0.40, QColor(255, 120, 20, 210));
+                    flameGrad.setColorAt(0.80, QColor(220, 40, 10, 140));
+                    flameGrad.setColorAt(1.0, QColor(180, 20, 0, 0));
+                    p.setBrush(flameGrad);
+                    p.drawEllipse(QPointF(blastTips[b].x() - 5, blastTips[b].y() + 7), 16.0 * flicker, 22.0 * flicker);
+                }
+            }
+        } else if (carModel == 3) {
+            // TITAN ENFORCER: Reinforced Armored Steel Bash Bumper + Dual Heavy Rectangular Exhausts
+            QRectF bashBar(-W * 0.44, -28, W * 0.88, 12);
+            p.setBrush(QColor(28, 32, 36));
+            p.setPen(QPen(QColor(85, 95, 105), 2.0));
+            p.drawRoundedRect(bashBar, 3, 3);
+
+            // Dual Heavy-Bore Rectangular Black Chrome Exhausts
+            QRectF rectExLeft(-106, -26, 24, 11);
+            QRectF rectExRight(82, -26, 24, 11);
+            QRectF rectEx[2] = { rectExLeft, rectExRight };
+            for (int r = 0; r < 2; ++r) {
+                p.setBrush(QColor(60, 65, 72));
+                p.setPen(QPen(QColor(135, 145, 155), 1.5));
+                p.drawRoundedRect(rectEx[r], 2, 2);
+                p.setBrush(spitFlames ? QColor(255, 130, 30) : QColor(10, 12, 14));
+                p.setPen(Qt::NoPen);
+                p.drawRoundedRect(rectEx[r].adjusted(3, 2, -3, -2), 1, 1);
+                if (spitFlames) {
+                    qreal flicker = 0.8 + (QRandomGenerator::global()->generateDouble() * 0.5);
+                    QRadialGradient flameGrad(rectEx[r].center().x(), rectEx[r].center().y() + 8, 22.0 * flicker);
+                    flameGrad.setColorAt(0.0, QColor(255, 220, 150, 240));
+                    flameGrad.setColorAt(0.50, QColor(255, 80, 20, 180));
+                    flameGrad.setColorAt(1.0, QColor(200, 20, 10, 0));
+                    p.setBrush(flameGrad);
+                    p.drawEllipse(rectEx[r].center() + QPointF(0, 6), 14.0 * flicker, 18.0 * flicker);
+                }
+            }
+        } else {
+            // APEX GT-R: Carbon Venturi Diffuser + Quad Titanium Exhaust Tips + F1 Strobe
+            QPolygonF diffuser;
+            diffuser << QPointF(-W * 0.34, -36) << QPointF(W * 0.34, -36)
+                     << QPointF(W * 0.31, -12)  << QPointF(-W * 0.31, -12);
+            p.setBrush(QColor(22, 25, 30));
+            p.setPen(QPen(QColor(68, 74, 84), 1.5));
+            p.drawPolygon(diffuser);
+            // 4 Vertical aerodynamic Venturi strakes
+            p.setPen(QPen(QColor(185, 165, 120, 175), 2.0));
+            for (int fin = -2; fin <= 2; ++fin) {
+                if (fin == 0) continue;
+                qreal fx = fin * 30.0;
+                p.drawLine(QPointF(fx, -34), QPointF(fx, -11));
+            }
+
+            // Quad Brushed Titanium Exhaust Tips
+            qreal exCenters[4] = { -88.0, -70.0, 70.0, 88.0 };
+            for (int e = 0; e < 4; ++e) {
+                QPointF ep(exCenters[e], -22.0);
+                p.setBrush(QColor(155, 150, 140));
+                p.setPen(QPen(QColor(215, 205, 185), 1.5));
+                p.drawEllipse(ep, 7.5, 6.5);
+                p.setBrush(spitFlames ? QColor(255, 150, 40) : QColor(16, 18, 22));
+                p.setPen(Qt::NoPen);
+                p.drawEllipse(ep, 5.2, 4.5);
+                if (spitFlames) {
+                    qreal flicker = 0.75 + (QRandomGenerator::global()->generateDouble() * 0.55);
+                    QRadialGradient flameGrad(ep.x(), ep.y() + 6, 18.0 * flicker);
+                    flameGrad.setColorAt(0.0, QColor(220, 245, 255, 240));
+                    flameGrad.setColorAt(0.35, QColor(60, 165, 255, 200));
+                    flameGrad.setColorAt(0.70, QColor(255, 120, 20, 140));
+                    flameGrad.setColorAt(1.0, QColor(255, 40, 10, 0));
+                    p.setBrush(flameGrad);
+                    p.drawEllipse(QPointF(ep.x(), ep.y() + 5), 11.0 * flicker, 16.0 * flicker);
+                }
+            }
+
+            // Central F1 Rain Light in Diffuser
+            QRectF f1Light(-10, -28, 20, 9);
+            p.setBrush(player.isBraking ? QColor(255, 40, 40) : QColor(140, 18, 22));
+            p.setPen(QPen(QColor(55, 60, 70), 1));
+            p.drawRoundedRect(f1Light, 2, 2);
+        }
     }
 
     // 4. Sculpted Widebody Rear Haunches & Lower Bumper (Liquid Gunmetal Metallic)
     {
         QPainterPath lowerBody;
-        lowerBody.moveTo(-W * 0.48, -32);
-        lowerBody.cubicTo(-W * 0.51, -62, -W * 0.47, -86, -W * 0.38 + yawShift * 0.25, -94);
-        lowerBody.lineTo( W * 0.38 + yawShift * 0.25, -94);
-        lowerBody.cubicTo( W * 0.47, -86,  W * 0.51, -62,  W * 0.48, -32);
-        lowerBody.lineTo( W * 0.35, -32);
-        lowerBody.lineTo( W * 0.32, -24);
-        lowerBody.lineTo(-W * 0.32, -24);
-        lowerBody.lineTo(-W * 0.35, -32);
-        lowerBody.closeSubpath();
+        if (carModel == 1) { // VORTEX V12 (Ultra-Low Exotic Hypercar Wedge)
+            lowerBody.moveTo(-W * 0.50, -32);
+            lowerBody.cubicTo(-W * 0.52, -58, -W * 0.46, -82, -W * 0.36 + yawShift * 0.25, -88);
+            lowerBody.lineTo( W * 0.36 + yawShift * 0.25, -88);
+            lowerBody.cubicTo( W * 0.46, -82,  W * 0.52, -58,  W * 0.50, -32);
+            lowerBody.lineTo( W * 0.38, -32);
+            lowerBody.lineTo( W * 0.34, -22);
+            lowerBody.lineTo(-W * 0.34, -22);
+            lowerBody.lineTo(-W * 0.38, -32);
+            lowerBody.closeSubpath();
+        } else if (carModel == 2) { // DRIFT SPEC-R (Aggressive JDM Bolt-On Overfenders)
+            lowerBody.moveTo(-W * 0.52, -30);
+            lowerBody.cubicTo(-W * 0.54, -64, -W * 0.49, -88, -W * 0.39 + yawShift * 0.25, -96);
+            lowerBody.lineTo( W * 0.39 + yawShift * 0.25, -96);
+            lowerBody.cubicTo( W * 0.49, -88,  W * 0.54, -64,  W * 0.52, -30);
+            lowerBody.lineTo( W * 0.35, -30);
+            lowerBody.lineTo( W * 0.32, -22);
+            lowerBody.lineTo(-W * 0.32, -22);
+            lowerBody.lineTo(-W * 0.35, -30);
+            lowerBody.closeSubpath();
+        } else if (carModel == 3) { // TITAN ENFORCER (Heavy Muscular Boxy Interceptor Shoulders)
+            lowerBody.moveTo(-W * 0.49, -32);
+            lowerBody.lineTo(-W * 0.49, -70);
+            lowerBody.lineTo(-W * 0.41 + yawShift * 0.25, -98);
+            lowerBody.lineTo( W * 0.41 + yawShift * 0.25, -98);
+            lowerBody.lineTo( W * 0.49, -70);
+            lowerBody.lineTo( W * 0.49, -32);
+            lowerBody.lineTo( W * 0.36, -32);
+            lowerBody.lineTo( W * 0.34, -24);
+            lowerBody.lineTo(-W * 0.34, -24);
+            lowerBody.lineTo(-W * 0.36, -32);
+            lowerBody.closeSubpath();
+        } else { // APEX GT-R (Sculpted Twin-Turbo Coupe)
+            lowerBody.moveTo(-W * 0.48, -32);
+            lowerBody.cubicTo(-W * 0.51, -62, -W * 0.47, -86, -W * 0.38 + yawShift * 0.25, -94);
+            lowerBody.lineTo( W * 0.38 + yawShift * 0.25, -94);
+            lowerBody.cubicTo( W * 0.47, -86,  W * 0.51, -62,  W * 0.48, -32);
+            lowerBody.lineTo( W * 0.35, -32);
+            lowerBody.lineTo( W * 0.32, -24);
+            lowerBody.lineTo(-W * 0.32, -24);
+            lowerBody.lineTo(-W * 0.35, -32);
+            lowerBody.closeSubpath();
+        }
 
         QLinearGradient bodyGrad(0, -96, 0, -24);
         if (player.selectedCar == 1) { // VORTEX V12 (Rosso Corsa Crimson)
@@ -4026,7 +4184,7 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
         p.drawLine(QPointF( W * 0.45, -78), QPointF( W * 0.34, -88));
     }
 
-    // 5. Tapered Fastback Cabin, Louvered V8 Engine Cover & Exterior Wing Mirrors
+    // 5. Tapered Fastback Cabin, Roof Styling & Exterior Wing Mirrors (Customized per Car)
     {
         // Left & Right aerodynamic exterior wing mirrors
         p.setBrush(QColor(38, 42, 50));
@@ -4042,99 +4200,230 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
         cabinPath.closeSubpath();
 
         QLinearGradient roofGrad(0, -140, 0, -92);
-        roofGrad.setColorAt(0.0, QColor(92, 102, 116));
-        roofGrad.setColorAt(0.45, QColor(52, 58, 68));
-        roofGrad.setColorAt(1.0, QColor(32, 36, 44));
+        if (carModel == 1) { // VORTEX V12
+            roofGrad.setColorAt(0.0, QColor(195, 26, 36));
+            roofGrad.setColorAt(0.5, QColor(118, 14, 20));
+            roofGrad.setColorAt(1.0, QColor(36, 8, 12));
+        } else if (carModel == 2) { // DRIFT SPEC-R Carbon Roof
+            roofGrad.setColorAt(0.0, QColor(38, 42, 48));
+            roofGrad.setColorAt(0.5, QColor(22, 24, 28));
+            roofGrad.setColorAt(1.0, QColor(12, 14, 16));
+        } else if (carModel == 3) { // TITAN ENFORCER
+            roofGrad.setColorAt(0.0, QColor(42, 75, 58));
+            roofGrad.setColorAt(0.5, QColor(26, 48, 38));
+            roofGrad.setColorAt(1.0, QColor(14, 26, 20));
+        } else { // APEX GT-R
+            roofGrad.setColorAt(0.0, QColor(92, 102, 116));
+            roofGrad.setColorAt(0.45, QColor(52, 58, 68));
+            roofGrad.setColorAt(1.0, QColor(32, 36, 44));
+        }
         p.setBrush(roofGrad);
         p.setPen(QPen(QColor(145, 155, 172), 1.5));
         p.drawPath(cabinPath);
 
-        // Twin Satin Champagne-Gold Centre Racing Stripes over Roof & Rear Deck
-        p.setBrush(QColor(228, 182, 86, 215));
-        p.setPen(Qt::NoPen);
-        for (int s = -1; s <= 1; s += 2) {
-            QPolygonF stripe;
-            qreal sxTop = s * 10.0 + yawShift * 0.55;
-            qreal sxBot = s * 13.0 + yawShift * 0.25;
-            stripe << QPointF(sxTop - 4.5, -139) << QPointF(sxTop + 4.5, -139)
-                   << QPointF(sxBot + 6.0,  -86) << QPointF(sxBot - 6.0,  -86);
-            p.drawPolygon(stripe);
-        }
+        if (carModel == 1) {
+            // VORTEX V12: Transparent Engine Canopy with Red V12 Cylinder Heads & Le Mans Dorsal Shark Fin
+            QPolygonF engineGlass;
+            engineGlass << QPointF(-W * 0.16 + yawShift * 0.55, -132)
+                        << QPointF( W * 0.16 + yawShift * 0.55, -132)
+                        << QPointF( W * 0.23 + yawShift * 0.30,  -94)
+                        << QPointF(-W * 0.23 + yawShift * 0.30,  -94);
+            p.setBrush(QColor(12, 16, 22, 230));
+            p.setPen(QPen(QColor(215, 38, 48), 1.2));
+            p.drawPolygon(engineGlass);
 
-        // Smoked Fastback Engine Bay Glass & Carbon Louvers
-        QPolygonF rearGlass;
-        rearGlass << QPointF(-W * 0.15 + yawShift * 0.55, -132)
-                  << QPointF( W * 0.15 + yawShift * 0.55, -132)
-                  << QPointF( W * 0.22 + yawShift * 0.30,  -95)
-                  << QPointF(-W * 0.22 + yawShift * 0.30,  -95);
-        QLinearGradient glassGrad(0, -132, 0, -95);
-        glassGrad.setColorAt(0.0, QColor(14, 18, 24, 235));
-        glassGrad.setColorAt(1.0, QColor(6, 8, 12, 245));
-        p.setBrush(glassGrad);
-        p.setPen(QPen(QColor(78, 86, 98), 1.2));
-        p.drawPolygon(rearGlass);
+            // Exposed Glowing Red V12 Engine Blocks
+            p.setBrush(QColor(215, 35, 45, 190));
+            p.setPen(QPen(QColor(255, 205, 55), 1.2));
+            p.drawRoundedRect(QRectF(-22 + yawShift * 0.42, -122, 18, 20), 3, 3);
+            p.drawRoundedRect(QRectF(  4 + yawShift * 0.42, -122, 18, 20), 3, 3);
 
-        // Twin-Turbo V8 Champagne-Gold Intake Plenum visible under glass louvers
-        p.setBrush(QColor(195, 152, 72, 165));
-        p.setPen(QPen(QColor(240, 198, 105, 180), 1));
-        p.drawRoundedRect(QRectF(-18 + yawShift * 0.42, -124, 15, 22), 3, 3);
-        p.drawRoundedRect(QRectF(  3 + yawShift * 0.42, -124, 15, 22), 3, 3);
+            // Le Mans Center Aerodynamic Dorsal Shark Fin
+            QPolygonF sharkFin;
+            sharkFin << QPointF(yawShift * 0.58 - 2.5, -146)
+                     << QPointF(yawShift * 0.58 + 2.5, -146)
+                     << QPointF(yawShift * 0.25 + 3.0,  -88)
+                     << QPointF(yawShift * 0.25 - 3.0,  -88);
+            p.setBrush(QColor(22, 25, 30));
+            p.setPen(QPen(QColor(215, 38, 48), 1.5));
+            p.drawPolygon(sharkFin);
 
-        // 5 Horizontal Carbon Engine Bay Louvers + Diagonal Sky Glare
-        p.setPen(QPen(QColor(36, 40, 48), 2.2));
-        for (int lv = 0; lv < 5; ++lv) {
-            qreal ly = -127.0 + lv * 6.8;
-            qreal halfSpan = 42.0 + lv * 4.2;
-            qreal lxShift = yawShift * (0.52 - lv * 0.04);
-            p.drawLine(QPointF(-halfSpan + lxShift, ly), QPointF(halfSpan + lxShift, ly));
+        } else if (carModel == 2) {
+            // DRIFT SPEC-R: JDM Carbon Deck & Decal Accent
+            QPolygonF rearGlass;
+            rearGlass << QPointF(-W * 0.15 + yawShift * 0.55, -132)
+                      << QPointF( W * 0.15 + yawShift * 0.55, -132)
+                      << QPointF( W * 0.22 + yawShift * 0.30,  -95)
+                      << QPointF(-W * 0.22 + yawShift * 0.30,  -95);
+            p.setBrush(QColor(12, 14, 18, 240));
+            p.setPen(QPen(QColor(235, 168, 38), 1.2));
+            p.drawPolygon(rearGlass);
+
+            // Japanese Drift Graphic banner
+            p.setFont(QFont("Arial", 6, QFont::Bold));
+            p.setPen(QColor(255, 205, 55));
+            p.drawText(QRectF(-35 + yawShift * 0.42, -118, 70, 14), Qt::AlignCenter, "⚡ DRIFT SPEC ⚡");
+
+        } else if (carModel == 3) {
+            // TITAN ENFORCER: Horizontal Armored Steel Window Louvers + Roof Emergency Strobe Bar
+            QPolygonF rearGlass;
+            rearGlass << QPointF(-W * 0.15 + yawShift * 0.55, -132)
+                      << QPointF( W * 0.15 + yawShift * 0.55, -132)
+                      << QPointF( W * 0.22 + yawShift * 0.30,  -95)
+                      << QPointF(-W * 0.22 + yawShift * 0.30,  -95);
+            p.setBrush(QColor(10, 12, 14, 250));
+            p.setPen(QPen(QColor(60, 68, 76), 1.5));
+            p.drawPolygon(rearGlass);
+
+            // Heavy Matte Black Steel Louver Slats
+            p.setPen(QPen(QColor(42, 48, 54), 3.0));
+            for (int lv = 0; lv < 4; ++lv) {
+                qreal ly = -126.0 + lv * 8.0;
+                qreal halfSpan = 38.0 + lv * 5.0;
+                p.drawLine(QPointF(-halfSpan + yawShift * 0.4, ly), QPointF(halfSpan + yawShift * 0.4, ly));
+            }
+
+            // Tactical Emergency Pursuit Strobe Lightbar on Roof
+            QRectF strobeBar(-34 + yawShift * 0.55, -147, 68, 8);
+            p.setBrush(QColor(20, 24, 30));
+            p.setPen(QPen(QColor(90, 100, 115), 1.2));
+            p.drawRoundedRect(strobeBar, 3, 3);
+            bool strobePhase = ((int)(m_rainAnimTime * 8.0) % 2 == 0);
+            p.setBrush(strobePhase ? QColor(0, 160, 255) : QColor(255, 35, 45));
+            p.drawRoundedRect(QRectF(strobeBar.left() + 2, strobeBar.top() + 1.5, 30, 5), 1.5, 1.5);
+            p.setBrush(strobePhase ? QColor(255, 35, 45) : QColor(0, 160, 255));
+            p.drawRoundedRect(QRectF(strobeBar.right() - 32, strobeBar.top() + 1.5, 30, 5), 1.5, 1.5);
+
+        } else {
+            // APEX GT-R: Twin Satin Champagne-Gold Centre Racing Stripes & Carbon Louvers
+            p.setBrush(QColor(228, 182, 86, 215));
+            p.setPen(Qt::NoPen);
+            for (int s = -1; s <= 1; s += 2) {
+                QPolygonF stripe;
+                qreal sxTop = s * 10.0 + yawShift * 0.55;
+                qreal sxBot = s * 13.0 + yawShift * 0.25;
+                stripe << QPointF(sxTop - 4.5, -139) << QPointF(sxTop + 4.5, -139)
+                       << QPointF(sxBot + 6.0,  -86) << QPointF(sxBot - 6.0,  -86);
+                p.drawPolygon(stripe);
+            }
+
+            QPolygonF rearGlass;
+            rearGlass << QPointF(-W * 0.15 + yawShift * 0.55, -132)
+                      << QPointF( W * 0.15 + yawShift * 0.55, -132)
+                      << QPointF( W * 0.22 + yawShift * 0.30,  -95)
+                      << QPointF(-W * 0.22 + yawShift * 0.30,  -95);
+            QLinearGradient glassGrad(0, -132, 0, -95);
+            glassGrad.setColorAt(0.0, QColor(14, 18, 24, 235));
+            glassGrad.setColorAt(1.0, QColor(6, 8, 12, 245));
+            p.setBrush(glassGrad);
+            p.setPen(QPen(QColor(78, 86, 98), 1.2));
+            p.drawPolygon(rearGlass);
+
+            // Twin-Turbo V8 Champagne-Gold Intake Plenum
+            p.setBrush(QColor(195, 152, 72, 165));
+            p.setPen(QPen(QColor(240, 198, 105, 180), 1));
+            p.drawRoundedRect(QRectF(-18 + yawShift * 0.42, -124, 15, 22), 3, 3);
+            p.drawRoundedRect(QRectF(  3 + yawShift * 0.42, -124, 15, 22), 3, 3);
+
+            // 5 Horizontal Carbon Engine Bay Louvers
+            p.setPen(QPen(QColor(36, 40, 48), 2.2));
+            for (int lv = 0; lv < 5; ++lv) {
+                qreal ly = -127.0 + lv * 6.8;
+                qreal halfSpan = 42.0 + lv * 4.2;
+                qreal lxShift = yawShift * (0.52 - lv * 0.04);
+                p.drawLine(QPointF(-halfSpan + lxShift, ly), QPointF(halfSpan + lxShift, ly));
+            }
         }
     }
 
-    // 6. Recessed Carbon Rear Fascia Grill, Dual-Halo LED Lightbars & License Plate
+    // 6. Recessed Rear Fascia Grill, Tail Lights & License Plate (Customized per Car Model)
     {
         QRectF fasciaRect(-W * 0.43, -84, W * 0.86, 26);
         p.setBrush(QColor(14, 16, 20));
         p.setPen(QPen(QColor(62, 68, 78), 1.5));
         p.drawRoundedRect(fasciaRect, 6, 6);
 
-        // Continuous Crimson LED Lightbar Strip across top of rear fascia
-        p.setPen(QPen(player.isBraking ? QColor(255, 65, 65) : QColor(225, 28, 38), player.isBraking ? 3.5 : 2.2));
-        p.drawLine(QPointF(-W * 0.41, -80), QPointF(W * 0.41, -80));
+        if (carModel == 1) {
+            // VORTEX V12: Ultra-Slim Razor Chevron LED Blades (Lamborghini/Ferrari inspired)
+            p.setPen(QPen(player.isBraking ? QColor(255, 45, 45) : QColor(215, 25, 35), player.isBraking ? 4.0 : 2.5));
+            // Left Chevron Blade (> shape)
+            QPolygonF leftChev;
+            leftChev << QPointF(-W * 0.38, -79) << QPointF(-W * 0.22, -72) << QPointF(-W * 0.38, -65);
+            p.drawPolyline(leftChev);
+            // Right Chevron Blade (< shape)
+            QPolygonF rightChev;
+            rightChev << QPointF(W * 0.38, -79) << QPointF(W * 0.22, -72) << QPointF(W * 0.38, -65);
+            p.drawPolyline(rightChev);
 
-        // Left & Right Sculpted 3D Dual-Halo Tail-Light Clusters
-        auto drawTailCluster = [&](qreal tx, bool isLeft) {
-            QRectF tl(tx, -79, 76, 17);
-            p.setBrush(player.isBraking ? QColor(255, 35, 35) : QColor(185, 16, 26));
-            p.setPen(QPen(QColor(255, 120, 120), 1.2));
-            p.drawRoundedRect(tl, 4, 4);
+        } else if (carModel == 2) {
+            // DRIFT SPEC-R: Iconic Skyline Dual Twin-Circle Round LED Tail Lights
+            auto drawRoundLights = [&](qreal centerX) {
+                for (int c = -1; c <= 1; c += 2) {
+                    QPointF rCenter(centerX + c * 16.0, -72);
+                    // Outer red halo ring
+                    p.setBrush(player.isBraking ? QColor(255, 30, 30) : QColor(195, 18, 24));
+                    p.setPen(QPen(QColor(255, 180, 180), 1.2));
+                    p.drawEllipse(rCenter, 11, 11);
+                    // Inner dark core
+                    p.setBrush(player.isBraking ? QColor(255, 230, 200) : QColor(20, 10, 12));
+                    p.setPen(Qt::NoPen);
+                    p.drawEllipse(rCenter, player.isBraking ? 7 : 5, player.isBraking ? 7 : 5);
+                }
+            };
+            drawRoundLights(-W * 0.28);
+            drawRoundLights( W * 0.28);
 
-            // Inner white-hot LED brake core
-            p.setBrush(player.isBraking ? QColor(255, 225, 200) : QColor(255, 95, 95));
-            p.setPen(Qt::NoPen);
-            p.drawRoundedRect(tl.adjusted(8, 4, -8, -4), 2, 2);
+        } else if (carModel == 3) {
+            // TITAN ENFORCER: Solid Blocky Armored Rectangular LED Tail Light Clusters
+            auto drawArmoredCluster = [&](qreal tx) {
+                QRectF br(tx, -80, 64, 18);
+                p.setBrush(player.isBraking ? QColor(255, 25, 25) : QColor(160, 14, 20));
+                p.setPen(QPen(QColor(90, 100, 110), 2.0));
+                p.drawRoundedRect(br, 3, 3);
+                // Protective steel cage bars
+                p.setPen(QPen(QColor(30, 34, 40), 2.0));
+                p.drawLine(tx + 21, -80, tx + 21, -62);
+                p.drawLine(tx + 42, -80, tx + 42, -62);
+            };
+            drawArmoredCluster(-W * 0.40);
+            drawArmoredCluster( W * 0.40 - 64);
 
-            // Sequential Amber Turn Signal Strip when steering or crashing
-            bool blink = ((int)(m_rainAnimTime * 7.0) % 2 == 0) &&
-                         ((isLeft && player.steerAngle < -0.15) || (!isLeft && player.steerAngle > 0.15) || player.crashTimer > 0);
-            if (blink) {
-                p.setBrush(QColor(255, 190, 25));
-                p.drawRect(QRectF(isLeft ? tx + 2 : tx + 52, -65, 22, 3.5));
-            }
+        } else {
+            // APEX GT-R: Continuous Crimson LED Lightbar Strip + Dual Halo Clusters
+            p.setPen(QPen(player.isBraking ? QColor(255, 65, 65) : QColor(225, 28, 38), player.isBraking ? 3.5 : 2.2));
+            p.drawLine(QPointF(-W * 0.41, -80), QPointF(W * 0.41, -80));
 
-            // Crimson brake-light bloom halo
-            if (player.isBraking) {
-                QRadialGradient bloom(tl.center(), 48);
-                bloom.setColorAt(0.0, QColor(255, 40, 40, 145));
-                bloom.setColorAt(0.55, QColor(255, 20, 25, 55));
-                bloom.setColorAt(1.0, QColor(255, 0, 0, 0));
-                p.setBrush(bloom);
-                p.drawEllipse(tl.center(), 48, 28);
-            }
-        };
-        drawTailCluster(-W * 0.41, true);
-        drawTailCluster( W * 0.41 - 76, false);
+            auto drawTailCluster = [&](qreal tx, bool isLeft) {
+                QRectF tl(tx, -79, 76, 17);
+                p.setBrush(player.isBraking ? QColor(255, 35, 35) : QColor(185, 16, 26));
+                p.setPen(QPen(QColor(255, 120, 120), 1.2));
+                p.drawRoundedRect(tl, 4, 4);
 
-        // Center Rear License Plate & Champagne-Gold Crest
+                p.setBrush(player.isBraking ? QColor(255, 225, 200) : QColor(255, 95, 95));
+                p.setPen(Qt::NoPen);
+                p.drawRoundedRect(tl.adjusted(8, 4, -8, -4), 2, 2);
+
+                bool blink = ((int)(m_rainAnimTime * 7.0) % 2 == 0) &&
+                             ((isLeft && player.steerAngle < -0.15) || (!isLeft && player.steerAngle > 0.15) || player.crashTimer > 0);
+                if (blink) {
+                    p.setBrush(QColor(255, 190, 25));
+                    p.drawRect(QRectF(isLeft ? tx + 2 : tx + 52, -65, 22, 3.5));
+                }
+
+                if (player.isBraking) {
+                    QRadialGradient bloom(tl.center(), 48);
+                    bloom.setColorAt(0.0, QColor(255, 40, 40, 145));
+                    bloom.setColorAt(0.55, QColor(255, 20, 25, 55));
+                    bloom.setColorAt(1.0, QColor(255, 0, 0, 0));
+                    p.setBrush(bloom);
+                    p.drawEllipse(tl.center(), 48, 28);
+                }
+            };
+            drawTailCluster(-W * 0.41, true);
+            drawTailCluster( W * 0.41 - 76, false);
+        }
+
+        // Center Rear License Plate & Model Tag
         QRectF plate(-42, -54, 84, 18);
         p.setBrush(QColor(22, 25, 32));
         p.setPen(QPen(QColor(215, 175, 95), 1.5));
@@ -4144,38 +4433,98 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
         p.drawText(plate, Qt::AlignCenter, player.carModelName);
     }
 
-    // 7. Active Carbon-Fiber Swan-Neck GT Rear Wing (Rises with speed & tilts as airbrake!)
+    // 7. Distinct Rear Spoilers / Wings (Customized per Car Model)
     {
         qreal aeroLift = qBound(0.0, (player.speed - 80.0) / 180.0, 1.0) * 8.0 + (player.isBraking ? 5.0 : 0.0);
-        qreal wingY = -98.0 - aeroLift;
 
-        // Twin CNC-machined Titanium Swan-Neck Pylons
-        p.setBrush(QColor(155, 148, 135));
-        p.setPen(QPen(QColor(40, 44, 52), 1.2));
-        p.drawRect(QRectF(-56 + yawShift * 0.25, wingY + 4, 7, 14 + aeroLift));
-        p.drawRect(QRectF( 49 + yawShift * 0.25, wingY + 4, 7, 14 + aeroLift));
+        if (carModel == 1) {
+            // VORTEX V12: Integrated Wide Active Hypercar Deck Spoiler with Luminous Red Edge
+            qreal wingY = -92.0 - aeroLift * 0.8;
+            QPainterPath activeBlade;
+            activeBlade.moveTo(-W * 0.46 + yawShift * 0.25, wingY);
+            activeBlade.lineTo( W * 0.46 + yawShift * 0.25, wingY);
+            activeBlade.lineTo( W * 0.43 + yawShift * 0.25, wingY + 7);
+            activeBlade.lineTo(-W * 0.43 + yawShift * 0.25, wingY + 7);
+            activeBlade.closeSubpath();
+            p.setBrush(QColor(24, 27, 34));
+            p.setPen(QPen(QColor(255, 45, 45), 1.8));
+            p.drawPath(activeBlade);
 
-        // Main Carbon-Fiber Airfoil Blade
-        QPainterPath wingBlade;
-        wingBlade.moveTo(-W * 0.44 + yawShift * 0.25, wingY + 3);
-        wingBlade.quadTo(yawShift * 0.25, wingY - (player.isBraking ? 7.0 : 3.0), W * 0.44 + yawShift * 0.25, wingY + 3);
-        wingBlade.lineTo( W * 0.42 + yawShift * 0.25, wingY + 11);
-        wingBlade.quadTo(yawShift * 0.25, wingY + 7, -W * 0.42 + yawShift * 0.25, wingY + 11);
-        wingBlade.closeSubpath();
+        } else if (carModel == 2) {
+            // DRIFT SPEC-R: Massive High-Rise Aluminum Drift "Park-Bench" GT Spoiler
+            qreal wingY = -122.0 - aeroLift * 0.5;
+            // Tall Staggered Aluminum Stanchions
+            p.setBrush(QColor(185, 190, 200));
+            p.setPen(QPen(QColor(40, 44, 52), 1.5));
+            p.drawRect(QRectF(-68 + yawShift * 0.25, wingY + 6, 8, 30));
+            p.drawRect(QRectF( 60 + yawShift * 0.25, wingY + 6, 8, 30));
 
-        QLinearGradient wingGrad(0, wingY - 5, 0, wingY + 11);
-        wingGrad.setColorAt(0.0, QColor(48, 52, 62));
-        wingGrad.setColorAt(0.5, QColor(22, 25, 30));
-        wingGrad.setColorAt(1.0, QColor(12, 14, 18));
-        p.setBrush(wingGrad);
-        p.setPen(QPen(QColor(218, 175, 92), 1.4));
-        p.drawPath(wingBlade);
+            // Massive Wide Aluminum Wing Airfoil
+            QPainterPath bigWing;
+            bigWing.moveTo(-W * 0.51 + yawShift * 0.25, wingY);
+            bigWing.lineTo( W * 0.51 + yawShift * 0.25, wingY);
+            bigWing.lineTo( W * 0.48 + yawShift * 0.25, wingY + 12);
+            bigWing.lineTo(-W * 0.48 + yawShift * 0.25, wingY + 12);
+            bigWing.closeSubpath();
+            QLinearGradient driftGrad(0, wingY, 0, wingY + 12);
+            driftGrad.setColorAt(0.0, QColor(45, 48, 55));
+            driftGrad.setColorAt(1.0, QColor(18, 20, 24));
+            p.setBrush(driftGrad);
+            p.setPen(QPen(QColor(245, 185, 45), 1.6));
+            p.drawPath(bigWing);
 
-        // Carbon Wing Endplates
-        p.setBrush(QColor(24, 27, 34));
-        p.setPen(QPen(QColor(185, 155, 95), 1.2));
-        p.drawRoundedRect(QRectF(-W * 0.45 + yawShift * 0.25, wingY - 2, 7, 18), 2, 2);
-        p.drawRoundedRect(QRectF( W * 0.45 - 7 + yawShift * 0.25, wingY - 2, 7, 18), 2, 2);
+            // Giant Drift Wing Endplates
+            p.setBrush(QColor(235, 168, 38));
+            p.setPen(QPen(QColor(20, 22, 26), 1.2));
+            p.drawRoundedRect(QRectF(-W * 0.52 + yawShift * 0.25, wingY - 6, 8, 24), 2, 2);
+            p.drawRoundedRect(QRectF( W * 0.52 - 8 + yawShift * 0.25, wingY - 6, 8, 24), 2, 2);
+
+        } else if (carModel == 3) {
+            // TITAN ENFORCER: Aggressive NASCAR Drag Ducktail Spoiler with Reinforcing Struts
+            qreal wingY = -102.0;
+            QPainterPath ducktail;
+            ducktail.moveTo(-W * 0.46 + yawShift * 0.25, wingY + 6);
+            ducktail.lineTo(-W * 0.43 + yawShift * 0.25, wingY - 6);
+            ducktail.lineTo( W * 0.43 + yawShift * 0.25, wingY - 6);
+            ducktail.lineTo( W * 0.46 + yawShift * 0.25, wingY + 6);
+            ducktail.closeSubpath();
+            p.setBrush(QColor(24, 30, 26));
+            p.setPen(QPen(QColor(95, 115, 105), 2.0));
+            p.drawPath(ducktail);
+
+            // Steel stay rods
+            p.setPen(QPen(QColor(160, 170, 180), 2.0));
+            p.drawLine(QPointF(-48 + yawShift * 0.25, wingY - 4), QPointF(-48 + yawShift * 0.25, wingY + 14));
+            p.drawLine(QPointF( 48 + yawShift * 0.25, wingY - 4), QPointF( 48 + yawShift * 0.25, wingY + 14));
+
+        } else {
+            // APEX GT-R: Active Carbon-Fiber Swan-Neck GT Rear Wing
+            qreal wingY = -98.0 - aeroLift;
+            p.setBrush(QColor(155, 148, 135));
+            p.setPen(QPen(QColor(40, 44, 52), 1.2));
+            p.drawRect(QRectF(-56 + yawShift * 0.25, wingY + 4, 7, 14 + aeroLift));
+            p.drawRect(QRectF( 49 + yawShift * 0.25, wingY + 4, 7, 14 + aeroLift));
+
+            QPainterPath wingBlade;
+            wingBlade.moveTo(-W * 0.44 + yawShift * 0.25, wingY + 3);
+            wingBlade.quadTo(yawShift * 0.25, wingY - (player.isBraking ? 7.0 : 3.0), W * 0.44 + yawShift * 0.25, wingY + 3);
+            wingBlade.lineTo( W * 0.42 + yawShift * 0.25, wingY + 11);
+            wingBlade.quadTo(yawShift * 0.25, wingY + 7, -W * 0.42 + yawShift * 0.25, wingY + 11);
+            wingBlade.closeSubpath();
+
+            QLinearGradient wingGrad(0, wingY - 5, 0, wingY + 11);
+            wingGrad.setColorAt(0.0, QColor(48, 52, 62));
+            wingGrad.setColorAt(0.5, QColor(22, 25, 30));
+            wingGrad.setColorAt(1.0, QColor(12, 14, 18));
+            p.setBrush(wingGrad);
+            p.setPen(QPen(QColor(218, 175, 92), 1.4));
+            p.drawPath(wingBlade);
+
+            p.setBrush(QColor(24, 27, 34));
+            p.setPen(QPen(QColor(185, 155, 95), 1.2));
+            p.drawRoundedRect(QRectF(-W * 0.45 + yawShift * 0.25, wingY - 2, 7, 18), 2, 2);
+            p.drawRoundedRect(QRectF( W * 0.45 - 7 + yawShift * 0.25, wingY - 2, 7, 18), 2, 2);
+        }
     }
 
     // 8. Billowing Tire Smoke Clouds during Drift / Handbrake / Hard Braking

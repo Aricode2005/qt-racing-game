@@ -2392,31 +2392,31 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
     int carY = 76;
 
     switch (type) {
-        case VEHICLE_SPORTS_RED:
+        case VEHICLE_SPORTS_RED: // VORTEX V12 (Rosso Corsa Crimson Hypercar)
             bodyColor = QColor(220, 28, 34);
-            carWidth = 232;
-            carHeight = 90;
-            carY = 92;
-            break;
-        case VEHICLE_SEDAN_SILVER:
-            bodyColor = QColor(180, 188, 198);
-            carWidth = 218;
-            carHeight = 104;
-            carY = 76;
-            break;
-        case VEHICLE_SUV_BLACK:
-            bodyColor = QColor(32, 34, 40);
             carWidth = 236;
-            carHeight = 128;
-            carY = 52;
+            carHeight = 88;
+            carY = 94;
             break;
-        case VEHICLE_COMPACT_BLUE:
-            bodyColor = QColor(28, 110, 215);
-            carWidth = 196;
-            carHeight = 104;
-            carY = 76;
+        case VEHICLE_SEDAN_SILVER: // APEX GT-R (Liquid Gunmetal Titanium Coupe)
+            bodyColor = QColor(118, 128, 142);
+            carWidth = 224;
+            carHeight = 98;
+            carY = 84;
             break;
-        case VEHICLE_TRUCK_SEMI:
+        case VEHICLE_SUV_BLACK: // TITAN ENFORCER (Tactical Emerald-Obsidian Interceptor)
+            bodyColor = QColor(28, 48, 38);
+            carWidth = 242;
+            carHeight = 124;
+            carY = 56;
+            break;
+        case VEHICLE_COMPACT_BLUE: // DRIFT SPEC-R (Solar Amber-Gold JDM Widebody)
+            bodyColor = QColor(235, 172, 38);
+            carWidth = 234;
+            carHeight = 96;
+            carY = 86;
+            break;
+        case VEHICLE_TRUCK_SEMI: // Commercial Semi Truck
             bodyColor = QColor(226, 229, 235);
             carWidth = 248;
             carHeight = 158;
@@ -2460,18 +2460,55 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
         drawTire(right - 8 - tireW, carY + carHeight - 32, tireW, 32);
     }
 
-    // 3. Sculpted Body Geometry
+    // 2b. Underglow Lighting (for DRIFT SPEC-R)
+    if (type == VEHICLE_COMPACT_BLUE) {
+        p.setBrush(QColor(0, 240, 255, 150));
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(cx - carWidth / 2 + 10, carY + carHeight - 14, carWidth - 20, 16);
+    }
+
+    // 3. Sculpted Body Geometry (Distinct silhouettes per car model!)
     QPainterPath body;
     if (type == VEHICLE_TRUCK_SEMI) {
         body.addRoundedRect(left, carY, carWidth, carHeight - 10, 6, 6);
+    } else if (type == VEHICLE_SPORTS_RED) {
+        // VORTEX V12: Ultra-low wide exotic hypercar wedge
+        body.moveTo(left + 8, carY + carHeight - 10);
+        body.lineTo(right - 8, carY + carHeight - 10);
+        body.cubicTo(right + 8, carY + carHeight - 12, right + 6, carY + carHeight * 0.40, right - 16, carY + carHeight * 0.36);
+        body.lineTo(right - 44, carY + 8);
+        body.lineTo(left + 44, carY + 8);
+        body.lineTo(left + 16, carY + carHeight * 0.36);
+        body.cubicTo(left - 6, carY + carHeight * 0.40, left - 8, carY + carHeight - 12, left + 8, carY + carHeight - 10);
+        body.closeSubpath();
+    } else if (type == VEHICLE_COMPACT_BLUE) {
+        // DRIFT SPEC-R: Extreme widebody stance with flared rivet overfenders
+        body.moveTo(left + 6, carY + carHeight - 10);
+        body.lineTo(right - 6, carY + carHeight - 10);
+        body.cubicTo(right + 12, carY + carHeight - 14, right + 8, carY + carHeight * 0.46, right - 14, carY + carHeight * 0.42);
+        body.lineTo(right - 34, carY + 8);
+        body.lineTo(left + 34, carY + 8);
+        body.lineTo(left + 14, carY + carHeight * 0.42);
+        body.cubicTo(left - 8, carY + carHeight * 0.46, left - 12, carY + carHeight - 14, left + 6, carY + carHeight - 10);
+        body.closeSubpath();
+    } else if (type == VEHICLE_SUV_BLACK) {
+        // TITAN ENFORCER: Muscular, heavy-duty boxy interceptor shoulders
+        body.moveTo(left + 8, carY + carHeight - 10);
+        body.lineTo(right - 8, carY + carHeight - 10);
+        body.lineTo(right - 8, carY + carHeight * 0.50);
+        body.lineTo(right - 26, carY + 6);
+        body.lineTo(left + 26, carY + 6);
+        body.lineTo(left + 8, carY + carHeight * 0.50);
+        body.closeSubpath();
     } else {
-        body.moveTo(left + 16, carY + carHeight - 12);
-        body.lineTo(right - 16, carY + carHeight - 12);
+        // APEX GT-R: Sculpted Twin-Turbo Coupe
+        body.moveTo(left + 14, carY + carHeight - 12);
+        body.lineTo(right - 14, carY + carHeight - 12);
         body.cubicTo(right + 5, carY + carHeight - 14, right + 4, carY + carHeight * 0.44, right - 12, carY + carHeight * 0.40);
         body.lineTo(right - 36, carY + 6);
         body.lineTo(left + 36, carY + 6);
         body.lineTo(left + 12, carY + carHeight * 0.40);
-        body.cubicTo(left - 4, carY + carHeight * 0.44, left - 5, carY + carHeight - 14, left + 16, carY + carHeight - 12);
+        body.cubicTo(left - 4, carY + carHeight * 0.44, left - 5, carY + carHeight - 14, left + 14, carY + carHeight - 12);
         body.closeSubpath();
     }
 
@@ -2486,17 +2523,49 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
     p.setPen(QPen(bodyColor.darker(190), 2));
     p.drawPath(body);
 
+    // Twin Gold Racing Stripes on APEX GT-R
+    if (type == VEHICLE_SEDAN_SILVER) {
+        p.fillRect(cx - 8, carY + 6, 5, carHeight - 18, QColor(228, 182, 86, 215));
+        p.fillRect(cx + 3, carY + 6, 5, carHeight - 18, QColor(228, 182, 86, 215));
+    }
+
+    // Carbon fiber deck on DRIFT SPEC-R
+    if (type == VEHICLE_COMPACT_BLUE) {
+        p.fillRect(cx - 36, carY + 6, 72, 14, QColor(24, 26, 30));
+    }
+
+    // Le Mans Dorsal Shark Fin on VORTEX V12
+    if (type == VEHICLE_SPORTS_RED) {
+        QPolygon sharkFin;
+        sharkFin << QPoint(cx - 2, carY - 6) << QPoint(cx + 2, carY - 6)
+                 << QPoint(cx + 2, carY + qRound(carHeight * 0.42))
+                 << QPoint(cx - 2, carY + qRound(carHeight * 0.42));
+        p.setBrush(QColor(22, 25, 30));
+        p.setPen(QPen(QColor(215, 38, 48), 1.2));
+        p.drawPolygon(sharkFin);
+    }
+
+    // Roof Police Strobe Bar on TITAN ENFORCER
+    if (type == VEHICLE_SUV_BLACK) {
+        QRect strobeBar(cx - 32, carY - 6, 64, 8);
+        p.setBrush(QColor(20, 24, 30));
+        p.setPen(QPen(QColor(90, 100, 115), 1));
+        p.drawRoundedRect(strobeBar, 2, 2);
+        p.setBrush(QColor(0, 160, 255));
+        p.drawRoundedRect(cx - 30, carY - 5, 28, 6, 1, 1);
+        p.setBrush(QColor(255, 35, 45));
+        p.drawRoundedRect(cx + 2, carY - 5, 28, 6, 1, 1);
+    }
+
     // 3b. Professional Multi-Volume Automotive Shading:
-    // Exterior side mirrors, crisp beltline sky-reflection crease, wheel-arch flares & glossy window glare
     if (type != VEHICLE_TRUCK_SEMI) {
-        // Left & Right aerodynamic exterior wing mirrors
+        // Exterior wing mirrors
         int mirY = carY + qRound(carHeight * 0.34);
         p.setBrush(bodyColor.darker(125));
         p.setPen(QPen(bodyColor.darker(185), 1.2));
         p.drawRoundedRect(left - 2, mirY, 15, 9, 3, 3);
         p.drawRoundedRect(right - 13, mirY, 15, 9, 3, 3);
 
-        // Specular sky-reflection highlight band across the beltline / trunk shoulder crease
         int beltY = carY + qRound(carHeight * 0.41);
         QLinearGradient beltGrad(left + 12, beltY, right - 12, beltY);
         beltGrad.setColorAt(0.0, QColor(255, 255, 255, 35));
@@ -2507,34 +2576,45 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
         p.setPen(QPen(QBrush(beltGrad), 2.2));
         p.drawLine(left + 14, beltY, right - 14, beltY);
 
-        // Roof crown specular highlight along upper cabin edge
         p.setPen(QPen(QColor(255, 255, 255, 145), 1.8));
         p.drawLine(left + 40, carY + 8, right - 40, carY + 8);
-
-        // Muscular wheel-arch flare highlights on left & right lower fenders
-        p.setPen(QPen(bodyColor.lighter(155), 2.0));
-        p.drawArc(left - 2, carY + carHeight - 40, 26, 30, 30 * 16, 110 * 16);
-        p.drawArc(right - 24, carY + carHeight - 40, 26, 30, 40 * 16, 110 * 16);
     }
 
-    // Sports Car Carbon Fiber Rear Wing / Spoiler
-    if (type == VEHICLE_SPORTS_RED && rearView) {
-        // Struts
-        p.setBrush(QColor(18, 20, 24));
-        p.setPen(Qt::NoPen);
-        p.drawRect(cx - 50, carY + carHeight * 0.36 - 16, 8, 16);
-        p.drawRect(cx + 42, carY + carHeight * 0.36 - 16, 8, 16);
-        // Wing blade
-        QLinearGradient wingGrad(left + 10, carY + carHeight * 0.36 - 18, right - 10, carY + carHeight * 0.36 - 18);
-        wingGrad.setColorAt(0.0, QColor(40, 43, 50));
-        wingGrad.setColorAt(0.5, QColor(22, 24, 28));
-        wingGrad.setColorAt(1.0, QColor(40, 43, 50));
-        p.setBrush(wingGrad);
-        p.drawRoundedRect(left + 8, carY + carHeight * 0.36 - 22, carWidth - 16, 8, 3, 3);
-        // Endplates
-        p.setBrush(QColor(220, 28, 34));
-        p.drawRoundedRect(left + 5, carY + carHeight * 0.36 - 26, 6, 16, 2, 2);
-        p.drawRoundedRect(right - 11, carY + carHeight * 0.36 - 26, 6, 16, 2, 2);
+    // Rear Spoilers / Wings (Customized per Car Model)
+    if (rearView) {
+        if (type == VEHICLE_SEDAN_SILVER) {
+            // APEX GT-R: Swan-Neck GT Wing on dual stanchions
+            p.setBrush(QColor(18, 20, 24));
+            p.setPen(Qt::NoPen);
+            p.drawRect(cx - 48, carY + carHeight * 0.36 - 16, 7, 16);
+            p.drawRect(cx + 41, carY + carHeight * 0.36 - 16, 7, 16);
+            p.setBrush(QColor(36, 40, 48));
+            p.setPen(QPen(QColor(218, 175, 92), 1.2));
+            p.drawRoundedRect(left + 10, carY + carHeight * 0.36 - 20, carWidth - 20, 7, 2, 2);
+        } else if (type == VEHICLE_COMPACT_BLUE) {
+            // DRIFT SPEC-R: Massive High-Rise Drift Wing on tall alloy struts
+            p.setBrush(QColor(185, 190, 200));
+            p.setPen(Qt::NoPen);
+            p.drawRect(cx - 56, carY + carHeight * 0.36 - 26, 7, 26);
+            p.drawRect(cx + 49, carY + carHeight * 0.36 - 26, 7, 26);
+            p.setBrush(QColor(28, 30, 36));
+            p.setPen(QPen(QColor(245, 185, 45), 1.5));
+            p.drawRoundedRect(left + 2, carY + carHeight * 0.36 - 30, carWidth - 4, 8, 2, 2);
+            // Tall drift endplates
+            p.setBrush(QColor(235, 172, 38));
+            p.drawRoundedRect(left - 2, carY + carHeight * 0.36 - 36, 6, 20, 2, 2);
+            p.drawRoundedRect(right - 4, carY + carHeight * 0.36 - 36, 6, 20, 2, 2);
+        } else if (type == VEHICLE_SPORTS_RED) {
+            // VORTEX V12: Active aero deck spoiler blade
+            p.setBrush(QColor(18, 20, 24));
+            p.setPen(QPen(QColor(255, 45, 45), 1.5));
+            p.drawRoundedRect(left + 12, carY + carHeight * 0.38 - 10, carWidth - 24, 6, 2, 2);
+        } else if (type == VEHICLE_SUV_BLACK) {
+            // TITAN ENFORCER: Drag Ducktail Spoiler
+            p.setBrush(QColor(20, 24, 22));
+            p.setPen(QPen(QColor(75, 95, 85), 1.8));
+            p.drawRoundedRect(left + 14, carY + carHeight * 0.42 - 8, carWidth - 28, 7, 2, 2);
+        }
     }
 
     if (rearView) {
@@ -2597,7 +2677,7 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
             p.fillRect(cx + 11, carY + carHeight - 18, 4, 14, QColor(40, 44, 52));
             p.fillRect(cx + 41, carY + carHeight - 18, 4, 14, QColor(40, 44, 52));
 
-            // Exhaust tips
+            // Exhaust tips (Customized per Car Model)
             auto drawExhaust = [&](int ex, int ey, int ew, int eh) {
                 p.setBrush(QColor(190, 195, 205));
                 p.setPen(QPen(QColor(80, 85, 95), 1));
@@ -2607,19 +2687,29 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
             };
 
             if (type == VEHICLE_SPORTS_RED) {
-                // Quad exhaust
-                drawExhaust(left + 42, carY + carHeight - 14, 11, 9);
-                drawExhaust(left + 55, carY + carHeight - 14, 11, 9);
-                drawExhaust(right - 66, carY + carHeight - 14, 11, 9);
-                drawExhaust(right - 53, carY + carHeight - 14, 11, 9);
+                // VORTEX V12: Center Triple-Jet Exhaust Cluster (/\)
+                drawExhaust(cx - 12, carY + carHeight - 14, 10, 8);
+                drawExhaust(cx + 2,  carY + carHeight - 14, 10, 8);
+                drawExhaust(cx - 5,  carY + carHeight - 22, 10, 8);
             } else if (type == VEHICLE_COMPACT_BLUE) {
-                // Dual center exhaust
-                drawExhaust(cx - 13, carY + carHeight - 12, 11, 9);
-                drawExhaust(cx + 2, carY + carHeight - 12, 11, 9);
+                // DRIFT SPEC-R: Dual Angled JDM Blast Pipes on left side
+                drawExhaust(left + 36, carY + carHeight - 13, 13, 10);
+                drawExhaust(left + 52, carY + carHeight - 13, 13, 10);
+            } else if (type == VEHICLE_SUV_BLACK) {
+                // TITAN ENFORCER: Dual Heavy Rectangular Black-Chrome Exhausts
+                p.setBrush(QColor(45, 50, 56));
+                p.setPen(QPen(QColor(110, 120, 130), 1.5));
+                p.drawRoundedRect(left + 36, carY + carHeight - 14, 20, 10, 2, 2);
+                p.drawRoundedRect(right - 56, carY + carHeight - 14, 20, 10, 2, 2);
+                p.setBrush(QColor(10, 12, 14));
+                p.drawRoundedRect(left + 39, carY + carHeight - 12, 14, 6, 1, 1);
+                p.drawRoundedRect(right - 53, carY + carHeight - 12, 14, 6, 1, 1);
             } else {
-                // Dual wide exhaust
-                drawExhaust(left + 46, carY + carHeight - 13, 14, 9);
-                drawExhaust(right - 60, carY + carHeight - 13, 14, 9);
+                // APEX GT-R: Quad Titanium Exhausts
+                drawExhaust(left + 38, carY + carHeight - 14, 10, 8);
+                drawExhaust(left + 50, carY + carHeight - 14, 10, 8);
+                drawExhaust(right - 60, carY + carHeight - 14, 10, 8);
+                drawExhaust(right - 48, carY + carHeight - 14, 10, 8);
             }
         }
 
@@ -2636,7 +2726,8 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
         // Plate text
         p.setFont(QFont("Arial", 6, QFont::Bold));
         p.setPen(QColor(20, 22, 28));
-        p.drawText(QRect(cx - 18, carY + carHeight - 30, 42, 16), Qt::AlignCenter, "APEX");
+        const char* pNames[5] = { "V12", "GT-R", "SPEC-R", "TITAN", "SEMI" };
+        p.drawText(QRect(cx - 18, carY + carHeight - 30, 42, 16), Qt::AlignCenter, pNames[type]);
         // Plate LED lamps
         p.setBrush(QColor(255, 255, 240, 160));
         p.setPen(Qt::NoPen);
@@ -2671,55 +2762,79 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
             p.fillRect(right - 34, carY + carHeight - 6, 12, 6, QColor(220, 30, 30));
         }
 
-        // 8. Multi-Stage LED Taillights & Volumetric Glow
+        // 8. Multi-Stage LED Taillights (Customized per Car Model)
         int tailW = 46;
         int tailH = 20;
         int tailY = carY + carHeight * 0.44;
 
-        auto drawLEDCluster = [&](int lx, int ly, bool isLeft) {
-            // Dark outer housing
-            p.setBrush(QColor(25, 15, 18));
-            p.setPen(QPen(QColor(60, 25, 30), 1));
-            p.drawRoundedRect(lx, ly, tailW, tailH, 4, 4);
+        if (type == VEHICLE_COMPACT_BLUE) {
+            // DRIFT SPEC-R: Skyline GT-R Dual Twin-Circle Round LED Taillights
+            auto drawRoundLEDs = [&](int centerX) {
+                for (int c = -1; c <= 1; c += 2) {
+                    QPoint rCenter(centerX + c * 14, tailY + tailH / 2);
+                    p.setBrush(brakeLights ? QColor(255, 30, 30) : QColor(195, 18, 24));
+                    p.setPen(QPen(QColor(255, 180, 180), 1.2));
+                    p.drawEllipse(rCenter, 9, 9);
+                    p.setBrush(brakeLights ? QColor(255, 230, 200) : QColor(20, 10, 12));
+                    p.setPen(Qt::NoPen);
+                    p.drawEllipse(rCenter, brakeLights ? 6 : 4, brakeLights ? 6 : 4);
+                }
+            };
+            drawRoundLEDs(left + 30);
+            drawRoundLEDs(right - 30);
 
-            // LED light tube signature
-            QColor tubeCol = brakeLights ? QColor(255, 40, 40) : QColor(190, 25, 25);
-            p.setBrush(tubeCol);
-            p.setPen(Qt::NoPen);
-            p.drawRoundedRect(lx + 4, ly + 4, tailW - 8, tailH - 8, 2, 2);
+        } else if (type == VEHICLE_SPORTS_RED) {
+            // VORTEX V12: Razor-Thin Angular Chevron LED Blades
+            p.setPen(QPen(brakeLights ? QColor(255, 45, 45) : QColor(215, 25, 35), brakeLights ? 3.5 : 2.2));
+            QPolygon leftChev;
+            leftChev << QPoint(left + 46, tailY) << QPoint(left + 16, tailY + tailH / 2) << QPoint(left + 46, tailY + tailH);
+            p.drawPolyline(leftChev);
+            QPolygon rightChev;
+            rightChev << QPoint(right - 46, tailY) << QPoint(right - 16, tailY + tailH / 2) << QPoint(right - 46, tailY + tailH);
+            p.drawPolyline(rightChev);
 
-            // Intense brake light inner core + halo
-            if (brakeLights) {
-                p.setBrush(QColor(255, 230, 230));
-                p.drawRoundedRect(lx + 10, ly + 6, tailW - 20, tailH - 12, 2, 2);
+        } else if (type == VEHICLE_SUV_BLACK) {
+            // TITAN ENFORCER: Solid Blocky Armored Rectangular LED Tail Light Clusters
+            auto drawArmoredLED = [&](int lx) {
+                QRect br(lx, tailY, 44, 20);
+                p.setBrush(brakeLights ? QColor(255, 25, 25) : QColor(160, 14, 20));
+                p.setPen(QPen(QColor(85, 95, 105), 1.8));
+                p.drawRoundedRect(br, 3, 3);
+                p.setPen(QPen(QColor(30, 34, 40), 2.0));
+                p.drawLine(lx + 15, tailY, lx + 15, tailY + 20);
+                p.drawLine(lx + 29, tailY, lx + 29, tailY + 20);
+            };
+            drawArmoredLED(left + 14);
+            drawArmoredLED(right - 58);
 
-                // Volumetric light halo
-                QRadialGradient halo(lx + tailW / 2, ly + tailH / 2, tailW * 0.9);
-                halo.setColorAt(0.0, QColor(255, 40, 40, 160));
-                halo.setColorAt(0.5, QColor(255, 40, 40, 70));
-                halo.setColorAt(1.0, QColor(255, 40, 40, 0));
-                p.setBrush(halo);
-                p.drawEllipse(lx - 15, ly - 15, tailW + 30, tailH + 30);
-            }
+        } else {
+            // APEX GT-R: Continuous LED light bar + Dual Halo Clusters
+            auto drawLEDCluster = [&](int lx, int ly, bool isLeft) {
+                p.setBrush(QColor(25, 15, 18));
+                p.setPen(QPen(QColor(60, 25, 30), 1));
+                p.drawRoundedRect(lx, ly, tailW, tailH, 4, 4);
 
-            // Amber turn signals
-            if ((isLeft && turnLeft) || (!isLeft && turnRight)) {
-                int amberX = isLeft ? lx + 3 : lx + tailW - 17;
-                p.setBrush(QColor(255, 175, 10));
-                p.drawRoundedRect(amberX, ly + 3, 14, tailH - 6, 2, 2);
-                p.setBrush(QColor(255, 220, 120));
-                p.drawRoundedRect(amberX + 2, ly + 5, 10, tailH - 10, 1, 1);
-                // Amber halo
-                p.setBrush(QColor(255, 160, 0, 110));
-                p.drawEllipse(amberX - 8, ly - 6, 30, tailH + 12);
-            }
-        };
+                QColor tubeCol = brakeLights ? QColor(255, 40, 40) : QColor(190, 25, 25);
+                p.setBrush(tubeCol);
+                p.setPen(Qt::NoPen);
+                p.drawRoundedRect(lx + 4, ly + 4, tailW - 8, tailH - 8, 2, 2);
 
-        drawLEDCluster(left + 14, tailY, true);
-        drawLEDCluster(right - 14 - tailW, tailY, false);
+                if (brakeLights) {
+                    p.setBrush(QColor(255, 230, 230));
+                    p.drawRoundedRect(lx + 10, ly + 6, tailW - 20, tailH - 12, 2, 2);
+                }
 
-        // Full-width connecting LED light bar for sports car
-        if (type == VEHICLE_SPORTS_RED) {
+                if ((isLeft && turnLeft) || (!isLeft && turnRight)) {
+                    int amberX = isLeft ? lx + 3 : lx + tailW - 17;
+                    p.setBrush(QColor(255, 175, 10));
+                    p.drawRoundedRect(amberX, ly + 3, 14, tailH - 6, 2, 2);
+                }
+            };
+
+            drawLEDCluster(left + 14, tailY, true);
+            drawLEDCluster(right - 14 - tailW, tailY, false);
+
+            // Full-width connecting light bar
             QColor barCol = brakeLights ? QColor(255, 40, 40) : QColor(190, 25, 25);
             p.setBrush(barCol);
             p.setPen(Qt::NoPen);
@@ -2793,10 +2908,10 @@ QImage RasterAssets::createSideVehicleSprite(VehicleType type, bool facingLeft) 
 
     QColor bodyColor;
     switch (type) {
-        case VEHICLE_SPORTS_RED: bodyColor = QColor(220, 28, 34); break;
-        case VEHICLE_SEDAN_SILVER: bodyColor = QColor(180, 188, 198); break;
-        case VEHICLE_SUV_BLACK: bodyColor = QColor(32, 34, 40); break;
-        case VEHICLE_COMPACT_BLUE: bodyColor = QColor(28, 110, 215); break;
+        case VEHICLE_SPORTS_RED: bodyColor = QColor(220, 28, 34); break;    // VORTEX V12 (Rosso Corsa)
+        case VEHICLE_SEDAN_SILVER: bodyColor = QColor(118, 128, 142); break; // APEX GT-R (Gunmetal Titanium)
+        case VEHICLE_SUV_BLACK: bodyColor = QColor(28, 48, 38); break;       // TITAN ENFORCER (Tactical Emerald)
+        case VEHICLE_COMPACT_BLUE: bodyColor = QColor(235, 172, 38); break;  // DRIFT SPEC-R (Solar Gold)
         case VEHICLE_TRUCK_SEMI: bodyColor = QColor(226, 229, 235); break;
     }
 
