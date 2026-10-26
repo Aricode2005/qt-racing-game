@@ -70,21 +70,26 @@ void GameWindow::paintEvent(QPaintEvent *event) {
 
     int pSize = m_engine.getPlayer().pixelSize;
     if (pSize > 1 && !m_showMainMenu) {
-        // High-speed low-res raster render directly at target pixel size
-        int lowW = qMax(160, width() / pSize);
-        int lowH = qMax(90, height() / pSize);
-        static QImage s_lowImg;
-        if (s_lowImg.size() != QSize(lowW, lowH)) {
-            s_lowImg = QImage(lowW, lowH, QImage::Format_RGB32);
+        // Render at native window dimensions to maintain 100% identical camera FOV, horizon, and cockpit framing
+        static QImage s_fullImg;
+        if (s_fullImg.size() != size()) {
+            s_fullImg = QImage(width(), height(), QImage::Format_RGB32);
         }
         {
-            QPainter lp(&s_lowImg);
-            m_renderer.render(lp, m_engine, lowW, lowH, m_lastDt);
+            QPainter fp(&s_fullImg);
+            m_renderer.render(fp, m_engine, width(), height(), m_lastDt);
         }
+
+        // Fast nearest-neighbor downscale to chunky retro pixel block resolution
+        int lowW = qMax(64, width() / pSize);
+        int lowH = qMax(36, height() / pSize);
+        QImage lowImg = s_fullImg.scaled(lowW, lowH, Qt::IgnoreAspectRatio, Qt::FastTransformation);
+
+        // Blit back with sharp nearest-neighbor pixels (no zoom, authentic retro software rasterizer)
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-        painter.drawImage(rect(), s_lowImg);
+        painter.drawImage(rect(), lowImg);
     } else {
-        // Render pure raster 3D game scene
+        // Render pure raster 3D game scene at native resolution
         m_renderer.render(painter, m_engine, width(), height(), m_lastDt);
     }
 

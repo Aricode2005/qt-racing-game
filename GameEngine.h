@@ -82,9 +82,9 @@ struct InfotainmentState {
 struct PlayerCar {
     qreal worldZ = 0;
     qreal x = 0;               // Road position: -1.0 to 1.0 (lanes)
-    qreal speed = 0;           // km/h (0 to 300)
-    qreal maxSpeed = 295;      // km/h
-    qreal accelRate = 45;      // Base acceleration
+    qreal speed = 0;           // km/h (0 to 200)
+    qreal maxSpeed = 200;      // km/h (competitive cap)
+    qreal accelRate = 58;      // Base acceleration
     qreal brakeRate = 95;      // Braking deceleration
     qreal steerAngle = 0;      // -1.0 (left) to 1.0 (right)
     qreal steerTarget = 0;
