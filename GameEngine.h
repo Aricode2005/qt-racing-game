@@ -52,6 +52,7 @@ struct NPCCar {
     bool hasFinished = false;
     qreal finishTime = 0.0;
     qreal accelRate = 48.0;
+    bool isRemotePlayer = false;
 };
 
 enum InfotainmentMode {
@@ -239,6 +240,12 @@ public:
     QVector<RaceStandingEntry> getRaceStandings() const;
     void spawnCrashSparks(qreal z, qreal x, int count, bool isHeadOn, qreal severity);
 
+    // Multiplayer Remote Player integration
+    void setRemotePlayerCar(const NPCCar& remoteCar);
+    bool hasRemotePlayer() const { return m_hasRemotePlayer; }
+    const NPCCar& getRemotePlayerCar() const { return m_remoteCar; }
+    void clearRemotePlayer() { m_hasRemotePlayer = false; }
+
     // Infotainment controls
     const InfotainmentState& getInfotainment() const { return m_infoState; }
     InfotainmentState& getInfotainmentMutable() { return m_infoState; }
@@ -306,6 +313,9 @@ private:
     bool m_paused = false;
     int m_nextNpcId = 1;
     GameDifficulty m_difficulty = DIFFICULTY_NORMAL;
+
+    bool m_hasRemotePlayer = false;
+    NPCCar m_remoteCar;
 };
 
 #endif // GAMEENGINE_H

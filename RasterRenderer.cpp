@@ -1,4 +1,5 @@
 #include "RasterRenderer.h"
+#include "NetworkManager.h"
 #include <QtMath>
 #include <QPainterPath>
 #include <QPolygonF>
@@ -22,6 +23,7 @@ struct RenderableSprite {
     bool isBraking = false;
     QString racerTag;
     int racerPos = 0;
+    bool isRemotePlayer = false;
 };
 
 RasterRenderer::RasterRenderer() {
@@ -1140,6 +1142,7 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
             rs.isBraking = npc.isBraking;
             rs.racerTag = npc.racerName;
             rs.racerPos = npc.currentPosition;
+            rs.isRemotePlayer = npc.isRemotePlayer;
 
             spritesToDraw.append(rs);
         }
@@ -1221,7 +1224,18 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
         }
 
         // Floating Motorsport Position & Driver Name Tag above Rival Race Cars
-        if (!isMirror && s.isCar && s.width >= 22 && !s.racerTag.isEmpty() && s.racerPos > 0) {
+        if (!isMirror && s.isCar && s.width >= 22 && s.isRemotePlayer) {
+            int tagW = qBound(110, s.width + 20, 160);
+            int tagH = 18;
+            int roofY = qRound(s.height * 0.31);
+            QRect tagRect(-tagW / 2, roofY - tagH - 5, tagW, tagH);
+            p.setBrush(QColor(0, 230, 255, 230));
+            p.setPen(QPen(QColor(255, 255, 255), 1.5));
+            p.drawRoundedRect(tagRect, 4, 4);
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(8, 16, 26));
+            p.drawText(tagRect, Qt::AlignCenter, QString("👑 [P2] %1").arg(s.racerTag));
+        } else if (!isMirror && s.isCar && s.width >= 22 && !s.racerTag.isEmpty() && s.racerPos > 0) {
             int tagW = qBound(78, s.width, 134);
             int tagH = 16;
             int roofY = qRound(s.height * 0.31);
@@ -2683,8 +2697,15 @@ void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& eng
             if (relZ > 0 && relZ < 2400) {
                 qreal dotY = (radarRect.bottom() - 15) - (relZ / 2400.0) * (radarRect.height() - 30);
                 qreal dotX = rx + npc.x * 28.0;
-                p.setBrush(QColor(255, 60, 60));
-                p.drawEllipse(QPointF(dotX, dotY), 4, 4);
+                if (npc.isRemotePlayer) {
+                    p.setBrush(QColor(0, 240, 255));
+                    p.setPen(QPen(Qt::white, 1.2));
+                    p.drawRect(QRectF(dotX - 3.5, dotY - 3.5, 7, 7));
+                    p.setPen(Qt::NoPen);
+                } else {
+                    p.setBrush(QColor(255, 60, 60));
+                    p.drawEllipse(QPointF(dotX, dotY), 4, 4);
+                }
             }
         }
 
@@ -3538,11 +3559,17 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         // Plot Rival Race Cars on the 2D Track Map
         for (const NPCCar& npc : engine.getTraffic()) {
             QPointF nPt = posOnCircuit(npc.worldZ);
-            QColor nCol = (npc.currentPosition == 1) ? QColor(255, 205, 55)
-                        : (npc.currentPosition <= 3 ? QColor(0, 225, 255) : QColor(255, 85, 85));
-            p.setBrush(nCol);
-            p.setPen(QPen(QColor(12, 16, 22), 1.0));
-            p.drawEllipse(nPt, 3.6, 3.6);
+            if (npc.isRemotePlayer) {
+                p.setBrush(QColor(0, 240, 255));
+                p.setPen(QPen(Qt::white, 1.2));
+                p.drawRect(QRectF(nPt.x() - 3.5, nPt.y() - 3.5, 7, 7));
+            } else {
+                QColor nCol = (npc.currentPosition == 1) ? QColor(255, 205, 55)
+                            : (npc.currentPosition <= 3 ? QColor(0, 225, 255) : QColor(255, 85, 85));
+                p.setBrush(nCol);
+                p.setPen(QPen(QColor(12, 16, 22), 1.0));
+                p.drawEllipse(nPt, 3.6, 3.6);
+            }
         }
 
         // Plot Player Beacon [YOU] on the 2D Track Map with Pulsing Halo
@@ -3671,6 +3698,45 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setPen(QColor(255, 230, 115));
         p.drawText(footRect, Qt::AlignCenter,
                    "PRESS [R] FOR NEW RACE   •   PRESS [C] TO SWITCH CAMERA VIEW   •   PRESS [M] FOR MENU");
+    }
+
+    // Top-Right Live Multiplayer Status Badge
+    if (NetworkManager::instance().isConnected()) {
+        QRect mpPill(w - 245, 10, 235, 22);
+        p.setBrush(QColor(14, 22, 34, 230));
+        p.setPen(QPen(QColor(0, 230, 255), 1.5));
+        p.drawRoundedRect(mpPill, 5, 5);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(0, 240, 255));
+        p.drawText(mpPill, Qt::AlignCenter,
+                   QString("🟢 MP: %1 (%2) • %3ms")
+                       .arg(NetworkManager::instance().isHost() ? "HOST" : "JOINED")
+                       .arg(NetworkManager::instance().getRemotePeer().name)
+                       .arg(NetworkManager::instance().getPingMs()));
+    }
+
+    // Synchronized 3-2-1 Arcade Countdown Overlay
+    qreal cd = NetworkManager::instance().getCountdownTimer();
+    if (cd > 0) {
+        int cdNum = (int)cd;
+        QString cdText = (cdNum >= 1) ? QString::number(cdNum) : "GO!";
+        QColor cdCol = (cdNum >= 2) ? QColor(255, 65, 65) : (cdNum == 1 ? QColor(255, 205, 45) : QColor(45, 240, 110));
+
+        // Dark frosted backdrop pill
+        QRect cdBox(w / 2 - 160, h / 2 - 130, 320, 140);
+        p.setBrush(QColor(10, 15, 25, 235));
+        p.setPen(QPen(cdCol, 2.5));
+        p.drawRoundedRect(cdBox, 14, 14);
+
+        QFont cdFont("Arial", 52, QFont::Black);
+        p.setFont(cdFont);
+        p.setPen(cdCol);
+        p.drawText(QRect(w / 2 - 150, h / 2 - 130, 300, 85), Qt::AlignCenter, cdText);
+
+        QFont cdSub("Arial", 10, QFont::Bold);
+        p.setFont(cdSub);
+        p.setPen(QColor(220, 235, 255));
+        p.drawText(QRect(w / 2 - 150, h / 2 - 35, 300, 30), Qt::AlignCenter, "SYNCHRONIZED MULTIPLAYER START");
     }
 
     p.restore();
