@@ -382,10 +382,25 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
         return;
     }
 
-    // Touchscreen Dashboard Center Console Interaction (Web browser, Music player, GPS radar)
     int w = width();
     int h = height();
     const PlayerCar& player = m_engine.getPlayer();
+
+    // Finish Line Scoreboard Action Button Click
+    if (player.raceFinished) {
+        int bw = qMin(640, w - 40);
+        int bh = 360;
+        int bx = (w - bw) / 2;
+        int by = (h - bh) / 2 - 10;
+        QRect footRect(bx + 14, by + bh - 38, bw - 28, 26);
+        if (footRect.contains(pos)) {
+            m_engine.resetPlayer(); // Restart new race on starting grid
+            update();
+            return;
+        }
+    }
+
+    // Touchscreen Dashboard Center Console Interaction (Web browser, Music player, GPS radar)
     int pitchOffset = qRound(player.pitchG * 90.0);
     int rollOffset = qRound(player.rollG * 60.0);
     int vibX = (player.vibration > 0) ? (QRandomGenerator::global()->generate() % 5 - 2) : 0;

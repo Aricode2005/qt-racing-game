@@ -3592,25 +3592,25 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
 
     // Championship Final Race Standings Leaderboard Overlay when crossing the Finish Line!
     if (player.raceFinished) {
-        int bw = 540;
-        int bh = 328;
+        int bw = qMin(640, w - 40);
+        int bh = 360;
         int bx = (w - bw) / 2;
         int by = (h - bh) / 2 - 10;
         QRect boardRect(bx, by, bw, bh);
 
         QLinearGradient bGrad(boardRect.topLeft(), boardRect.bottomRight());
-        bGrad.setColorAt(0.0, QColor(12, 16, 24, 242));
-        bGrad.setColorAt(1.0, QColor(6, 9, 14, 248));
+        bGrad.setColorAt(0.0, QColor(12, 16, 24, 246));
+        bGrad.setColorAt(1.0, QColor(6, 9, 14, 252));
         p.setBrush(bGrad);
         p.setPen(QPen(QColor(245, 200, 85), 2.5));
         p.drawRoundedRect(boardRect, 12, 12);
 
         // Header Banner
-        QRect hdrRect(bx + 12, by + 12, bw - 24, 38);
+        QRect hdrRect(bx + 14, by + 12, bw - 28, 38);
         p.setBrush(QColor(245, 195, 70, 40));
         p.setPen(QPen(QColor(245, 200, 85, 180), 1));
         p.drawRoundedRect(hdrRect, 6, 6);
-        p.setFont(QFont("Arial", 13, QFont::Bold));
+        p.setFont(QFont("Arial", 12, QFont::Bold));
         p.setPen(QColor(255, 220, 95));
         p.drawText(hdrRect, Qt::AlignCenter,
                    QString("🏁  FINISH LINE — FINAL RACE STANDINGS (YOU: P%1/%2)  🏁")
@@ -3621,10 +3621,10 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         int rowStartY = by + 58;
         p.setFont(QFont("Arial", 8, QFont::Bold));
         p.setPen(QColor(150, 170, 195));
-        p.drawText(bx + 24,  rowStartY, "POS");
-        p.drawText(bx + 85,  rowStartY, "DRIVER / VEHICLE");
-        p.drawText(bx + 320, rowStartY, "FINISH TIME");
-        p.drawText(bx + 435, rowStartY, "GAP");
+        p.drawText(bx + 26,  rowStartY, "POS");
+        p.drawText(bx + 90,  rowStartY, "DRIVER / VEHICLE");
+        p.drawText(bx + 380, rowStartY, "FINISH TIME");
+        p.drawText(bx + 510, rowStartY, "GAP");
 
         QVector<RaceStandingEntry> standings = engine.getRaceStandings();
         qreal leaderTime = standings.isEmpty() ? player.finishTime : standings[0].finishTime;
@@ -3632,7 +3632,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         for (int i = 0; i < standings.size() && i < 8; ++i) {
             const RaceStandingEntry& e = standings[i];
             int ry = rowStartY + 10 + i * 26;
-            QRect rowRect(bx + 16, ry, bw - 32, 23);
+            QRect rowRect(bx + 14, ry, bw - 28, 23);
 
             if (e.isPlayer) {
                 p.setBrush(QColor(0, 225, 255, 55));
@@ -3648,23 +3648,29 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
 
             p.setFont(QFont("Arial", 9, QFont::Bold));
             p.setPen(e.isPlayer ? QColor(120, 248, 255) : (i == 0 ? QColor(255, 220, 90) : QColor(220, 230, 245)));
-            p.drawText(QRect(bx + 22, ry, 50, 23), Qt::AlignVCenter | Qt::AlignLeft, QString("P%1").arg(e.position));
-            p.drawText(QRect(bx + 85, ry, 220, 23), Qt::AlignVCenter | Qt::AlignLeft, e.name);
+            p.drawText(QRect(bx + 24, ry, 50, 23), Qt::AlignVCenter | Qt::AlignLeft, QString("P%1").arg(e.position));
+            p.drawText(QRect(bx + 90, ry, 270, 23), Qt::AlignVCenter | Qt::AlignLeft, e.name);
 
             int mins = (int)(e.finishTime / 60.0);
             qreal secs = e.finishTime - mins * 60.0;
             QString timeStr = QString("%1:%2").arg(mins, 2, 10, QChar('0')).arg(QString::number(secs, 'f', 2).rightJustified(5, '0'));
-            p.drawText(QRect(bx + 320, ry, 100, 23), Qt::AlignVCenter | Qt::AlignLeft, timeStr);
+            p.drawText(QRect(bx + 380, ry, 110, 23), Qt::AlignVCenter | Qt::AlignLeft, timeStr);
 
             QString gapStr = (i == 0) ? "WINNER" : QString("+%1s").arg(QString::number(qMax(0.01, e.finishTime - leaderTime), 'f', 2));
             p.setPen(i == 0 ? QColor(60, 240, 120) : QColor(180, 195, 215));
-            p.drawText(QRect(bx + 435, ry, 85, 23), Qt::AlignVCenter | Qt::AlignLeft, gapStr);
+            p.drawText(QRect(bx + 510, ry, 95, 23), Qt::AlignVCenter | Qt::AlignLeft, gapStr);
         }
 
-        p.setFont(QFont("Arial", 9, QFont::Bold));
-        p.setPen(QColor(255, 225, 110));
-        p.drawText(QRect(bx, by + bh - 26, bw, 20), Qt::AlignCenter,
-                   "PRESS [R] TO RETURN TO STARTING GRID FOR A NEW RACE  •  PRESS [C] TO SWITCH 1ST/3RD VIEW");
+        // Dedicated bottom action footer pill with ample margins so text is never clipped
+        QRect footRect(bx + 14, by + bh - 38, bw - 28, 26);
+        p.setBrush(QColor(245, 195, 70, 32));
+        p.setPen(QPen(QColor(245, 200, 85, 140), 1));
+        p.drawRoundedRect(footRect, 5, 5);
+
+        p.setFont(QFont("Arial", 8, QFont::Bold));
+        p.setPen(QColor(255, 230, 115));
+        p.drawText(footRect, Qt::AlignCenter,
+                   "PRESS [R] FOR NEW RACE   •   PRESS [C] TO SWITCH CAMERA VIEW   •   PRESS [M] FOR MENU");
     }
 
     p.restore();
