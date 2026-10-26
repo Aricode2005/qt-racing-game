@@ -23,6 +23,7 @@ struct RenderableSprite {
     bool isBraking = false;
     QString racerTag;
     int racerPos = 0;
+    int racerId = 0;
     bool isRemotePlayer = false;
 };
 
@@ -1142,6 +1143,7 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
             rs.isBraking = npc.isBraking;
             rs.racerTag = npc.racerName;
             rs.racerPos = npc.currentPosition;
+            rs.racerId = npc.id;
             rs.isRemotePlayer = npc.isRemotePlayer;
 
             spritesToDraw.append(rs);
@@ -1234,7 +1236,8 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
             p.drawRoundedRect(tagRect, 4, 4);
             p.setFont(QFont("Arial", 7, QFont::Bold));
             p.setPen(QColor(8, 16, 26));
-            p.drawText(tagRect, Qt::AlignCenter, QString("👑 [P2] %1").arg(s.racerTag));
+            int pNum = (s.racerId >= 9000 && s.racerId < 9100) ? (s.racerId - 9000 + 1) : 2;
+            p.drawText(tagRect, Qt::AlignCenter, QString("👑 [P%1] %2").arg(pNum).arg(s.racerTag.isEmpty() ? QString("Racer %1").arg(pNum) : s.racerTag));
         } else if (!isMirror && s.isCar && s.width >= 22 && !s.racerTag.isEmpty() && s.racerPos > 0) {
             int tagW = qBound(78, s.width, 134);
             int tagH = 16;
@@ -3708,11 +3711,12 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.drawRoundedRect(mpPill, 5, 5);
         p.setFont(QFont("Arial", 7, QFont::Bold));
         p.setPen(QColor(0, 240, 255));
+        int playerCount = NetworkManager::instance().getConnectedPlayerCount();
         p.drawText(mpPill, Qt::AlignCenter,
-                   QString("🟢 MP: %1 (%2) • %3ms")
-                       .arg(NetworkManager::instance().isHost() ? "HOST" : "JOINED")
-                       .arg(NetworkManager::instance().getRemotePeer().name)
-                       .arg(NetworkManager::instance().getPingMs()));
+                   QString("🟢 MP: %1 (%2/8 PILOTS) • %3ms")
+                       .arg(NetworkManager::instance().isHost() ? "HOST" : QString("P%1").arg(NetworkManager::instance().getMyPeerId() + 1))
+                       .arg(playerCount)
+                       .arg(NetworkManager::instance().getAveragePingMs()));
     }
 
     // Synchronized 3-2-1 Arcade Countdown Overlay

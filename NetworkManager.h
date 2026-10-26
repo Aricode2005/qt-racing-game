@@ -8,7 +8,9 @@
 #include <QHostAddress>
 #include <QNetworkInterface>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QMap>
 #include <QVector>
 #include <QElapsedTimer>
 #include "GameEngine.h"
@@ -30,6 +32,7 @@ enum MultiplayerState {
 #pragma pack(push, 1)
 struct TelemetryPacket {
     uint32_t magic;       // 0x41504558 ("APEX")
+    uint8_t  peerId;      // 0 for Host, 1-7 for clients
     uint32_t sequence;    // Monotonic packet ID
     uint32_t timestampMs; // Elapsed ms for round-trip latency
     float    worldZ;
@@ -47,22 +50,45 @@ struct TelemetryPacket {
 #pragma pack(pop)
 
 struct RemotePeerInfo {
-    QString name = "Rival Racer";
+    int peerId = 1;
+    QString name = "Racer";
     int carModel = 0;
     bool isReady = false;
     qint64 pingMs = 0;
     QHostAddress udpAddress;
     quint16 udpPort = 7778;
+    QTcpSocket* tcpSocket = nullptr; // Tracked by host
 };
 
 struct DiscoveredHost {
     QString hostName;
     QHostAddress address;
     quint16 port;
-    int trackTheme;
-    int timeOfDay;
-    int carModel;
-    qint64 lastSeenMs;
+    int playerCount = 1;
+    int maxPlayers = 8;
+    int trackTheme = 0;
+    int timeOfDay = 0;
+    int carModel = 0;
+    qint64 lastSeenMs = 0;
+};
+
+struct PeerInterpTarget {
+    qreal targetZ = 0;
+    qreal targetX = 0;
+    qreal targetSpeed = 0;
+    qreal targetSteer = 0;
+    qreal targetPitchG = 0;
+    qreal targetRollG = 0;
+    qreal targetSkid = 0;
+    int   carModel = 0;
+    bool  isBraking = false;
+    bool  isCrashing = false;
+    bool  hazardLights = false;
+    bool  horn = false;
+    bool  hasFinished = false;
+    qreal finishTime = 0;
+    qreal health = 100.0;
+    qint64 lastPacketTimeMs = 0;
 };
 
 class NetworkManager : public QObject {
@@ -77,10 +103,12 @@ public:
     NetworkRole getRole() const { return m_role; }
     MultiplayerState getState() const { return m_state; }
 
-    const RemotePeerInfo& getRemotePeer() const { return m_remotePeer; }
+    int getMyPeerId() const { return m_myPeerId; }
+    int getConnectedPlayerCount() const { return m_peers.size() + 1; } // Peers + Local
+    const QMap<int, RemotePeerInfo>& getPeers() const { return m_peers; }
     const QVector<DiscoveredHost>& getDiscoveredHosts() const { return m_discoveredHosts; }
     QString getLocalIpAddress() const;
-    qint64 getPingMs() const { return m_remotePeer.pingMs; }
+    qint64 getAveragePingMs() const;
     qreal getCountdownTimer() const { return m_countdownTimer; }
 
     void setLocalPlayerName(const QString& name) { m_localName = name; }
@@ -105,11 +133,11 @@ public:
 
 signals:
     void hostDiscovered(const DiscoveredHost& host);
-    void peerConnected(const QString& peerName);
-    void peerDisconnected();
-    void peerReadyChanged(bool ready);
+    void peerJoined(int peerId, const QString& peerName);
+    void peerLeft(int peerId, const QString& peerName);
+    void peerReadyChanged(int peerId, bool ready);
     void trackSyncRequested(int trackTheme, int timeOfDay);
-    void carSyncRequested(int carModel);
+    void carSyncRequested(int peerId, int carModel);
     void countdownStarted(qreal durationSecs);
     void raceStarted();
     void raceRestarted();
@@ -128,24 +156,28 @@ private:
     NetworkManager();
     ~NetworkManager();
 
-    void sendTcpJson(const QJsonObject& json);
-    void processTcpMessage(const QJsonObject& json);
+    void sendTcpJson(const QJsonObject& json, QTcpSocket* dest = nullptr);
+    void broadcastTcpJson(const QJsonObject& json, QTcpSocket* exclude = nullptr);
+    void processTcpMessage(const QJsonObject& json, QTcpSocket* senderSocket);
     void sendBeaconBroadcast();
 
     NetworkRole m_role = NET_ROLE_NONE;
     MultiplayerState m_state = MP_STATE_DISCONNECTED;
+    int m_myPeerId = 0; // 0 for host, assigned 1-7 for clients
     QString m_localName = "Driver 1";
 
     QTcpServer* m_tcpServer = nullptr;
-    QTcpSocket* m_tcpSocket = nullptr; // For client, or connected peer for host
+    QTcpSocket* m_clientTcpSocket = nullptr; // For client connecting to host
     QUdpSocket* m_udpSocket = nullptr;
     QUdpSocket* m_beaconSocket = nullptr;
 
     quint16 m_localTcpPort = 7777;
     quint16 m_localUdpPort = 7778;
-    quint16 m_peerUdpPort = 7778;
+    QHostAddress m_hostUdpAddress;
+    quint16 m_hostUdpPort = 7778;
 
-    RemotePeerInfo m_remotePeer;
+    QMap<int, RemotePeerInfo> m_peers;
+    QMap<int, PeerInterpTarget> m_peerTargets;
     QVector<DiscoveredHost> m_discoveredHosts;
 
     QTimer* m_beaconTimer = nullptr;
@@ -155,24 +187,4 @@ private:
 
     // Countdown sync
     qreal m_countdownTimer = -1.0;
-
-    // Interpolation targets for smooth rendering
-    struct {
-        qreal targetZ = 0;
-        qreal targetX = 0;
-        qreal targetSpeed = 0;
-        qreal targetSteer = 0;
-        qreal targetPitchG = 0;
-        qreal targetRollG = 0;
-        qreal targetSkid = 0;
-        int   carModel = 0;
-        bool  isBraking = false;
-        bool  isCrashing = false;
-        bool  hazardLights = false;
-        bool  horn = false;
-        bool  hasFinished = false;
-        qreal finishTime = 0;
-        qreal health = 100.0;
-        qint64 lastPacketTimeMs = 0;
-    } m_interp;
 };

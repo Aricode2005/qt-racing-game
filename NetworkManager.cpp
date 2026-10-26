@@ -8,8 +8,8 @@ static const quint16 BEACON_PORT = 7779;
 NetworkManager::NetworkManager() {
     m_uptime.start();
 
-    // Default friendly racer name
-    QStringList names = { "VeloRacer", "ApexDrifter", "TurboNomad", "CyberGhost", "PhantomPilot" };
+    // Default friendly racer callsign
+    QStringList names = { "VeloRacer", "ApexDrifter", "TurboNomad", "CyberGhost", "PhantomPilot", "NitroWolf" };
     m_localName = names[QRandomGenerator::global()->generate() % names.size()] + QString::number(QRandomGenerator::global()->generate() % 90 + 10);
 
     m_beaconTimer = new QTimer(this);
@@ -30,7 +30,6 @@ NetworkManager::NetworkManager() {
             QJsonObject obj = doc.object();
             if (obj["type"].toString() == "APEX_BEACON") {
                 QHostAddress senderAddr = datagram.senderAddress();
-                // Normalize IPv4-mapped IPv6 addresses (e.g. ::ffff:192.168.1.5 -> 192.168.1.5)
                 bool ok = false;
                 quint32 ip4 = senderAddr.toIPv4Address(&ok);
                 if (ok) senderAddr = QHostAddress(ip4);
@@ -48,6 +47,8 @@ NetworkManager::NetworkManager() {
                 for (DiscoveredHost& h : m_discoveredHosts) {
                     if (h.address == senderAddr && h.port == port) {
                         h.hostName = hostName;
+                        h.playerCount = obj["players"].toInt(1);
+                        h.maxPlayers = obj["max"].toInt(8);
                         h.trackTheme = obj["track"].toInt();
                         h.timeOfDay = obj["tod"].toInt();
                         h.carModel = obj["car"].toInt();
@@ -61,6 +62,8 @@ NetworkManager::NetworkManager() {
                     newHost.hostName = hostName;
                     newHost.address = senderAddr;
                     newHost.port = port;
+                    newHost.playerCount = obj["players"].toInt(1);
+                    newHost.maxPlayers = obj["max"].toInt(8);
                     newHost.trackTheme = obj["track"].toInt();
                     newHost.timeOfDay = obj["tod"].toInt();
                     newHost.carModel = obj["car"].toInt();
@@ -97,12 +100,21 @@ QString NetworkManager::getLocalIpAddress() const {
     return "127.0.0.1";
 }
 
+qint64 NetworkManager::getAveragePingMs() const {
+    if (m_peers.isEmpty()) return 0;
+    qint64 total = 0;
+    for (const RemotePeerInfo& p : m_peers) {
+        total += p.pingMs;
+    }
+    return total / m_peers.size();
+}
+
 bool NetworkManager::startHost(quint16 tcpPort, quint16 udpPort) {
     disconnectSession();
 
     m_localTcpPort = tcpPort;
     m_localUdpPort = udpPort;
-    m_peerUdpPort = 7780; // Default expected client UDP port
+    m_myPeerId = 0; // Host is always Player 1 / Peer 0
 
     m_tcpServer = new QTcpServer(this);
     if (!m_tcpServer->listen(QHostAddress::AnyIPv4, m_localTcpPort)) {
@@ -121,10 +133,11 @@ bool NetworkManager::startHost(quint16 tcpPort, quint16 udpPort) {
 
     m_role = NET_ROLE_HOST;
     m_state = MP_STATE_LOBBY;
-    m_remotePeer.isReady = false;
+    m_peers.clear();
+    m_peerTargets.clear();
     m_discoveredHosts.clear();
 
-    emit statusMessage(QString("Hosting race on %1:%2 — Waiting for racer...").arg(getLocalIpAddress()).arg(m_localTcpPort));
+    emit statusMessage(QString("Hosting multiplayer room on %1:%2 (Up to 8 Players)").arg(getLocalIpAddress()).arg(m_localTcpPort));
     return true;
 }
 
@@ -132,48 +145,59 @@ bool NetworkManager::connectToHost(const QString& hostAddress, quint16 tcpPort, 
     disconnectSession();
 
     m_localUdpPort = udpPort;
-    m_peerUdpPort = 7778; // Host default UDP port
+    m_hostUdpAddress = QHostAddress(hostAddress);
+    m_hostUdpPort = 7778; // Host default UDP telemetry port
+    m_myPeerId = -1;      // Will be assigned by host
 
-    m_tcpSocket = new QTcpSocket(this);
-    connect(m_tcpSocket, &QTcpSocket::readyRead, this, &NetworkManager::onTcpReadyRead);
-    connect(m_tcpSocket, &QTcpSocket::disconnected, this, &NetworkManager::onTcpDisconnected);
+    m_clientTcpSocket = new QTcpSocket(this);
+    connect(m_clientTcpSocket, &QTcpSocket::readyRead, this, &NetworkManager::onTcpReadyRead);
+    connect(m_clientTcpSocket, &QTcpSocket::disconnected, this, &NetworkManager::onTcpDisconnected);
 
-    connect(m_tcpSocket, &QTcpSocket::connected, this, [this]() {
+    connect(m_clientTcpSocket, &QTcpSocket::connected, this, [this]() {
         m_role = NET_ROLE_CLIENT;
         m_state = MP_STATE_LOBBY;
-        m_remotePeer.udpAddress = m_tcpSocket->peerAddress();
 
         // Send Handshake
         QJsonObject hello;
         hello["type"] = "HELLO";
         hello["name"] = m_localName;
         hello["udpPort"] = m_localUdpPort;
-        sendTcpJson(hello);
+        sendTcpJson(hello, m_clientTcpSocket);
 
-        emit statusMessage(QString("Connected to host %1! In Lobby.").arg(m_tcpSocket->peerAddress().toString()));
+        emit statusMessage(QString("Connected to host %1! In Lobby.").arg(m_clientTcpSocket->peerAddress().toString()));
         m_pingTimer->start(1500);
     });
 
     m_udpSocket = new QUdpSocket(this);
     if (!m_udpSocket->bind(QHostAddress::AnyIPv4, m_localUdpPort, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
-        emit statusMessage(QString("Client UDP bind warning on %1").arg(m_localUdpPort), true);
+        if (!m_udpSocket->bind(QHostAddress::AnyIPv4, 0)) {
+            emit statusMessage(QString("Client UDP bind warning on %1").arg(m_localUdpPort), true);
+        }
     }
+    m_localUdpPort = m_udpSocket->localPort();
     connect(m_udpSocket, &QUdpSocket::readyRead, this, &NetworkManager::onUdpReadyRead);
 
     emit statusMessage(QString("Connecting to %1:%2...").arg(hostAddress).arg(tcpPort));
-    m_tcpSocket->connectToHost(hostAddress, tcpPort);
+    m_clientTcpSocket->connectToHost(hostAddress, tcpPort);
     return true;
 }
 
 void NetworkManager::disconnectSession() {
     m_pingTimer->stop();
 
-    if (m_tcpSocket) {
-        m_tcpSocket->disconnectFromHost();
-        m_tcpSocket->deleteLater();
-        m_tcpSocket = nullptr;
+    if (m_clientTcpSocket) {
+        m_clientTcpSocket->disconnectFromHost();
+        m_clientTcpSocket->deleteLater();
+        m_clientTcpSocket = nullptr;
     }
     if (m_tcpServer) {
+        // Disconnect all client sockets
+        for (auto& peer : m_peers) {
+            if (peer.tcpSocket) {
+                peer.tcpSocket->disconnectFromHost();
+                peer.tcpSocket->deleteLater();
+            }
+        }
         m_tcpServer->close();
         m_tcpServer->deleteLater();
         m_tcpServer = nullptr;
@@ -186,7 +210,9 @@ void NetworkManager::disconnectSession() {
 
     m_role = NET_ROLE_NONE;
     m_state = MP_STATE_DISCONNECTED;
-    m_remotePeer.isReady = false;
+    m_myPeerId = 0;
+    m_peers.clear();
+    m_peerTargets.clear();
     m_countdownTimer = -1.0;
 }
 
@@ -195,123 +221,294 @@ void NetworkManager::onNewTcpConnection() {
     QTcpSocket* newSocket = m_tcpServer->nextPendingConnection();
     if (!newSocket) return;
 
-    if (m_tcpSocket) {
-        // Only 1 rival peer for 1v1 multiplayer
+    if (m_peers.size() >= 7) {
+        // Room full (1 Host + 7 Clients = 8 Players max)
+        QJsonObject rej;
+        rej["type"] = "ROOM_FULL";
+        QByteArray data = QJsonDocument(rej).toJson(QJsonDocument::Compact) + "\n";
+        newSocket->write(data);
         newSocket->disconnectFromHost();
         newSocket->deleteLater();
         return;
     }
 
-    m_tcpSocket = newSocket;
-    connect(m_tcpSocket, &QTcpSocket::readyRead, this, &NetworkManager::onTcpReadyRead);
-    connect(m_tcpSocket, &QTcpSocket::disconnected, this, &NetworkManager::onTcpDisconnected);
+    // Find lowest available peer ID (1 to 7)
+    int assignedId = 1;
+    while (m_peers.contains(assignedId)) {
+        assignedId++;
+    }
 
-    QHostAddress peerAddr = m_tcpSocket->peerAddress();
+    RemotePeerInfo info;
+    info.peerId = assignedId;
+    info.tcpSocket = newSocket;
+    QHostAddress peerAddr = newSocket->peerAddress();
     bool ok = false;
     quint32 ip4 = peerAddr.toIPv4Address(&ok);
     if (ok) peerAddr = QHostAddress(ip4);
-    m_remotePeer.udpAddress = peerAddr;
+    info.udpAddress = peerAddr;
+    info.udpPort = 7780 + (assignedId - 1); // Expected client UDP port
 
-    // Send Welcome & current circuit configuration
+    m_peers[assignedId] = info;
+
+    connect(newSocket, &QTcpSocket::readyRead, this, &NetworkManager::onTcpReadyRead);
+    connect(newSocket, &QTcpSocket::disconnected, this, &NetworkManager::onTcpDisconnected);
+
+    // Send Welcome & Roster to newly joined peer
     QJsonObject welcome;
     welcome["type"] = "WELCOME";
+    welcome["assignedId"] = assignedId;
     welcome["hostName"] = m_localName;
     welcome["udpPort"] = m_localUdpPort;
-    sendTcpJson(welcome);
+
+    // Send existing roster list
+    QJsonArray rosterArr;
+    // Include host (ID 0)
+    QJsonObject hostEntry;
+    hostEntry["id"] = 0;
+    hostEntry["name"] = m_localName;
+    hostEntry["car"] = 0;
+    hostEntry["ready"] = true;
+    rosterArr.append(hostEntry);
+
+    for (auto it = m_peers.begin(); it != m_peers.end(); ++it) {
+        if (it.key() == assignedId) continue;
+        QJsonObject pe;
+        pe["id"] = it.key();
+        pe["name"] = it.value().name;
+        pe["car"] = it.value().carModel;
+        pe["ready"] = it.value().isReady;
+        rosterArr.append(pe);
+    }
+    welcome["roster"] = rosterArr;
+
+    sendTcpJson(welcome, newSocket);
 
     m_pingTimer->start(1500);
-    emit peerConnected(m_remotePeer.name);
-    emit statusMessage(QString("Rival racer joined from %1!").arg(peerAddr.toString()));
 }
 
 void NetworkManager::onTcpDisconnected() {
-    emit statusMessage("Rival racer disconnected.");
-    emit peerDisconnected();
+    QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender());
+    if (!socket) return;
+
     if (m_role == NET_ROLE_CLIENT) {
+        emit statusMessage("Disconnected from host room.");
         disconnectSession();
-    } else {
-        if (m_tcpSocket) {
-            m_tcpSocket->deleteLater();
-            m_tcpSocket = nullptr;
-        }
-        m_remotePeer.isReady = false;
-        m_state = MP_STATE_LOBBY;
+        return;
     }
+
+    // Find which client disconnected
+    int disconnectedId = -1;
+    QString disconnectedName;
+    for (auto it = m_peers.begin(); it != m_peers.end(); ++it) {
+        if (it.value().tcpSocket == socket) {
+            disconnectedId = it.key();
+            disconnectedName = it.value().name;
+            break;
+        }
+    }
+
+    if (disconnectedId != -1) {
+        m_peers.remove(disconnectedId);
+        m_peerTargets.remove(disconnectedId);
+
+        // Notify other clients
+        QJsonObject leftObj;
+        leftObj["type"] = "PEER_LEFT";
+        leftObj["id"] = disconnectedId;
+        leftObj["name"] = disconnectedName;
+        broadcastTcpJson(leftObj);
+
+        emit peerLeft(disconnectedId, disconnectedName);
+        emit statusMessage(QString("Pilot %1 left the room.").arg(disconnectedName));
+    }
+
+    socket->deleteLater();
 }
 
-void NetworkManager::sendTcpJson(const QJsonObject& json) {
-    if (!m_tcpSocket || m_tcpSocket->state() != QAbstractSocket::ConnectedState) return;
+void NetworkManager::sendTcpJson(const QJsonObject& json, QTcpSocket* dest) {
+    if (!dest) dest = m_clientTcpSocket;
+    if (!dest || dest->state() != QAbstractSocket::ConnectedState) return;
     QByteArray data = QJsonDocument(json).toJson(QJsonDocument::Compact) + "\n";
-    m_tcpSocket->write(data);
+    dest->write(data);
+}
+
+void NetworkManager::broadcastTcpJson(const QJsonObject& json, QTcpSocket* exclude) {
+    if (m_role != NET_ROLE_HOST) return;
+    QByteArray data = QJsonDocument(json).toJson(QJsonDocument::Compact) + "\n";
+    for (auto& peer : m_peers) {
+        if (peer.tcpSocket && peer.tcpSocket != exclude && peer.tcpSocket->state() == QAbstractSocket::ConnectedState) {
+            peer.tcpSocket->write(data);
+        }
+    }
 }
 
 void NetworkManager::onTcpReadyRead() {
-    if (!m_tcpSocket) return;
-    while (m_tcpSocket->canReadLine()) {
-        QByteArray line = m_tcpSocket->readLine().trimmed();
+    QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender());
+    if (!socket) socket = m_clientTcpSocket;
+    if (!socket) return;
+
+    while (socket->canReadLine()) {
+        QByteArray line = socket->readLine().trimmed();
         if (line.isEmpty()) continue;
         QJsonDocument doc = QJsonDocument::fromJson(line);
         if (doc.isObject()) {
-            processTcpMessage(doc.object());
+            processTcpMessage(doc.object(), socket);
         }
     }
 }
 
-void NetworkManager::processTcpMessage(const QJsonObject& json) {
+void NetworkManager::processTcpMessage(const QJsonObject& json, QTcpSocket* senderSocket) {
     QString type = json["type"].toString();
 
-    if (type == "HELLO") {
-        m_remotePeer.name = json["name"].toString("Rival");
-        m_peerUdpPort = (quint16)json["udpPort"].toInt(7780);
-        emit peerConnected(m_remotePeer.name);
-    } else if (type == "WELCOME") {
-        m_remotePeer.name = json["hostName"].toString("Host Driver");
-        m_peerUdpPort = (quint16)json["udpPort"].toInt(7778);
-        emit peerConnected(m_remotePeer.name);
+    if (type == "HELLO" && m_role == NET_ROLE_HOST) {
+        // Find which peer sent HELLO
+        for (auto it = m_peers.begin(); it != m_peers.end(); ++it) {
+            if (it.value().tcpSocket == senderSocket) {
+                int id = it.key();
+                it.value().name = json["name"].toString(QString("Racer %1").arg(id + 1));
+                it.value().udpPort = (quint16)json["udpPort"].toInt(7780);
+
+                // Notify all other clients of this new peer
+                QJsonObject joinedObj;
+                joinedObj["type"] = "PEER_JOINED";
+                joinedObj["id"] = id;
+                joinedObj["name"] = it.value().name;
+                joinedObj["car"] = it.value().carModel;
+                broadcastTcpJson(joinedObj, senderSocket);
+
+                emit peerJoined(id, it.value().name);
+                emit statusMessage(QString("Pilot %1 entered the room!").arg(it.value().name));
+                break;
+            }
+        }
+    } else if (type == "WELCOME" && m_role == NET_ROLE_CLIENT) {
+        m_myPeerId = json["assignedId"].toInt(1);
+        m_hostUdpPort = (quint16)json["udpPort"].toInt(7778);
+
+        // Host is Peer 0
+        RemotePeerInfo hostInfo;
+        hostInfo.peerId = 0;
+        hostInfo.name = json["hostName"].toString("Host Pilot");
+        hostInfo.udpAddress = m_clientTcpSocket->peerAddress();
+        hostInfo.udpPort = m_hostUdpPort;
+        m_peers[0] = hostInfo;
+
+        // Import existing room roster
+        QJsonArray rosterArr = json["roster"].toArray();
+        for (int i = 0; i < rosterArr.size(); ++i) {
+            QJsonObject pe = rosterArr[i].toObject();
+            int pid = pe["id"].toInt();
+            if (pid == m_myPeerId) continue;
+            RemotePeerInfo pInfo;
+            pInfo.peerId = pid;
+            pInfo.name = pe["name"].toString();
+            pInfo.carModel = pe["car"].toInt();
+            pInfo.isReady = pe["ready"].toBool();
+            pInfo.udpAddress = m_clientTcpSocket->peerAddress();
+            pInfo.udpPort = m_hostUdpPort; // Client communicates via Host relay
+            m_peers[pid] = pInfo;
+        }
+
+        emit peerJoined(0, hostInfo.name);
+        emit statusMessage(QString("Joined room as Player %1!").arg(m_myPeerId + 1));
+    } else if (type == "PEER_JOINED") {
+        int id = json["id"].toInt();
+        QString name = json["name"].toString();
+        RemotePeerInfo info;
+        info.peerId = id;
+        info.name = name;
+        info.carModel = json["car"].toInt();
+        info.udpAddress = m_hostUdpAddress;
+        info.udpPort = m_hostUdpPort;
+        m_peers[id] = info;
+
+        emit peerJoined(id, name);
+        emit statusMessage(QString("Racer %1 joined the lobby!").arg(name));
+    } else if (type == "PEER_LEFT") {
+        int id = json["id"].toInt();
+        QString name = json["name"].toString();
+        m_peers.remove(id);
+        m_peerTargets.remove(id);
+        emit peerLeft(id, name);
     } else if (type == "READY") {
-        m_remotePeer.isReady = json["ready"].toBool();
-        emit peerReadyChanged(m_remotePeer.isReady);
+        int id = json["id"].toInt();
+        bool ready = json["ready"].toBool();
+        if (m_peers.contains(id)) {
+            m_peers[id].isReady = ready;
+            emit peerReadyChanged(id, ready);
+        }
+        if (m_role == NET_ROLE_HOST) {
+            broadcastTcpJson(json, senderSocket);
+        }
     } else if (type == "TRACK_SYNC") {
         int theme = json["theme"].toInt();
         int tod = json["tod"].toInt();
         emit trackSyncRequested(theme, tod);
+        if (m_role == NET_ROLE_HOST) {
+            broadcastTcpJson(json, senderSocket);
+        }
     } else if (type == "CAR_SYNC") {
+        int id = json["id"].toInt();
         int car = json["car"].toInt();
-        m_remotePeer.carModel = car;
-        emit carSyncRequested(car);
+        if (m_peers.contains(id)) {
+            m_peers[id].carModel = car;
+            emit carSyncRequested(id, car);
+        }
+        if (m_role == NET_ROLE_HOST) {
+            broadcastTcpJson(json, senderSocket);
+        }
     } else if (type == "COUNTDOWN_START") {
-        qreal duration = json["duration"].toDouble(3.0);
+        qreal duration = json["duration"].toDouble(3.5);
         m_countdownTimer = duration;
         m_state = MP_STATE_COUNTDOWN;
         emit countdownStarted(duration);
     } else if (type == "RACE_RESTART") {
         m_state = MP_STATE_LOBBY;
-        m_remotePeer.isReady = false;
+        for (auto& p : m_peers) p.isReady = false;
         emit raceRestarted();
     } else if (type == "CHAT") {
         emit chatMessageReceived(json["sender"].toString(), json["text"].toString());
+        if (m_role == NET_ROLE_HOST) {
+            broadcastTcpJson(json, senderSocket);
+        }
     } else if (type == "PING") {
         QJsonObject pong;
         pong["type"] = "PONG";
+        pong["id"] = json["id"].toInt();
         pong["t"] = json["t"].toDouble();
-        sendTcpJson(pong);
+        sendTcpJson(pong, senderSocket);
     } else if (type == "PONG") {
+        int id = json["id"].toInt();
         qint64 sendTime = (qint64)json["t"].toDouble();
-        m_remotePeer.pingMs = qBound(1LL, m_uptime.elapsed() - sendTime, 999LL);
+        if (m_peers.contains(id)) {
+            m_peers[id].pingMs = qBound(1LL, m_uptime.elapsed() - sendTime, 999LL);
+        }
     }
 }
 
 void NetworkManager::onPingTimer() {
     if (isConnected()) {
-        QJsonObject ping;
-        ping["type"] = "PING";
-        ping["t"] = (double)m_uptime.elapsed();
-        sendTcpJson(ping);
+        if (m_role == NET_ROLE_CLIENT && m_clientTcpSocket) {
+            QJsonObject ping;
+            ping["type"] = "PING";
+            ping["id"] = m_myPeerId;
+            ping["t"] = (double)m_uptime.elapsed();
+            sendTcpJson(ping, m_clientTcpSocket);
+        } else if (m_role == NET_ROLE_HOST) {
+            for (auto& peer : m_peers) {
+                if (peer.tcpSocket) {
+                    QJsonObject ping;
+                    ping["type"] = "PING";
+                    ping["id"] = 0;
+                    ping["t"] = (double)m_uptime.elapsed();
+                    sendTcpJson(ping, peer.tcpSocket);
+                }
+            }
+        }
     }
 }
 
 void NetworkManager::onBeaconTimer() {
-    // Clean up stale discovered hosts older than 4 seconds
     qint64 now = m_uptime.elapsed();
     for (int i = m_discoveredHosts.size() - 1; i >= 0; --i) {
         if (now - m_discoveredHosts[i].lastSeenMs > 4000) {
@@ -319,7 +516,6 @@ void NetworkManager::onBeaconTimer() {
         }
     }
 
-    // If hosting, broadcast LAN beacon
     if (m_role == NET_ROLE_HOST && m_state == MP_STATE_LOBBY) {
         sendBeaconBroadcast();
     }
@@ -331,6 +527,8 @@ void NetworkManager::sendBeaconBroadcast() {
     beacon["type"] = "APEX_BEACON";
     beacon["name"] = m_localName;
     beacon["port"] = m_localTcpPort;
+    beacon["players"] = getConnectedPlayerCount();
+    beacon["max"] = 8;
     beacon["car"] = 0;
     QByteArray data = QJsonDocument(beacon).toJson(QJsonDocument::Compact);
     m_beaconSocket->writeDatagram(data, QHostAddress::Broadcast, BEACON_PORT);
@@ -339,8 +537,13 @@ void NetworkManager::sendBeaconBroadcast() {
 void NetworkManager::setReady(bool ready) {
     QJsonObject obj;
     obj["type"] = "READY";
+    obj["id"] = m_myPeerId;
     obj["ready"] = ready;
-    sendTcpJson(obj);
+    if (m_role == NET_ROLE_CLIENT) {
+        sendTcpJson(obj, m_clientTcpSocket);
+    } else if (m_role == NET_ROLE_HOST) {
+        broadcastTcpJson(obj);
+    }
 }
 
 void NetworkManager::notifyTrackChange(int trackTheme, int timeOfDay) {
@@ -349,14 +552,19 @@ void NetworkManager::notifyTrackChange(int trackTheme, int timeOfDay) {
     obj["type"] = "TRACK_SYNC";
     obj["theme"] = trackTheme;
     obj["tod"] = timeOfDay;
-    sendTcpJson(obj);
+    broadcastTcpJson(obj);
 }
 
 void NetworkManager::notifyCarChange(int carModel) {
     QJsonObject obj;
     obj["type"] = "CAR_SYNC";
+    obj["id"] = m_myPeerId;
     obj["car"] = carModel;
-    sendTcpJson(obj);
+    if (m_role == NET_ROLE_CLIENT) {
+        sendTcpJson(obj, m_clientTcpSocket);
+    } else if (m_role == NET_ROLE_HOST) {
+        broadcastTcpJson(obj);
+    }
 }
 
 void NetworkManager::startRaceCountdown() {
@@ -367,33 +575,43 @@ void NetworkManager::startRaceCountdown() {
     QJsonObject obj;
     obj["type"] = "COUNTDOWN_START";
     obj["duration"] = 3.5;
-    sendTcpJson(obj);
+    broadcastTcpJson(obj);
 
     emit countdownStarted(3.5);
 }
 
 void NetworkManager::notifyRaceRestart() {
     m_state = MP_STATE_LOBBY;
-    m_remotePeer.isReady = false;
+    for (auto& p : m_peers) p.isReady = false;
     QJsonObject obj;
     obj["type"] = "RACE_RESTART";
-    sendTcpJson(obj);
+    if (m_role == NET_ROLE_HOST) {
+        broadcastTcpJson(obj);
+    } else {
+        sendTcpJson(obj, m_clientTcpSocket);
+    }
     emit raceRestarted();
 }
 
 void NetworkManager::sendQuickChat(const QString& text) {
     QJsonObject obj;
     obj["type"] = "CHAT";
-    obj["sender"] = m_localName;
+    obj["sender"] = QString("[P%1] %2").arg(m_myPeerId + 1).arg(m_localName);
     obj["text"] = text;
-    sendTcpJson(obj);
+    if (m_role == NET_ROLE_CLIENT) {
+        sendTcpJson(obj, m_clientTcpSocket);
+    } else if (m_role == NET_ROLE_HOST) {
+        broadcastTcpJson(obj);
+        emit chatMessageReceived(obj["sender"].toString(), text);
+    }
 }
 
 void NetworkManager::sendTelemetry(const PlayerCar& player) {
-    if (!m_udpSocket || !isConnected() || m_remotePeer.udpAddress.isNull()) return;
+    if (!m_udpSocket || !isConnected()) return;
 
     TelemetryPacket pkt;
     pkt.magic = APEX_MAGIC;
+    pkt.peerId = (uint8_t)qMax(0, m_myPeerId);
     pkt.sequence = ++m_packetSequence;
     pkt.timestampMs = (uint32_t)(m_uptime.elapsed() & 0xFFFFFFFF);
     pkt.worldZ = (float)player.worldZ;
@@ -415,7 +633,17 @@ void NetworkManager::sendTelemetry(const PlayerCar& player) {
     pkt.finishTime = (float)player.finishTime;
     pkt.health = (float)player.health;
 
-    m_udpSocket->writeDatagram((const char*)&pkt, sizeof(pkt), m_remotePeer.udpAddress, m_peerUdpPort);
+    if (m_role == NET_ROLE_CLIENT) {
+        // Send to host
+        m_udpSocket->writeDatagram((const char*)&pkt, sizeof(pkt), m_hostUdpAddress, m_hostUdpPort);
+    } else if (m_role == NET_ROLE_HOST) {
+        // Broadcast to all connected clients
+        for (const auto& peer : m_peers) {
+            if (!peer.udpAddress.isNull()) {
+                m_udpSocket->writeDatagram((const char*)&pkt, sizeof(pkt), peer.udpAddress, peer.udpPort);
+            }
+        }
+    }
 }
 
 void NetworkManager::onUdpReadyRead() {
@@ -426,23 +654,39 @@ void NetworkManager::onUdpReadyRead() {
         quint16 senderPort;
         qint64 bytes = m_udpSocket->readDatagram((char*)&pkt, sizeof(pkt), &sender, &senderPort);
         if (bytes == sizeof(TelemetryPacket) && pkt.magic == APEX_MAGIC) {
+            int pid = (int)pkt.peerId;
+
+            // Host auto-learns client UDP port if received
+            if (m_role == NET_ROLE_HOST && m_peers.contains(pid)) {
+                m_peers[pid].udpAddress = sender;
+                m_peers[pid].udpPort = senderPort;
+
+                // Relay client packet to all OTHER clients!
+                for (const auto& peer : m_peers) {
+                    if (peer.peerId != pid && !peer.udpAddress.isNull()) {
+                        m_udpSocket->writeDatagram((const char*)&pkt, sizeof(pkt), peer.udpAddress, peer.udpPort);
+                    }
+                }
+            }
+
             // Update peer target coordinates
-            m_interp.targetZ = pkt.worldZ;
-            m_interp.targetX = pkt.x;
-            m_interp.targetSpeed = pkt.speed;
-            m_interp.targetSteer = pkt.steerAngle;
-            m_interp.targetPitchG = pkt.pitchG;
-            m_interp.targetRollG = pkt.rollG;
-            m_interp.targetSkid = pkt.skidAngle;
-            m_interp.carModel = pkt.carModel;
-            m_interp.isBraking = (pkt.flags & 0x01) != 0;
-            m_interp.isCrashing = (pkt.flags & 0x02) != 0;
-            m_interp.hazardLights = (pkt.flags & 0x04) != 0;
-            m_interp.horn = (pkt.flags & 0x08) != 0;
-            m_interp.hasFinished = (pkt.flags & 0x10) != 0;
-            m_interp.finishTime = pkt.finishTime;
-            m_interp.health = pkt.health;
-            m_interp.lastPacketTimeMs = m_uptime.elapsed();
+            PeerInterpTarget& tgt = m_peerTargets[pid];
+            tgt.targetZ = pkt.worldZ;
+            tgt.targetX = pkt.x;
+            tgt.targetSpeed = pkt.speed;
+            tgt.targetSteer = pkt.steerAngle;
+            tgt.targetPitchG = pkt.pitchG;
+            tgt.targetRollG = pkt.rollG;
+            tgt.targetSkid = pkt.skidAngle;
+            tgt.carModel = pkt.carModel;
+            tgt.isBraking = (pkt.flags & 0x01) != 0;
+            tgt.isCrashing = (pkt.flags & 0x02) != 0;
+            tgt.hazardLights = (pkt.flags & 0x04) != 0;
+            tgt.horn = (pkt.flags & 0x08) != 0;
+            tgt.hasFinished = (pkt.flags & 0x10) != 0;
+            tgt.finishTime = pkt.finishTime;
+            tgt.health = pkt.health;
+            tgt.lastPacketTimeMs = m_uptime.elapsed();
         }
     }
 }
@@ -458,37 +702,44 @@ void NetworkManager::update(qreal dt, GameEngine& engine) {
         }
     }
 
-    // 2. Synchronize Remote Rival Car into GameEngine
-    if (isConnected() && m_interp.lastPacketTimeMs > 0) {
-        // Dead Reckoning: extrapolate forward based on remote player's current speed
-        qreal dtSincePacket = (m_uptime.elapsed() - m_interp.lastPacketTimeMs) / 1000.0;
-        if (dtSincePacket < 0.6) {
-            qreal extrapolatedZ = m_interp.targetZ + (m_interp.targetSpeed / 3.6) * dtSincePacket * 62.0;
+    // 2. Synchronize all connected Remote Player Cars into GameEngine
+    if (isConnected()) {
+        for (auto it = m_peers.begin(); it != m_peers.end(); ++it) {
+            int pid = it.key();
+            if (pid == m_myPeerId) continue;
 
-            NPCCar remoteCar;
-            remoteCar.id = 9999; // Dedicated ID for remote multiplayer peer
-            remoteCar.isRemotePlayer = true;
-            remoteCar.racerName = m_remotePeer.name;
-            remoteCar.worldZ = extrapolatedZ;
-            remoteCar.x = m_interp.targetX;
-            remoteCar.targetX = m_interp.targetX;
-            remoteCar.speed = m_interp.targetSpeed;
-            remoteCar.maxSpeed = 200.0;
-            remoteCar.isBraking = m_interp.isBraking;
-            remoteCar.isCrashing = m_interp.isCrashing;
-            remoteCar.hazardLights = m_interp.hazardLights;
-            remoteCar.hasFinished = m_interp.hasFinished;
-            remoteCar.finishTime = m_interp.finishTime;
+            if (m_peerTargets.contains(pid)) {
+                const PeerInterpTarget& tgt = m_peerTargets[pid];
+                qreal dtSincePacket = (m_uptime.elapsed() - tgt.lastPacketTimeMs) / 1000.0;
+                if (dtSincePacket < 0.8) {
+                    // Dead reckoning extrapolation forward
+                    qreal extrapolatedZ = tgt.targetZ + (tgt.targetSpeed / 3.6) * dtSincePacket * 62.0;
 
-            // Map selectedCar to vehicle model type
-            switch (m_interp.carModel) {
-                case 1: remoteCar.type = VEHICLE_SPORTS_RED; break;
-                case 2: remoteCar.type = VEHICLE_COMPACT_BLUE; break;
-                case 3: remoteCar.type = VEHICLE_SUV_BLACK; break;
-                default: remoteCar.type = VEHICLE_SEDAN_SILVER; break;
+                    NPCCar remoteCar;
+                    remoteCar.id = 9000 + pid;
+                    remoteCar.isRemotePlayer = true;
+                    remoteCar.racerName = it.value().name;
+                    remoteCar.worldZ = extrapolatedZ;
+                    remoteCar.x = tgt.targetX;
+                    remoteCar.targetX = tgt.targetX;
+                    remoteCar.speed = tgt.targetSpeed;
+                    remoteCar.maxSpeed = 200.0;
+                    remoteCar.isBraking = tgt.isBraking;
+                    remoteCar.isCrashing = tgt.isCrashing;
+                    remoteCar.hazardLights = tgt.hazardLights;
+                    remoteCar.hasFinished = tgt.hasFinished;
+                    remoteCar.finishTime = tgt.finishTime;
+
+                    switch (tgt.carModel) {
+                        case 1: remoteCar.type = VEHICLE_SPORTS_RED; break;
+                        case 2: remoteCar.type = VEHICLE_COMPACT_BLUE; break;
+                        case 3: remoteCar.type = VEHICLE_SUV_BLACK; break;
+                        default: remoteCar.type = VEHICLE_SEDAN_SILVER; break;
+                    }
+
+                    engine.setRemotePlayerCar(pid, remoteCar);
+                }
             }
-
-            engine.setRemotePlayerCar(remoteCar);
         }
     }
 }

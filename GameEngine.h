@@ -240,11 +240,12 @@ public:
     QVector<RaceStandingEntry> getRaceStandings() const;
     void spawnCrashSparks(qreal z, qreal x, int count, bool isHeadOn, qreal severity);
 
-    // Multiplayer Remote Player integration
-    void setRemotePlayerCar(const NPCCar& remoteCar);
-    bool hasRemotePlayer() const { return m_hasRemotePlayer; }
-    const NPCCar& getRemotePlayerCar() const { return m_remoteCar; }
-    void clearRemotePlayer() { m_hasRemotePlayer = false; }
+    // Multiplayer Remote Player integration (Supports up to 8 racers)
+    void setRemotePlayerCar(int peerId, const NPCCar& remoteCar);
+    void removeRemotePlayer(int peerId);
+    void clearAllRemotePlayers();
+    bool hasRemotePlayer() const { return !m_remoteCars.isEmpty(); }
+    const QMap<int, NPCCar>& getRemotePlayerCars() const { return m_remoteCars; }
 
     // Infotainment controls
     const InfotainmentState& getInfotainment() const { return m_infoState; }
@@ -314,8 +315,7 @@ private:
     int m_nextNpcId = 1;
     GameDifficulty m_difficulty = DIFFICULTY_NORMAL;
 
-    bool m_hasRemotePlayer = false;
-    NPCCar m_remoteCar;
+    QMap<int, NPCCar> m_remoteCars;
 };
 
 #endif // GAMEENGINE_H
