@@ -38,8 +38,10 @@ NetworkManager::NetworkManager() {
                 QString hostName = obj["name"].toString();
                 quint16 port = (quint16)obj["port"].toInt(7777);
 
-                // Do not discover ourselves if broadcasting
-                if (m_role == NET_ROLE_HOST && senderAddr == QHostAddress::LocalHost) continue;
+                // Do not discover ourselves: ignore our own name, local loopback, or if we are the host
+                if (hostName == m_localName) continue;
+                if (m_role == NET_ROLE_HOST) continue;
+                if (senderAddr == QHostAddress::LocalHost || QNetworkInterface::allAddresses().contains(senderAddr)) continue;
 
                 bool found = false;
                 qint64 now = m_uptime.elapsed();
@@ -120,6 +122,7 @@ bool NetworkManager::startHost(quint16 tcpPort, quint16 udpPort) {
     m_role = NET_ROLE_HOST;
     m_state = MP_STATE_LOBBY;
     m_remotePeer.isReady = false;
+    m_discoveredHosts.clear();
 
     emit statusMessage(QString("Hosting race on %1:%2 — Waiting for racer...").arg(getLocalIpAddress()).arg(m_localTcpPort));
     return true;

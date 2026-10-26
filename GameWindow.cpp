@@ -411,6 +411,9 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
                 return;
             }
             if (m_joinLocalBtn.contains(pos)) {
+                if (net.isHost()) {
+                    return; // Already hosting, waiting for peer
+                }
                 const auto& hosts = net.getDiscoveredHosts();
                 if (!hosts.isEmpty()) {
                     net.connectToHost(hosts.first().address.toString(), hosts.first().port, 7780);
@@ -849,17 +852,22 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         p.drawText(paneX + cardW + 14 + 14, cardY + 26, "🔍 2. QUICK-JOIN LAN");
         p.setFont(QFont("Arial", 7, QFont::Normal));
         p.setPen(QColor(150, 170, 195));
-        QString joinDesc = hasDiscovered
-            ? QString("FOUND: %1 on %2:%3!").arg(hosts.first().hostName).arg(hosts.first().address.toString()).arg(hosts.first().port)
-            : "Auto-scanning Wi-Fi broadcast for available games... (Click to join)";
+        QString joinDesc = isHostActive
+            ? "You are currently HOSTING. Tell Player 2 to click 'QUICK-JOIN' on their PC!"
+            : (hasDiscovered
+                ? QString("FOUND: %1 on %2:%3!").arg(hosts.first().hostName).arg(hosts.first().address.toString()).arg(hosts.first().port)
+                : "Auto-scanning Wi-Fi broadcast for available games... (Click to join)");
         p.drawText(QRect(paneX + cardW + 14 + 14, cardY + 36, cardW - 28, 42), Qt::AlignLeft | Qt::TextWordWrap, joinDesc);
         QRect jPill(paneX + cardW + 14 + 14, cardY + cardH - 32, cardW - 28, 22);
-        p.setBrush(hasDiscovered ? QColor(255, 205, 55, 45) : QColor(25, 36, 52));
+        p.setBrush((hasDiscovered && !isHostActive) ? QColor(255, 205, 55, 45) : QColor(25, 36, 52));
         p.setPen(Qt::NoPen);
         p.drawRoundedRect(jPill, 4, 4);
         p.setFont(QFont("Arial", 7, QFont::Bold));
-        p.setPen(hasDiscovered ? QColor(255, 205, 55) : QColor(180, 200, 225));
-        p.drawText(jPill, Qt::AlignCenter, isClientActive ? "CONNECTED ✓" : (hasDiscovered ? "ONE-CLICK JOIN ✓" : "SCAN & CONNECT"));
+        p.setPen((hasDiscovered && !isHostActive) ? QColor(255, 205, 55) : QColor(180, 200, 225));
+        QString pillText = isHostActive
+            ? "CURRENTLY HOSTING"
+            : (isClientActive ? "CONNECTED ✓" : (hasDiscovered ? "ONE-CLICK JOIN ✓" : "SCAN & CONNECT"));
+        p.drawText(jPill, Qt::AlignCenter, pillText);
 
         // Mode 3: Localhost Loopback (127.0.0.1)
         m_joinDirectBtn = QRect(paneX + 2 * (cardW + 14), cardY, cardW, cardH);
