@@ -8,6 +8,7 @@
 #include "GameEngine.h"
 #include "RasterRenderer.h"
 #include "AudioSynthesizer.h"
+#include "NetworkManager.h"
 
 class GameWindow : public QWidget {
     Q_OBJECT
@@ -59,6 +60,16 @@ private:
     QRect m_resumeBtn;
     QRect m_repairBtn;
     QRect m_lightsBtn;
+
+    bool m_showMultiplayerTab = false;
+    QRect m_soloTabBtn;
+    QRect m_mpTabBtn;
+    QRect m_hostBtn;
+    QRect m_joinLocalBtn;
+    QRect m_joinDirectBtn;
+    QRect m_readyBtn;
+    QRect m_startMpBtn;
+    QRect m_disconnectBtn;
 };
 
 #endif // GAMEWINDOW_H

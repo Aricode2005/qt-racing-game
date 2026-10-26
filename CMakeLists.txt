@@ -10,7 +10,7 @@ set(CMAKE_AUTOUIC ON)
 
 # set(CMAKE_PREFIX_PATH "/Users/mukutchatterjee/Qt/6.11.1/macos")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Network)
 
 set(PROJECT_SOURCES
     main.cpp
@@ -26,6 +26,8 @@ set(PROJECT_SOURCES
     RasterRenderer.cpp
     AudioSynthesizer.h
     AudioSynthesizer.cpp
+    NetworkManager.h
+    NetworkManager.cpp
 )
 
 add_executable(ApexVelocity ${PROJECT_SOURCES})
@@ -35,6 +37,7 @@ target_link_libraries(ApexVelocity PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::Multimedia
+    Qt6::Network
 )
 
 if(MSVC)
@@ -57,6 +60,8 @@ add_executable(capture_screenshots
     RasterRenderer.cpp
     AudioSynthesizer.h
     AudioSynthesizer.cpp
+    NetworkManager.h
+    NetworkManager.cpp
 )
 
 target_link_libraries(capture_screenshots PRIVATE
@@ -64,5 +69,6 @@ target_link_libraries(capture_screenshots PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::Multimedia
+    Qt6::Network
 )
 

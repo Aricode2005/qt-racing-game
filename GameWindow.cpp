@@ -25,6 +25,50 @@ GameWindow::GameWindow(QWidget *parent)
         m_audio.playCrash();
     });
 
+    // Multiplayer Network Signals
+    NetworkManager& net = NetworkManager::instance();
+    connect(&net, &NetworkManager::peerJoined, this, [this](int peerId, const QString& peerName) {
+        m_engine.getPlayerMutable().lastAnnouncement = QString("🔥 PILOT [P%1] %2 JOINED ROOM!").arg(peerId + 1).arg(peerName);
+        m_engine.getPlayerMutable().announcementTimer = 3.5;
+        update();
+    });
+    connect(&net, &NetworkManager::peerLeft, this, [this](int peerId, const QString& peerName) {
+        m_engine.getPlayerMutable().lastAnnouncement = QString("⚠️ PILOT [P%1] %2 LEFT ROOM").arg(peerId + 1).arg(peerName);
+        m_engine.getPlayerMutable().announcementTimer = 3.0;
+        m_engine.removeRemotePlayer(peerId);
+        update();
+    });
+    connect(&net, &NetworkManager::trackSyncRequested, this, [this](int theme, int tod) {
+        selectTrack(static_cast<TrackTheme>(theme));
+        m_engine.setTimeOfDay(static_cast<TimeOfDay>(tod));
+        update();
+    });
+    connect(&net, &NetworkManager::countdownStarted, this, [this](qreal) {
+        m_showMainMenu = false;
+        m_engine.resetPlayer();
+        update();
+    });
+    connect(&net, &NetworkManager::raceStarted, this, [this]() {
+        m_showMainMenu = false;
+        m_engine.getPlayerMutable().lastAnnouncement = "🏁 GREEN LIGHT! GO GO GO!";
+        m_engine.getPlayerMutable().announcementTimer = 2.0;
+        update();
+    });
+    connect(&net, &NetworkManager::raceRestarted, this, [this]() {
+        m_engine.resetPlayer();
+        update();
+    });
+    connect(&net, &NetworkManager::chatMessageReceived, this, [this](const QString& sender, const QString& msg) {
+        m_engine.getPlayerMutable().lastAnnouncement = QString("💬 %1: %2").arg(sender).arg(msg);
+        m_engine.getPlayerMutable().announcementTimer = 3.5;
+        update();
+    });
+    connect(&net, &NetworkManager::statusMessage, this, [this](const QString& msg, bool isError) {
+        m_engine.getPlayerMutable().lastAnnouncement = (isError ? "⚠️ " : "ℹ️ ") + msg;
+        m_engine.getPlayerMutable().announcementTimer = 3.0;
+        update();
+    });
+
     // High Refresh Rate Smooth Game Loop (up to 120 FPS capable)
     connect(&m_loopTimer, &QTimer::timeout, this, &GameWindow::onGameLoop);
     m_frameTimer.start();
@@ -42,6 +86,12 @@ void GameWindow::onGameLoop() {
     m_smoothDt = m_smoothDt * 0.35 + qBound(0.004, rawDt, 0.040) * 0.65;
     qreal dt = m_smoothDt;
     m_lastDt = dt;
+
+    // Network Telemetry & Sync Update
+    NetworkManager::instance().update(dt, m_engine);
+    if (NetworkManager::instance().isConnected()) {
+        NetworkManager::instance().sendTelemetry(m_engine.getPlayer());
+    }
 
     if (!m_showMainMenu) {
         m_engine.update(dt);
@@ -180,6 +230,20 @@ void GameWindow::keyPressEvent(QKeyEvent *event) {
         case Qt::Key_T:
         case Qt::Key_Escape:
             m_showMainMenu = !m_showMainMenu;
+            break;
+        case Qt::Key_O:
+            m_showMultiplayerTab = true;
+            m_showMainMenu = true;
+            update();
+            break;
+        case Qt::Key_F5:
+            NetworkManager::instance().sendQuickChat("Nice driving!");
+            break;
+        case Qt::Key_F6:
+            NetworkManager::instance().sendQuickChat("Eat my dust!");
+            break;
+        case Qt::Key_F7:
+            NetworkManager::instance().sendQuickChat("See you at the finish line!");
             break;
         case Qt::Key_C:
         case Qt::Key_V:
@@ -325,6 +389,72 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
     QPoint pos = event->pos();
 
     if (m_showMainMenu) {
+        // Tab switching: [ SOLO CIRCUITS ] vs [ MULTIPLAYER LIVE ARENA ]
+        if (m_soloTabBtn.contains(pos)) {
+            m_showMultiplayerTab = false;
+            update();
+            return;
+        }
+        if (m_mpTabBtn.contains(pos)) {
+            m_showMultiplayerTab = true;
+            update();
+            return;
+        }
+
+        if (m_showMultiplayerTab) {
+            NetworkManager& net = NetworkManager::instance();
+            if (m_hostBtn.contains(pos)) {
+                if (!net.isHost()) {
+                    net.startHost(7777, 7778);
+                }
+                update();
+                return;
+            }
+            if (m_joinLocalBtn.contains(pos)) {
+                if (net.isHost()) {
+                    return; // Already hosting, waiting for peer
+                }
+                const auto& hosts = net.getDiscoveredHosts();
+                if (!hosts.isEmpty()) {
+                    net.connectToHost(hosts.first().address.toString(), hosts.first().port, 7780);
+                } else {
+                    net.connectToHost("127.0.0.1", 7777, 7780);
+                }
+                update();
+                return;
+            }
+            if (m_joinDirectBtn.contains(pos)) {
+                net.connectToHost("127.0.0.1", 7777, 7780);
+                update();
+                return;
+            }
+            if (m_readyBtn.contains(pos)) {
+                static bool s_ready = false;
+                s_ready = !s_ready;
+                net.setReady(s_ready);
+                update();
+                return;
+            }
+            if (m_startMpBtn.contains(pos)) {
+                if (net.isHost()) {
+                    net.startRaceCountdown();
+                }
+                update();
+                return;
+            }
+            if (m_disconnectBtn.contains(pos)) {
+                net.disconnectSession();
+                update();
+                return;
+            }
+            if (m_resumeBtn.contains(pos)) {
+                m_showMainMenu = false;
+                update();
+                return;
+            }
+            return;
+        }
+
         // 1. Difficulty Buttons
         for (int i = 0; i < 3; ++i) {
             if (m_diffButtons[i].contains(pos)) {
@@ -628,12 +758,267 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
     QFont titleFont("Arial", 20, QFont::Black);
     p.setFont(titleFont);
     p.setPen(Qt::white);
-    p.drawText(QRect(0, 34, w, 28), Qt::AlignCenter, "RACING EVENT COMMAND CENTER");
+    p.drawText(QRect(0, 32, w, 24), Qt::AlignCenter, "RACING EVENT COMMAND CENTER");
 
-    QFont subFont("Arial", 9, QFont::Normal);
-    p.setFont(subFont);
-    p.setPen(QColor(165, 185, 210));
-    p.drawText(QRect(0, 62, w, 18), Qt::AlignCenter, "Select Difficulty • Choose Track • Set Environment • Press [M] or [ESC] to Race");
+    // Mode Switcher Tabs: [ 🏎️ SOLO CIRCUITS & CAREER ] vs [ 🌐 LIVE 1V1 MULTIPLAYER ARENA ]
+    int tabW = 240;
+    int tabH = 25;
+    m_soloTabBtn = QRect(w / 2 - tabW - 8, 58, tabW, tabH);
+    m_mpTabBtn   = QRect(w / 2 + 8, 58, tabW, tabH);
+
+    // Solo Tab
+    p.setBrush(!m_showMultiplayerTab ? QColor(0, 220, 255, 35) : QColor(14, 20, 30, 180));
+    p.setPen(QPen(!m_showMultiplayerTab ? QColor(0, 230, 255) : QColor(45, 55, 75), !m_showMultiplayerTab ? 2 : 1));
+    p.drawRoundedRect(m_soloTabBtn, 5, 5);
+    QFont tabF("Arial", 8, QFont::Bold);
+    p.setFont(tabF);
+    p.setPen(!m_showMultiplayerTab ? QColor(0, 240, 255) : QColor(150, 170, 195));
+    p.drawText(m_soloTabBtn, Qt::AlignCenter, "🏎️ SOLO CIRCUITS & CAREER");
+
+    // MP Tab
+    bool hasPeer = NetworkManager::instance().isConnected();
+    QColor mpAccent = hasPeer ? QColor(45, 240, 110) : QColor(255, 185, 45);
+    p.setBrush(m_showMultiplayerTab ? QColor(mpAccent.red(), mpAccent.green(), mpAccent.blue(), 35) : QColor(14, 20, 30, 180));
+    p.setPen(QPen(m_showMultiplayerTab ? mpAccent : QColor(45, 55, 75), m_showMultiplayerTab ? 2 : 1));
+    p.drawRoundedRect(m_mpTabBtn, 5, 5);
+    p.setPen(m_showMultiplayerTab ? mpAccent : (hasPeer ? QColor(45, 240, 110) : QColor(150, 170, 195)));
+    p.drawText(m_mpTabBtn, Qt::AlignCenter, hasPeer ? "🟢 LIVE 1V1 MULTIPLAYER (CONNECTED)" : "🌐 LIVE 1V1 MULTIPLAYER (KEY O)");
+
+    if (m_showMultiplayerTab) {
+        NetworkManager& net = NetworkManager::instance();
+        int paneW = qMin(960, w - 80);
+        int paneX = (w - paneW) / 2;
+        int paneY = 90;
+
+        // 1. Callsign & Network Identity Header Card
+        QRect idCard(paneX, paneY, paneW, 58);
+        p.setBrush(QColor(12, 17, 26, 230));
+        p.setPen(QPen(QColor(38, 52, 74), 1));
+        p.drawRoundedRect(idCard, 8, 8);
+
+        p.setFont(QFont("Arial", 10, QFont::Bold));
+        p.setPen(QColor(0, 230, 255));
+        p.drawText(paneX + 16, paneY + 24, QString("PILOT CALLSIGN:  %1").arg(net.getLocalPlayerName()));
+
+        p.setFont(QFont("Arial", 8, QFont::Normal));
+        p.setPen(QColor(160, 180, 205));
+        p.drawText(paneX + 16, paneY + 44, QString("SELECTED VEHICLE: %1 (Press F1-F4 to change)").arg(m_engine.getPlayer().carModelName));
+
+        // Network Info on the right
+        p.setFont(QFont("Arial", 9, QFont::Bold));
+        p.setPen(QColor(255, 205, 55));
+        p.drawText(QRect(paneX + paneW - 320, paneY + 8, 305, 22), Qt::AlignRight, QString("📡 LOCAL LAN IP:  %1").arg(net.getLocalIpAddress()));
+        p.setFont(QFont("Arial", 8, QFont::Normal));
+        p.setPen(QColor(140, 160, 185));
+        p.drawText(QRect(paneX + paneW - 320, paneY + 30, 305, 20), Qt::AlignRight, QString("TCP Port: 7777 • UDP Telemetry: 60 Hz"));
+
+        // 2. Action Modes (3 Cards side by side)
+        int cardY = paneY + 70;
+        int cardW = (paneW - 2 * 14) / 3;
+        int cardH = 120;
+
+        // Mode 1: Host LAN Race
+        m_hostBtn = QRect(paneX, cardY, cardW, cardH);
+        bool isHostActive = (net.getRole() == NET_ROLE_HOST);
+        p.setBrush(isHostActive ? QColor(20, 38, 28) : QColor(14, 20, 30));
+        p.setPen(QPen(isHostActive ? QColor(45, 240, 110) : QColor(45, 60, 85), isHostActive ? 2 : 1));
+        p.drawRoundedRect(m_hostBtn, 8, 8);
+        p.setFont(QFont("Arial", 10, QFont::Bold));
+        p.setPen(isHostActive ? QColor(45, 240, 110) : Qt::white);
+        p.drawText(paneX + 14, cardY + 26, "📡 1. HOST LAN RACE");
+        p.setFont(QFont("Arial", 7, QFont::Normal));
+        p.setPen(QColor(150, 170, 195));
+        p.drawText(QRect(paneX + 14, cardY + 36, cardW - 28, 42), Qt::AlignLeft | Qt::TextWordWrap,
+                   "Create a local server on port 7777 and broadcast beacon over your Wi-Fi.");
+        // Host Status pill
+        QRect hPill(paneX + 14, cardY + cardH - 32, cardW - 28, 22);
+        p.setBrush(isHostActive ? QColor(45, 240, 110, 45) : QColor(25, 36, 52));
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(hPill, 4, 4);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(isHostActive ? QColor(45, 240, 110) : QColor(180, 200, 225));
+        p.drawText(hPill, Qt::AlignCenter, isHostActive ? "ACTIVE: LISTENING ✓" : "CLICK TO HOST RACE");
+
+        // Mode 2: Quick-Join Local Race
+        m_joinLocalBtn = QRect(paneX + cardW + 14, cardY, cardW, cardH);
+        const auto& hosts = net.getDiscoveredHosts();
+        bool hasDiscovered = !hosts.isEmpty();
+        bool isClientActive = (net.getRole() == NET_ROLE_CLIENT);
+        p.setBrush(isClientActive ? QColor(20, 38, 52) : QColor(14, 20, 30));
+        p.setPen(QPen(isClientActive ? QColor(0, 230, 255) : (hasDiscovered ? QColor(255, 205, 55) : QColor(45, 60, 85)), (isClientActive || hasDiscovered) ? 2 : 1));
+        p.drawRoundedRect(m_joinLocalBtn, 8, 8);
+        p.setFont(QFont("Arial", 10, QFont::Bold));
+        p.setPen(isClientActive ? QColor(0, 230, 255) : (hasDiscovered ? QColor(255, 205, 55) : Qt::white));
+        p.drawText(paneX + cardW + 14 + 14, cardY + 26, "🔍 2. QUICK-JOIN LAN");
+        p.setFont(QFont("Arial", 7, QFont::Normal));
+        p.setPen(QColor(150, 170, 195));
+        QString joinDesc = isHostActive
+            ? "You are currently HOSTING. Tell Player 2 to click 'QUICK-JOIN' on their PC!"
+            : (hasDiscovered
+                ? QString("FOUND: %1 on %2:%3!").arg(hosts.first().hostName).arg(hosts.first().address.toString()).arg(hosts.first().port)
+                : "Auto-scanning Wi-Fi broadcast for available games... (Click to join)");
+        p.drawText(QRect(paneX + cardW + 14 + 14, cardY + 36, cardW - 28, 42), Qt::AlignLeft | Qt::TextWordWrap, joinDesc);
+        QRect jPill(paneX + cardW + 14 + 14, cardY + cardH - 32, cardW - 28, 22);
+        p.setBrush((hasDiscovered && !isHostActive) ? QColor(255, 205, 55, 45) : QColor(25, 36, 52));
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(jPill, 4, 4);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen((hasDiscovered && !isHostActive) ? QColor(255, 205, 55) : QColor(180, 200, 225));
+        QString pillText = isHostActive
+            ? "CURRENTLY HOSTING"
+            : (isClientActive ? "CONNECTED ✓" : (hasDiscovered ? "ONE-CLICK JOIN ✓" : "SCAN & CONNECT"));
+        p.drawText(jPill, Qt::AlignCenter, pillText);
+
+        // Mode 3: Localhost Loopback (127.0.0.1)
+        m_joinDirectBtn = QRect(paneX + 2 * (cardW + 14), cardY, cardW, cardH);
+        p.setBrush(QColor(14, 20, 30));
+        p.setPen(QPen(QColor(45, 60, 85), 1));
+        p.drawRoundedRect(m_joinDirectBtn, 8, 8);
+        p.setFont(QFont("Arial", 10, QFont::Bold));
+        p.setPen(Qt::white);
+        p.drawText(paneX + 2 * (cardW + 14) + 14, cardY + 26, "💻 3. LOCAL LOOPBACK");
+        p.setFont(QFont("Arial", 7, QFont::Normal));
+        p.setPen(QColor(150, 170, 195));
+        p.drawText(QRect(paneX + 2 * (cardW + 14) + 14, cardY + 36, cardW - 28, 42), Qt::AlignLeft | Qt::TextWordWrap,
+                   "Connect to 127.0.0.1. Open two game windows to test multiplayer on 1 PC!");
+        QRect lPill(paneX + 2 * (cardW + 14) + 14, cardY + cardH - 32, cardW - 28, 22);
+        p.setBrush(QColor(25, 36, 52));
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(lPill, 4, 4);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(180, 200, 225));
+        p.drawText(lPill, Qt::AlignCenter, "CONNECT 127.0.0.1");
+
+        // 3. Matchmaking / Connected Status Panel (Supports up to 8 racers)
+        int lobbyY = cardY + cardH + 12;
+        int lobbyH = 162;
+        QRect lobbyCard(paneX, lobbyY, paneW, lobbyH);
+        p.setBrush(QColor(12, 17, 26, 240));
+        p.setPen(QPen(hasPeer ? QColor(45, 240, 110, 180) : QColor(38, 52, 74), hasPeer ? 2 : 1));
+        p.drawRoundedRect(lobbyCard, 8, 8);
+
+        p.setFont(QFont("Arial", 8, QFont::Bold));
+        p.setPen(QColor(0, 240, 255));
+        int totalConnected = net.getConnectedPlayerCount();
+        p.drawText(paneX + 16, lobbyY + 20, QString("🏁 ROOM ROSTER: %1 / 8 PLAYERS CONNECTED • %2")
+            .arg(totalConnected)
+            .arg(net.isHost() ? "HOSTING SESSION" : QString("CONNECTED AS PLAYER %1").arg(net.getMyPeerId() + 1)));
+
+        p.setFont(QFont("Arial", 8, QFont::Normal));
+        p.setPen(QColor(140, 160, 185));
+        p.drawText(QRect(paneX + paneW - 320, lobbyY + 8, 305, 18), Qt::AlignRight,
+            QString("Avg Ping: %1 ms • 60Hz UDP Relay").arg(net.getAveragePingMs()));
+
+        // 8-Player Slot Grid (2 rows x 4 columns)
+        int slotCols = 4;
+        int slotGap = 8;
+        int slotW = (paneW - 32 - (slotCols - 1) * slotGap) / slotCols;
+        int slotH = 40;
+        const auto& peers = net.getPeers();
+
+        for (int slot = 0; slot < 8; ++slot) {
+            int col = slot % slotCols;
+            int row = slot / slotCols;
+            int sx = paneX + 16 + col * (slotW + slotGap);
+            int sy = lobbyY + 28 + row * (slotH + 6);
+            QRect sRect(sx, sy, slotW, slotH);
+
+            if (slot == net.getMyPeerId()) {
+                // Local player (YOU)
+                p.setBrush(QColor(18, 32, 48));
+                p.setPen(QPen(QColor(0, 240, 255), 1.5));
+                p.drawRoundedRect(sRect, 5, 5);
+                p.setFont(QFont("Arial", 8, QFont::Bold));
+                p.setPen(QColor(0, 240, 255));
+                p.drawText(sx + 8, sy + 16, QString("👑 [P%1] %2 (YOU)").arg(slot + 1).arg(net.getLocalPlayerName()));
+                p.setFont(QFont("Arial", 7, QFont::Normal));
+                p.setPen(QColor(160, 190, 220));
+                p.drawText(sx + 8, sy + 32, QString("%1 • READY ✓").arg(m_engine.getPlayer().carModelName));
+            } else if (peers.contains(slot)) {
+                // Connected Remote Peer
+                const auto& pr = peers[slot];
+                p.setBrush(QColor(22, 28, 38));
+                p.setPen(QPen(QColor(255, 205, 55), 1.2));
+                p.drawRoundedRect(sRect, 5, 5);
+                p.setFont(QFont("Arial", 8, QFont::Bold));
+                p.setPen(QColor(255, 205, 55));
+                p.drawText(sx + 8, sy + 16, QString("👑 [P%1] %2").arg(slot + 1).arg(pr.name));
+                p.setFont(QFont("Arial", 7, QFont::Normal));
+                p.setPen(QColor(160, 180, 205));
+                const char* carNames[4] = { "APEX GT-R", "VORTEX V12", "DRIFT SPEC-R", "TITAN ENFORCER" };
+                QString cName = (pr.carModel >= 0 && pr.carModel < 4) ? carNames[pr.carModel] : "APEX GT-R";
+                p.drawText(sx + 8, sy + 32, QString("%1 • %2ms").arg(cName).arg(pr.pingMs));
+            } else {
+                // Empty Open Slot
+                p.setBrush(QColor(14, 18, 25, 140));
+                p.setPen(QPen(QColor(35, 45, 62), 1, Qt::DashLine));
+                p.drawRoundedRect(sRect, 5, 5);
+                p.setFont(QFont("Arial", 7, QFont::Normal));
+                p.setPen(QColor(80, 100, 130));
+                p.drawText(sRect, Qt::AlignCenter, QString("[ Slot %1 Open ]").arg(slot + 1));
+            }
+        }
+
+        // Action Controls Bar
+        int actY = lobbyY + 122;
+        int actH = 30;
+
+        // Ready toggle button on left
+        m_readyBtn = QRect(paneX + 16, actY, 130, actH);
+        p.setBrush(QColor(24, 36, 52));
+        p.setPen(QPen(QColor(0, 230, 255), 1.2));
+        p.drawRoundedRect(m_readyBtn, 5, 5);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(0, 240, 255));
+        p.drawText(m_readyBtn, Qt::AlignCenter, "👍 TOGGLE READY");
+
+        // Start Race in Center
+        int startW = 320;
+        m_startMpBtn = QRect(paneX + (paneW - startW) / 2, actY, startW, actH);
+        bool canStart = (net.isHost() && totalConnected >= 2);
+        QLinearGradient sGrad(m_startMpBtn.topLeft(), m_startMpBtn.bottomRight());
+        if (canStart) {
+            sGrad.setColorAt(0.0, QColor(0, 220, 120));
+            sGrad.setColorAt(1.0, QColor(0, 160, 75));
+        } else if (net.isHost()) {
+            sGrad.setColorAt(0.0, QColor(60, 110, 80));
+            sGrad.setColorAt(1.0, QColor(40, 80, 55));
+        } else {
+            sGrad.setColorAt(0.0, QColor(30, 45, 65));
+            sGrad.setColorAt(1.0, QColor(20, 30, 45));
+        }
+        p.setBrush(sGrad);
+        p.setPen(QPen(canStart ? QColor(100, 255, 180) : QColor(50, 75, 105), canStart ? 2 : 1));
+        p.drawRoundedRect(m_startMpBtn, 5, 5);
+        p.setFont(QFont("Arial", 8, QFont::Bold));
+        p.setPen(canStart ? QColor(8, 20, 12) : QColor(160, 180, 205));
+        QString startText = net.isHost()
+            ? (totalConnected >= 2 ? QString("🏁 LAUNCH RACE (%1 RACERS)").arg(totalConnected) : "⏳ WAITING FOR RACERS TO JOIN...")
+            : "⏳ WAITING FOR HOST TO LAUNCH RACE...";
+        p.drawText(m_startMpBtn, Qt::AlignCenter, startText);
+
+        // Disconnect on Right
+        int discW = 140;
+        m_disconnectBtn = QRect(paneX + paneW - 16 - discW, actY, discW, actH);
+        p.setBrush(QColor(80, 24, 28));
+        p.setPen(QPen(QColor(220, 60, 60), 1));
+        p.drawRoundedRect(m_disconnectBtn, 5, 5);
+        p.setFont(QFont("Arial", 7, QFont::Bold));
+        p.setPen(QColor(255, 180, 180));
+        p.drawText(m_disconnectBtn, Qt::AlignCenter, net.isHost() ? "CANCEL HOSTING" : "❌ DISCONNECT");
+
+        // Return button at bottom of multiplayer tab
+        m_resumeBtn = QRect(paneX + paneW / 2 - 110, lobbyY + lobbyH + 14, 220, 34);
+        p.setBrush(QColor(28, 38, 54));
+        p.setPen(QPen(QColor(55, 75, 105), 1.5));
+        p.drawRoundedRect(m_resumeBtn, 6, 6);
+        p.setFont(QFont("Arial", 9, QFont::Bold));
+        p.setPen(Qt::white);
+        p.drawText(m_resumeBtn, Qt::AlignCenter, "◀ RETURN TO RACE (M / ESC)");
+
+        p.restore();
+        return;
+    }
 
     // -------------------------------------------------------------
     // 1. DIFFICULTY SELECTION ROW (EASY, NORMAL, PRO)
@@ -878,7 +1263,7 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
     QFont hf("Arial", 8, QFont::Normal);
     p.setFont(hf);
     p.drawText(QRect(0, bottomY, w, 22), Qt::AlignCenter,
-               "CONTROLS: [W/S] Gas/Brake • [A/D] Steer • [C] 1st/3rd Cam • [F1-F4] Car • [G] ADAS • [F] AR-Gap • [Z] 3D-Z • [J/5-9] Pixel(1-6px) • [K] CRT • [Y] Repair");
+               "CONTROLS: [W/S] Gas/Brake • [A/D] Steer • [C] Cam • [F1-F4] Car • [O] 1v1 Multiplayer • [F5-F7] Chat • [M] Menu • [R] Reset");
 
     p.restore();
 }

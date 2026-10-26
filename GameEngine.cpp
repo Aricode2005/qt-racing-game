@@ -88,6 +88,27 @@ void GameEngine::resetPlayer() {
     qreal lenScale = (m_difficulty == DIFFICULTY_EASY) ? 0.65 : ((m_difficulty == DIFFICULTY_PRO) ? 1.0 : 0.82);
     m_player.finishLineZ = fullTrackZ * lenScale;
     spawnTraffic();
+    if (!m_remoteCars.isEmpty()) {
+        int peerIdx = 0;
+        for (auto it = m_remoteCars.begin(); it != m_remoteCars.end(); ++it) {
+            int pid = it.key();
+            NPCCar& rCar = it.value();
+            rCar.id = 9000 + pid;
+            rCar.isRemotePlayer = true;
+            // Staggered grid slots beside/behind host player
+            qreal gridZ = (peerIdx == 0) ? (m_player.worldZ + 25.0) : (m_player.worldZ - 25.0 * peerIdx);
+            qreal gridX = (peerIdx % 2 == 0) ? -0.25 : 0.25;
+            rCar.worldZ = gridZ;
+            rCar.x = gridX;
+            rCar.targetX = gridX;
+            rCar.speed = 0.0;
+            rCar.hasFinished = false;
+            rCar.finishTime = 0.0;
+            m_traffic.append(rCar);
+            peerIdx++;
+        }
+        m_player.totalRacers = m_traffic.size() + 1;
+    }
     m_player.lastAnnouncement = QString("STARTING GRID READY (%1 CARS • %2) — FLOOR THE THROTTLE!")
         .arg(m_player.totalRacers)
         .arg(m_player.carModelName);
@@ -837,7 +858,12 @@ QVector<RaceStandingEntry> GameEngine::getRaceStandings() const {
 
     for (const NPCCar& npc : m_traffic) {
         RaceStandingEntry e;
-        e.name = npc.racerName.isEmpty() ? QString("RACER #%1").arg(npc.id) : npc.racerName;
+        if (npc.isRemotePlayer) {
+            int pNum = (npc.id >= 9000 && npc.id < 9100) ? (npc.id - 9000 + 1) : 2;
+            e.name = QString("👑 [P%1] %2").arg(pNum).arg(npc.racerName.isEmpty() ? QString("Racer %1").arg(pNum) : npc.racerName);
+        } else {
+            e.name = npc.racerName.isEmpty() ? QString("RACER #%1").arg(npc.id) : npc.racerName;
+        }
         e.isPlayer = false;
         e.hasFinished = npc.hasFinished;
         e.finishTime = npc.finishTime;
@@ -862,6 +888,59 @@ QVector<RaceStandingEntry> GameEngine::getRaceStandings() const {
     return list;
 }
 
+void GameEngine::setRemotePlayerCar(int peerId, const NPCCar& remoteCar) {
+    m_remoteCars[peerId] = remoteCar;
+    int targetId = 9000 + peerId;
+
+    bool found = false;
+    for (int i = 0; i < m_traffic.size(); ++i) {
+        if (m_traffic[i].id == targetId) {
+            m_traffic[i].worldZ += (remoteCar.worldZ - m_traffic[i].worldZ) * 0.45;
+            m_traffic[i].x += (remoteCar.x - m_traffic[i].x) * 0.50;
+            m_traffic[i].speed = remoteCar.speed;
+            m_traffic[i].type = remoteCar.type;
+            m_traffic[i].racerName = remoteCar.racerName;
+            m_traffic[i].isRemotePlayer = true;
+            m_traffic[i].isBraking = remoteCar.isBraking;
+            m_traffic[i].isCrashing = remoteCar.isCrashing;
+            m_traffic[i].hazardLights = remoteCar.hazardLights;
+            m_traffic[i].hasFinished = remoteCar.hasFinished;
+            m_traffic[i].finishTime = remoteCar.finishTime;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        NPCCar newCar = remoteCar;
+        newCar.id = targetId;
+        newCar.isRemotePlayer = true;
+        m_traffic.append(newCar);
+        m_player.totalRacers = m_traffic.size() + 1;
+    }
+}
+
+void GameEngine::removeRemotePlayer(int peerId) {
+    m_remoteCars.remove(peerId);
+    int targetId = 9000 + peerId;
+    for (int i = m_traffic.size() - 1; i >= 0; --i) {
+        if (m_traffic[i].id == targetId) {
+            m_traffic.removeAt(i);
+            break;
+        }
+    }
+    m_player.totalRacers = m_traffic.size() + 1;
+}
+
+void GameEngine::clearAllRemotePlayers() {
+    m_remoteCars.clear();
+    for (int i = m_traffic.size() - 1; i >= 0; --i) {
+        if (m_traffic[i].isRemotePlayer || m_traffic[i].id >= 9000) {
+            m_traffic.removeAt(i);
+        }
+    }
+    m_player.totalRacers = m_traffic.size() + 1;
+}
+
 void GameEngine::updateTraffic(qreal dt) {
   {
     const qreal laneCoords[4] = { -0.75, -0.25, 0.25, 0.75 };
@@ -870,6 +949,14 @@ void GameEngine::updateTraffic(qreal dt) {
 
     for (int i = 0; i < m_traffic.size(); ++i) {
         NPCCar& npc = m_traffic[i];
+
+        if (npc.isRemotePlayer) {
+            if (!npc.hasFinished && npc.worldZ >= m_player.finishLineZ) {
+                npc.hasFinished = true;
+                if (npc.finishTime <= 0) npc.finishTime = m_player.raceTime;
+            }
+            continue; // Movement controlled by network packets
+        }
         npc.isOncoming = false; // Strictly one-sided race cars
 
         // Post-crash skid, fishtailing & recovery
