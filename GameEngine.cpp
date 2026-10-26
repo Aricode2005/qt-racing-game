@@ -100,34 +100,34 @@ void GameEngine::setSelectedCar(int carIdx) {
     switch (m_player.selectedCar) {
         case 0: // APEX GT-R (Balanced Twin-Turbo Coupe)
             m_player.carModelName = "APEX GT-R";
-            m_player.maxSpeed = 300.0;
+            m_player.maxSpeed = 200.0;
             m_player.accelRate = 96.0;
             m_player.armorMultiplier = 1.00;
             m_player.gripMultiplier = 1.00;
             break;
         case 1: // VORTEX V12 (Hypercar Interceptor)
             m_player.carModelName = "VORTEX V12";
-            m_player.maxSpeed = 345.0;
-            m_player.accelRate = 118.0;
+            m_player.maxSpeed = 200.0;
+            m_player.accelRate = 104.0;
             m_player.armorMultiplier = 0.85;
             m_player.gripMultiplier = 0.96;
             break;
         case 2: // DRIFT SPEC-R (Touge Track Special)
             m_player.carModelName = "DRIFT SPEC-R";
-            m_player.maxSpeed = 288.0;
+            m_player.maxSpeed = 196.0;
             m_player.accelRate = 94.0;
             m_player.armorMultiplier = 0.95;
             m_player.gripMultiplier = 1.28;
             break;
         case 3: // TITAN ENFORCER (Armored Endurance GT)
             m_player.carModelName = "TITAN ENFORCER";
-            m_player.maxSpeed = 294.0;
+            m_player.maxSpeed = 198.0;
             m_player.accelRate = 92.0;
             m_player.armorMultiplier = 1.55;
             m_player.gripMultiplier = 1.04;
             break;
     }
-    m_player.lastAnnouncement = QString("🏎️ SUPERCAR SELECTED: %1 (%2 KM/H • %3% ARMOR)")
+    m_player.lastAnnouncement = QString("🏎️ SUPERCAR SELECTED: %1 (MAX %2 KM/H • %3% ARMOR)")
         .arg(m_player.carModelName)
         .arg((int)m_player.maxSpeed)
         .arg(qRound(m_player.armorMultiplier * 100));
@@ -420,7 +420,7 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
         accel = -120.0; // Rapid braking when wrecked
         m_player.boostBar = 0.0;
     } else if (m_player.isAccelerating) {
-        qreal powerFactor = qBound(0.45, 1.0 - (m_player.speed / 350.0), 1.0);
+        qreal powerFactor = qBound(0.35, 1.0 - (m_player.speed / 215.0), 1.0);
         m_player.slipstreamActive = false;
         for (const NPCCar& npc : m_traffic) {
             qreal dz = npc.worldZ - m_player.worldZ;
@@ -489,10 +489,10 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
     if (m_player.isBraking && m_player.speed < 0) {
         m_player.speed = qMax(-45.0, m_player.speed);
     } else {
-        m_player.speed = qBound(0.0, m_player.speed, m_player.maxSpeed);
+        m_player.speed = qBound(0.0, m_player.speed, qMin(200.0, m_player.maxSpeed));
     }
 
-    qreal speedBoost = 1.0 + qBound(0.0, (m_player.speed - 60.0) / 300.0, 0.25);
+    qreal speedBoost = 1.0 + qBound(0.0, (m_player.speed - 60.0) / 200.0, 0.25);
     qreal absSpd = qAbs(m_player.speed);
     qreal signSpd = (m_player.speed >= 0.0) ? 1.0 : -1.0;
     qreal worldSpeed = (absSpd > 0.2)
@@ -573,24 +573,24 @@ void GameEngine::updateGearAndRpm(qreal dt) {
     int oldGear = m_player.gear;
     qreal s = m_player.speed;
 
-    if (s < 55) {
+    if (s < 38) {
         m_player.gear = 1;
-        m_player.rpm = 900 + (s / 55.0) * 6300.0;
-    } else if (s < 105) {
+        m_player.rpm = 900 + (s / 38.0) * 6200.0;
+    } else if (s < 72) {
         m_player.gear = 2;
-        m_player.rpm = 3400 + ((s - 55.0) / 50.0) * 3800.0;
-    } else if (s < 155) {
+        m_player.rpm = 3400 + ((s - 38.0) / 34.0) * 3700.0;
+    } else if (s < 108) {
         m_player.gear = 3;
-        m_player.rpm = 3900 + ((s - 105.0) / 50.0) * 3400.0;
-    } else if (s < 205) {
+        m_player.rpm = 3800 + ((s - 72.0) / 36.0) * 3400.0;
+    } else if (s < 144) {
         m_player.gear = 4;
-        m_player.rpm = 4300 + ((s - 155.0) / 50.0) * 3100.0;
-    } else if (s < 250) {
+        m_player.rpm = 4200 + ((s - 108.0) / 36.0) * 3100.0;
+    } else if (s < 176) {
         m_player.gear = 5;
-        m_player.rpm = 4800 + ((s - 205.0) / 45.0) * 2700.0;
+        m_player.rpm = 4600 + ((s - 144.0) / 32.0) * 2700.0;
     } else {
         m_player.gear = 6;
-        m_player.rpm = 5300 + ((s - 250.0) / 50.0) * 2400.0;
+        m_player.rpm = 5100 + ((s - 176.0) / 24.0) * 2300.0;
     }
 
     if (m_player.isAccelerating && m_player.rpm > 7400) {
@@ -633,9 +633,9 @@ void GameEngine::spawnTraffic() {
 
     int rivalCount = (m_difficulty == DIFFICULTY_EASY) ? 5 : ((m_difficulty == DIFFICULTY_PRO) ? 15 : 9);
     int aheadCount = (rivalCount + 1) / 2; // Player starts in the middle of the pack!
-    qreal trackDiffBonus = (m_track.getInfo().difficulty - 2) * 3.0;
-    qreal diffBoost = ((m_difficulty == DIFFICULTY_EASY) ? -16.0 : ((m_difficulty == DIFFICULTY_PRO) ? 12.0 : 0.0)) + trackDiffBonus;
-    qreal accelBoost = (m_difficulty == DIFFICULTY_EASY) ? -4.0 : ((m_difficulty == DIFFICULTY_PRO) ? 5.0 : 0.0);
+    qreal trackDiffBonus = (m_track.getInfo().difficulty - 2) * 2.0;
+    qreal diffBoost = ((m_difficulty == DIFFICULTY_EASY) ? -8.0 : ((m_difficulty == DIFFICULTY_PRO) ? 4.0 : 0.0)) + trackDiffBonus;
+    qreal accelBoost = (m_difficulty == DIFFICULTY_EASY) ? -3.0 : ((m_difficulty == DIFFICULTY_PRO) ? 5.0 : 0.0);
 
     struct RacerTemplate {
         const char* name;
@@ -644,21 +644,21 @@ void GameEngine::spawnTraffic() {
         qreal baseSpd;
         qreal baseAccel;
     } roster[15] = {
-        { "VORTEX GT",   VEHICLE_SPORTS_RED,   0, 176.0, 35.0 },
-        { "NITRO RS",    VEHICLE_SEDAN_SILVER, 2, 171.0, 34.5 },
-        { "COBRA V8",    VEHICLE_COMPACT_BLUE, 1, 166.0, 34.0 },
-        { "TITAN GTR",   VEHICLE_SUV_BLACK,    3, 161.0, 33.5 },
-        { "PHANTOM X",   VEHICLE_SPORTS_RED,   0, 156.0, 33.0 },
-        { "FALCON R",    VEHICLE_COMPACT_BLUE, 3, 152.0, 32.5 },
-        { "BLITZ EVO",   VEHICLE_SEDAN_SILVER, 1, 148.0, 32.0 },
-        { "APEX FURY",   VEHICLE_SPORTS_RED,   2, 144.0, 31.5 },
-        { "HYPERION Z",  VEHICLE_SUV_BLACK,    0, 140.0, 31.0 },
-        { "SHADOW M8",   VEHICLE_SEDAN_SILVER, 3, 137.0, 30.5 },
-        { "VALKYRIE S",  VEHICLE_SPORTS_RED,   1, 134.0, 30.0 },
-        { "TEMPEST RS",  VEHICLE_COMPACT_BLUE, 2, 131.0, 29.5 },
-        { "MONARCH V12", VEHICLE_SUV_BLACK,    0, 128.0, 29.0 },
-        { "SPECTRE GT",  VEHICLE_SEDAN_SILVER, 3, 125.0, 28.5 },
-        { "KRAKEN R",    VEHICLE_COMPACT_BLUE, 1, 122.0, 28.0 }
+        { "VORTEX GT",   VEHICLE_SPORTS_RED,   0, 198.0, 48.0 },
+        { "NITRO RS",    VEHICLE_SEDAN_SILVER, 2, 196.0, 46.5 },
+        { "COBRA V8",    VEHICLE_COMPACT_BLUE, 1, 194.0, 45.0 },
+        { "TITAN GTR",   VEHICLE_SUV_BLACK,    3, 192.0, 44.0 },
+        { "PHANTOM X",   VEHICLE_SPORTS_RED,   0, 190.0, 43.0 },
+        { "FALCON R",    VEHICLE_COMPACT_BLUE, 3, 188.0, 42.0 },
+        { "BLITZ EVO",   VEHICLE_SEDAN_SILVER, 1, 186.0, 41.0 },
+        { "APEX FURY",   VEHICLE_SPORTS_RED,   2, 184.0, 40.0 },
+        { "HYPERION Z",  VEHICLE_SUV_BLACK,    0, 182.0, 39.0 },
+        { "SHADOW M8",   VEHICLE_SEDAN_SILVER, 3, 180.0, 38.0 },
+        { "VALKYRIE S",  VEHICLE_SPORTS_RED,   1, 178.0, 37.0 },
+        { "TEMPEST RS",  VEHICLE_COMPACT_BLUE, 2, 176.0, 36.0 },
+        { "MONARCH V12", VEHICLE_SUV_BLACK,    0, 175.0, 35.0 },
+        { "SPECTRE GT",  VEHICLE_SEDAN_SILVER, 3, 174.0, 34.0 },
+        { "KRAKEN R",    VEHICLE_COMPACT_BLUE, 1, 172.0, 33.0 }
     };
 
     for (int i = 0; i < rivalCount; ++i) {
@@ -686,7 +686,7 @@ void GameEngine::spawnTraffic() {
 
         npc.worldZ = m_player.worldZ + startZ;
         npc.speed = 0.0;        // Starts stationary on the Starting Grid with the player!
-        npc.maxSpeed = roster[i].baseSpd + diffBoost;
+        npc.maxSpeed = qBound(168.0, roster[i].baseSpd + diffBoost, 200.0);
         npc.accelRate = roster[i].baseAccel + accelBoost;
         npc.hasFinished = false;
         npc.finishTime = 0.0;
@@ -904,23 +904,17 @@ void GameEngine::updateTraffic(qreal dt) {
                 }
             }
 
-            // Realistic Motorsport Pack Pacing — ensures player can catch, draft & overtake rivals for P1!
+            // Competitive Motorsport Pack Pacing — rivals race aggressively at up to 172-198 km/h!
             qreal relDist = npc.worldZ - m_player.worldZ;
             qreal targetRaceSpeed = npc.maxSpeed;
-            if (relDist > 1800.0) {
-                // Rivals far ahead pace slightly so player can reel in the lead pack and overtake
-                targetRaceSpeed = qMin(npc.maxSpeed, qMax(95.0, m_player.speed * 0.76));
-            } else if (relDist > 0.0) {
-                // Rivals immediately ahead drive at overtakeable race pace
-                targetRaceSpeed = qMin(npc.maxSpeed, qMax(115.0, m_player.speed * 0.85));
-            } else if (relDist < -300.0 && !npc.hasFinished) {
-                // Overtaken rivals trail cleanly behind without artificial rubber-band cheating
-                targetRaceSpeed = qMin(npc.maxSpeed, qMax(110.0, m_player.speed * 0.84));
+            if (relDist < -250.0 && !npc.hasFinished) {
+                // Trailing rivals slipstream and attempt to counter-attack at near top speed
+                targetRaceSpeed = qBound(165.0, m_player.speed * 0.98, npc.maxSpeed);
             }
 
             if (minLeadDist < 220.0 && npc.laneChangeTimer <= 1.2) {
                 npc.isBraking = (npc.speed > leadSpeed + 8.0);
-                qreal followSpd = qMax(90.0, leadSpeed - 4.0);
+                qreal followSpd = qMax(140.0, leadSpeed - 3.0);
                 npc.speed += (followSpd - npc.speed) * 3.5 * dt;
             } else {
                 npc.isBraking = false;
