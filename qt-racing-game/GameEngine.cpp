@@ -148,7 +148,7 @@ void GameEngine::setSelectedCar(int carIdx) {
             m_player.gripMultiplier = 1.04;
             break;
     }
-    m_player.lastAnnouncement = QString("🏎️ SUPERCAR SELECTED: %1 (MAX %2 KM/H • %3% ARMOR)")
+    m_player.lastAnnouncement = QString("SUPERCAR SELECTED: %1 (MAX %2 KM/H • %3% ARMOR)")
         .arg(m_player.carModelName)
         .arg((int)m_player.maxSpeed)
         .arg(qRound(m_player.armorMultiplier * 100));
@@ -158,24 +158,24 @@ void GameEngine::setSelectedCar(int carIdx) {
 void GameEngine::toggleAdas() {
     m_player.adasEnabled = !m_player.adasEnabled;
     m_player.lastAnnouncement = m_player.adasEnabled
-        ? "🛡️ ADAS STEERING ASSIST: ON (APEX COMPENSATION & LANE STABILITY)"
-        : "⚙️ ADAS STEERING ASSIST: OFF (100% MANUAL CENTRIFUGAL REALISM)";
+        ? "ADAS STEERING ASSIST: ON (APEX COMPENSATION & LANE STABILITY)"
+        : "ADAS STEERING ASSIST: OFF (100% MANUAL CENTRIFUGAL REALISM)";
     m_player.announcementTimer = 2.4;
 }
 
 void GameEngine::toggleArGuides() {
     m_player.arGuidesEnabled = !m_player.arGuidesEnabled;
     m_player.lastAnnouncement = m_player.arGuidesEnabled
-        ? "🎯 3D AR PASSING-GAP TRAJECTORY RAILS & TARGET BRACKETS: ON"
-        : "🎯 3D AR PASSING-GAP TRAJECTORY RAILS: OFF";
+        ? "3D AR PASSING-GAP TRAJECTORY RAILS & TARGET BRACKETS: ON"
+        : "3D AR PASSING-GAP TRAJECTORY RAILS: OFF";
     m_player.announcementTimer = 2.4;
 }
 
 void GameEngine::toggleZBuffer3DMode() {
     m_player.zBuffer3DMode = !m_player.zBuffer3DMode;
     m_player.lastAnnouncement = m_player.zBuffer3DMode
-        ? "🧊 FULL-DEPTH 3D Z-BUFFER & LAMBERTIAN SHADING PIPELINE: ON"
-        : "🧊 CLASSIC 2.5D SCANLINE RASTER PIPELINE: ON";
+        ? "FULL-DEPTH 3D Z-BUFFER & LAMBERTIAN SHADING PIPELINE: ON"
+        : "CLASSIC 2.5D SCANLINE RASTER PIPELINE: ON";
     m_player.announcementTimer = 2.4;
 }
 
@@ -183,7 +183,7 @@ void GameEngine::setPixelSizePreset(int presetIdx) {
     static const int kPresets[5] = { 1, 2, 3, 4, 6 };
     int idx = qBound(0, presetIdx, 4);
     m_player.pixelSize = kPresets[idx];
-    m_player.lastAnnouncement = QString("👾 RETRO PIXEL RASTERIZER: %1px (%2x%3 INTERNAL BUFFER)")
+    m_player.lastAnnouncement = QString("RETRO PIXEL RASTERIZER: %1px (%2x%3 INTERNAL BUFFER)")
         .arg(m_player.pixelSize)
         .arg(1280 / m_player.pixelSize)
         .arg(720 / m_player.pixelSize);
@@ -206,8 +206,8 @@ void GameEngine::cyclePixelSize(int dir) {
 void GameEngine::toggleCrtScanlines() {
     m_player.crtScanlines = !m_player.crtScanlines;
     m_player.lastAnnouncement = m_player.crtScanlines
-        ? "📺 RETRO CRT PHOSPHOR SCANLINES: ON"
-        : "📺 RETRO CRT PHOSPHOR SCANLINES: OFF";
+        ? "RETRO CRT PHOSPHOR SCANLINES: ON"
+        : "RETRO CRT PHOSPHOR SCANLINES: OFF";
     m_player.announcementTimer = 2.2;
 }
 
@@ -215,7 +215,7 @@ void GameEngine::fieldRepair() {
     m_player.health = qMin(100, m_player.health + 50);
     m_player.isWrecked = false;
     m_player.crashTimer = 0;
-    m_player.lastAnnouncement = QString("🔧 ON-SPOT FIELD REPAIR COMPLETE (+50% HEALTH → %1%)").arg(m_player.health);
+    m_player.lastAnnouncement = QString("ON-SPOT FIELD REPAIR COMPLETE (+50% HEALTH -> %1%)").arg(m_player.health);
     m_player.announcementTimer = 2.4;
 
     m_player.announcementTimer = 2.0;
@@ -530,7 +530,7 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
     if (m_player.currentSector != m_player.lastSectorAnnounced && !currentSeg.sectorName.isEmpty()) {
         m_player.lastSectorAnnounced = m_player.currentSector;
         m_player.health = qMin(100, m_player.health + 25);
-        m_player.lastAnnouncement = QString("🔧 CHECKPOINT ARCH: SECTOR %1 - %2 (+25% HEALTH)").arg(m_player.currentSector).arg(currentSeg.sectorName);
+        m_player.lastAnnouncement = QString("CHECKPOINT ARCH: SECTOR %1 - %2 (+25% HEALTH)").arg(m_player.currentSector).arg(currentSeg.sectorName);
         m_player.announcementTimer = 3.5;
         m_player.score += 500;
     }
@@ -860,7 +860,7 @@ QVector<RaceStandingEntry> GameEngine::getRaceStandings() const {
         RaceStandingEntry e;
         if (npc.isRemotePlayer) {
             int pNum = (npc.id >= 9000 && npc.id < 9100) ? (npc.id - 9000 + 1) : 2;
-            e.name = QString("👑 [P%1] %2").arg(pNum).arg(npc.racerName.isEmpty() ? QString("Racer %1").arg(pNum) : npc.racerName);
+            e.name = QString("[P%1] %2").arg(pNum).arg(npc.racerName.isEmpty() ? QString("Racer %1").arg(pNum) : npc.racerName);
         } else {
             e.name = npc.racerName.isEmpty() ? QString("RACER #%1").arg(npc.id) : npc.racerName;
         }
@@ -1107,13 +1107,13 @@ void GameEngine::updateTraffic(qreal dt) {
         int gained = prevPlayerPos - m_player.currentPosition;
         m_player.score += gained * 1000;
         m_player.lastAnnouncement = (m_player.currentPosition == 1)
-            ? QString("🏆 RACE LEADER! OVERTAKE FOR P1 / %1 (+%2 PTS)").arg(m_player.totalRacers).arg(gained * 1000)
-            : QString("🔥 OVERTAKE! ADVANCED TO P%1 / %2 (+%3 PTS)").arg(m_player.currentPosition).arg(m_player.totalRacers).arg(gained * 1000);
+            ? QString("RACE LEADER! OVERTAKE FOR P1 / %1 (+%2 PTS)").arg(m_player.totalRacers).arg(gained * 1000)
+            : QString("OVERTAKE! ADVANCED TO P%1 / %2 (+%3 PTS)").arg(m_player.currentPosition).arg(m_player.totalRacers).arg(gained * 1000);
         m_player.announcementTimer = 2.4;
     }
 
     if (m_player.raceFinished && m_player.announcementTimer < 100.0) {
-        m_player.lastAnnouncement = QString("🏁 FINISH LINE! YOU FINISHED P%1 / %2 (%3s) — PRESS [R] TO RACE AGAIN")
+        m_player.lastAnnouncement = QString("FINISH LINE! YOU FINISHED P%1 / %2 (%3s) — PRESS [R] TO RACE AGAIN")
             .arg(m_player.currentPosition)
             .arg(m_player.totalRacers)
             .arg(QString::number(m_player.finishTime, 'f', 2));

@@ -1237,7 +1237,7 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
             p.setFont(QFont("Arial", 7, QFont::Bold));
             p.setPen(QColor(8, 16, 26));
             int pNum = (s.racerId >= 9000 && s.racerId < 9100) ? (s.racerId - 9000 + 1) : 2;
-            p.drawText(tagRect, Qt::AlignCenter, QString("👑 [P%1] %2").arg(pNum).arg(s.racerTag.isEmpty() ? QString("Racer %1").arg(pNum) : s.racerTag));
+            p.drawText(tagRect, Qt::AlignCenter, QString("[P%1] %2").arg(pNum).arg(s.racerTag.isEmpty() ? QString("Racer %1").arg(pNum) : s.racerTag));
         } else if (!isMirror && s.isCar && s.width >= 22 && !s.racerTag.isEmpty() && s.racerPos > 0) {
             int tagW = qBound(78, s.width, 134);
             int tagH = 16;
@@ -1322,8 +1322,8 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
             p.setFont(QFont("Arial", fontPt, QFont::Bold));
             p.setPen(isFinishArch ? QColor(255, 220, 80) : QColor(190, 248, 255));
             p.drawText(bannerRect, Qt::AlignCenter,
-                       isFinishArch ? QString("🏁  FINISH LINE — GRAND PRIX (%1 CARS)  🏁").arg(player.totalRacers)
-                                    : QString("🏁  START LINE — %1-CAR GRID  🏁").arg(player.totalRacers));
+                       isFinishArch ? QString("FINISH LINE — GRAND PRIX (%1 CARS)").arg(player.totalRacers)
+                                    : QString("START LINE — %1-CAR GRID").arg(player.totalRacers));
 
             qreal lightR = qBound(2.0, beamH * 0.14, 7.0);
             for (int l = -2; l <= 2; ++l) {
@@ -2333,10 +2333,10 @@ void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& eng
         InfotainmentMode mode;
         QString title;
     } tabs[4] = {
-        { INFO_MODE_WEB, "🌐 WEB" },
-        { INFO_MODE_MUSIC, "🎵 MUSIC" },
-        { INFO_MODE_RADAR, "🧭 GPS" },
-        { INFO_MODE_CAR, "🚗 CAR" }
+        { INFO_MODE_WEB, "WEB" },
+        { INFO_MODE_MUSIC, "MUSIC" },
+        { INFO_MODE_RADAR, "GPS" },
+        { INFO_MODE_CAR, "CAR" }
     };
 
     int tabW = sw / 4;
@@ -2376,14 +2376,14 @@ void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& eng
         p.setPen(QColor(0, 220, 120));
         QFont urlFont("Arial", 6, QFont::Bold);
         p.setFont(urlFont);
-        p.drawText(urlBar.left() + 6, urlBar.top() + 13, "🔒");
+        p.drawText(urlBar.left() + 6, urlBar.top() + 13, "SSL");
 
         p.setPen(QColor(190, 215, 245));
-        p.drawText(QRect(urlBar.left() + 22, urlBar.top(), urlBar.width() - 55, 19), Qt::AlignVCenter | Qt::AlignLeft, info.currentUrl);
+        p.drawText(QRect(urlBar.left() + 28, urlBar.top(), urlBar.width() - 60, 19), Qt::AlignVCenter | Qt::AlignLeft, info.currentUrl);
 
         // Refresh icon
         p.setPen(QColor(110, 130, 160));
-        p.drawText(urlBar.right() - 20, urlBar.top() + 13, "⟳");
+        p.drawText(urlBar.right() - 28, urlBar.top() + 13, "SYNC");
 
         // Bookmark Category Pills (Height: 17 px)
         int catY = contentY + 24;
@@ -2392,10 +2392,10 @@ void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& eng
             QString label;
             QColor col;
         } pills[4] = {
-            { 0, "💬 FEED", QColor(0, 220, 255) },
-            { 1, "📰 NEWS", QColor(255, 180, 40) },
-            { 2, "🌦️ WX", QColor(80, 220, 120) },
-            { 3, "🏎️ SPEC", QColor(255, 70, 70) }
+            { 0, "FEED", QColor(0, 220, 255) },
+            { 1, "NEWS", QColor(255, 180, 40) },
+            { 2, "WX", QColor(80, 220, 120) },
+            { 3, "SPEC", QColor(255, 70, 70) }
         };
 
         int pillW = (sw - 18) / 4;
@@ -2432,8 +2432,8 @@ void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& eng
                 QString time;
                 QColor tagCol;
             } posts[3] = {
-                { "@HighwayPatrol", "⚠️ Speed enforcement active Sec 2. Limit 120.", "1m", QColor(255, 190, 40) },
-                { "@TurboGT_Driver", "Clocked 294 km/h through coastal sweep! 🔥", "2m", QColor(0, 240, 255) },
+                { "@HighwayPatrol", "ALERT: Speed enforcement active Sec 2. Limit 120.", "1m", QColor(255, 190, 40) },
+                { "@TurboGT_Driver", "Clocked 294 km/h through coastal sweep!", "2m", QColor(0, 240, 255) },
                 { "@TruckerDave", "Heavy freight in lane 3. Pass on left lanes.", "4m", QColor(80, 220, 120) }
             };
 
@@ -2577,7 +2577,7 @@ void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& eng
         QFont pbf("Arial", 5, QFont::Bold);
         p.setFont(pbf);
         p.setPen(Qt::white);
-        p.drawText(playBadge, Qt::AlignCenter, info.isPlaying ? "▶ PLAYING" : "⏸ PAUSED");
+        p.drawText(playBadge, Qt::AlignCenter, info.isPlaying ? "PLAYING" : "PAUSED");
 
         // Song Title & Artist (Right of album art)
         int infoX = sx + 70;
@@ -2652,7 +2652,7 @@ void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& eng
         p.setPen(Qt::NoPen);
         p.drawRoundedRect(playBtn, 3, 3);
         p.setPen(QColor(10, 14, 22));
-        p.drawText(playBtn, Qt::AlignCenter, info.isPlaying ? "⏸ PAUSE" : "▶ PLAY");
+        p.drawText(playBtn, Qt::AlignCenter, info.isPlaying ? "PAUSE" : "PLAY");
 
         // Next button
         QRect nextBtn(btnStartX + 2 * (btnW + 10), btnY, btnW, btnH);
@@ -2741,7 +2741,7 @@ void RasterRenderer::renderInfotainmentScreen(QPainter& p, const GameEngine& eng
         p.setPen(QColor(230, 235, 245));
         QFont cf("Arial", 8, QFont::Bold);
         p.setFont(cf);
-        p.drawText(tx, ty + 42, QString("💥 CRASHES: %1   🔥 COMBO: x%2").arg(player.crashCount).arg(player.nearMissCombo));
+        p.drawText(tx, ty + 42, QString("CRASHES: %1   COMBO: x%2").arg(player.crashCount).arg(player.nearMissCombo));
 
         // Boost bar
         p.setPen(QColor(150, 165, 185));
@@ -2952,7 +2952,7 @@ void RasterRenderer::renderWindshieldEffects(QPainter& p, const GameEngine& engi
         QFont wf("Arial", 16, QFont::Bold);
         p.setFont(wf);
         p.setPen(Qt::white);
-        p.drawText(QRect(wreckBox.left(), wreckBox.top() + 10, wreckBox.width(), 32), Qt::AlignCenter, "⚠️ TOTAL WRECK - VEHICLE DESTROYED ⚠️");
+        p.drawText(QRect(wreckBox.left(), wreckBox.top() + 10, wreckBox.width(), 32), Qt::AlignCenter, "TOTAL WRECK - VEHICLE DESTROYED");
         QFont subWf("Arial", 12, QFont::Bold);
         p.setFont(subWf);
         p.setPen(QColor(255, 230, 80));
@@ -3142,7 +3142,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
     p.setPen(diffColor);
     p.drawText(diffPill, Qt::AlignCenter, diffText);
 
-    // Interactive Camera View Switch Button: [ 🎥 3RD PERSON [C] ] / [ 🎥 1ST PERSON [C] ]
+    // Interactive Camera View Switch Button
     {
         QRect camBtn(292, 6, 148, 22);
         QLinearGradient camGrad(camBtn.topLeft(), camBtn.bottomLeft());
@@ -3160,7 +3160,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setFont(QFont("Arial", 7, QFont::Bold));
         p.setPen(player.thirdPersonView ? QColor(255, 230, 150) : QColor(180, 248, 255));
         p.drawText(camBtn, Qt::AlignCenter,
-                   player.thirdPersonView ? "🎥 1ST PERSON VIEW [C]" : "🎥 3RD PERSON VIEW [C]");
+                   player.thirdPersonView ? "1ST PERSON VIEW [C]" : "3RD PERSON VIEW [C]");
 
         // Live Race Position & Finish Line Timer Badge
         QRect posBadge(292, 30, 148, 17);
@@ -3171,7 +3171,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setPen(QColor(255, 220, 95));
         qreal dispTime = player.raceFinished ? player.finishTime : player.raceTime;
         p.drawText(posBadge, Qt::AlignCenter,
-                   QString("🏆 POS %1/%2  •  ⏱ %3s")
+                   QString("POS %1/%2  •  TIME %3s")
                        .arg(player.currentPosition)
                        .arg(player.totalRacers)
                        .arg(QString::number(dispTime, 'f', 1)));
@@ -3238,7 +3238,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setFont(nf);
         p.setPen(QColor(255, 220, 75));
         p.drawText(navPill, Qt::AlignCenter,
-                   QString("⛰ CREST AHEAD! • SLOPE %1%2°")
+                   QString("CREST AHEAD! • SLOPE %1%2°")
                        .arg(player.roadSlopeDeg >= 0 ? "+" : "")
                        .arg(QString::number(player.roadSlopeDeg, 'f', 1)));
     } else if (qAbs(player.roadSlopeDeg) > 1.8) {
@@ -3250,7 +3250,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setFont(nf);
         p.setPen(QColor(130, 235, 255));
         p.drawText(navPill, Qt::AlignCenter,
-                   QString("⛰ UNEVEN ROAD (%1%2° SLOPE • %3° CAMBER)")
+                   QString("UNEVEN ROAD (%1%2° SLOPE • %3° CAMBER)")
                        .arg(player.roadSlopeDeg >= 0 ? "+" : "")
                        .arg(QString::number(player.roadSlopeDeg, 'f', 1))
                        .arg(QString::number(player.roadBankDeg, 'f', 1)));
@@ -3320,8 +3320,8 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
                             : ((player.adasBestLaneX > player.x + 0.08) ? "AUTO-STEERING RIGHT TO CLEAR GAP ▶▶"
                             : "✓ LANE CENTER LOCKED");
             QString radarStr = (player.adasRadarDistM < 90.0)
-                ? QString("🛡️ ADAS RADAR: %1m • %2").arg(qRound(player.adasRadarDistM)).arg(laneDir)
-                : QString("🛡️ ADAS ASSIST ACTIVE • %1").arg(laneDir);
+                ? QString("ADAS RADAR: %1m • %2").arg(qRound(player.adasRadarDistM)).arg(laneDir)
+                : QString("ADAS ASSIST ACTIVE • %1").arg(laneDir);
             p.drawText(adasBox, Qt::AlignCenter, radarStr);
         }
     }
@@ -3347,7 +3347,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         QFont cmbf("Arial", 8, QFont::Bold);
         p.setFont(cmbf);
         p.setPen(QColor(255, 210, 40));
-        p.drawText(comboPill, Qt::AlignCenter, QString("🔥 x%1 COMBO").arg(player.nearMissCombo));
+        p.drawText(comboPill, Qt::AlignCenter, QString("x%1 COMBO").arg(player.nearMissCombo));
     }
 
     // Vehicle Health Segmented Armor Bar (10 discrete glowing segments)
@@ -3378,7 +3378,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
 
     // Collision tally
     p.setPen(player.crashCount > 0 ? QColor(255, 110, 110) : QColor(140, 170, 205));
-    p.drawText(QRect(rx - 65, hpY - 1, 65, 12), Qt::AlignRight | Qt::AlignVCenter, QString("💥 %1 HITS").arg(player.crashCount));
+    p.drawText(QRect(rx - 65, hpY - 1, 65, 12), Qt::AlignRight | Qt::AlignVCenter, QString("%1 HITS").arg(player.crashCount));
 
     // -------------------------------------------------------------------------
     // PROFESSIONAL SIDE PANELS: LEFT LIVE STANDINGS TOWER & RIGHT 2D TRACK MAP
@@ -3407,7 +3407,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.drawRoundedRect(tHdr, 4, 4);
         p.setFont(QFont("Arial", 7, QFont::Bold));
         p.setPen(QColor(245, 205, 105));
-        p.drawText(tHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignLeft, "🏆 LIVE STANDINGS");
+        p.drawText(tHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignLeft, "LIVE STANDINGS");
         p.setPen(QColor(0, 230, 255));
         p.drawText(tHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignRight,
                    QString("P%1 / %2").arg(player.currentPosition).arg(player.totalRacers));
@@ -3481,7 +3481,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.drawRoundedRect(mHdr, 4, 4);
         p.setFont(QFont("Arial", 7, QFont::Bold));
         p.setPen(QColor(245, 205, 105));
-        p.drawText(mHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignLeft, "🗺️ CIRCUIT TRACK MAP");
+        p.drawText(mHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignLeft, "CIRCUIT TRACK MAP");
         p.setPen(QColor(0, 230, 255));
         p.drawText(mHdr.adjusted(8, 0, -8, 0), Qt::AlignVCenter | Qt::AlignRight,
                    QString("SEC %1/4").arg(player.currentSector));
@@ -3579,7 +3579,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.drawEllipse(finPt, 5.5, 5.5);
         p.setFont(QFont("Arial", 6, QFont::Bold));
         p.setPen(QColor(255, 220, 85));
-        p.drawText(QRectF(finPt.x() - 22, finPt.y() - 14, 44, 11), Qt::AlignCenter, "🏁 FIN");
+        p.drawText(QRectF(finPt.x() - 22, finPt.y() - 14, 44, 11), Qt::AlignCenter, "FIN");
 
         // Plot Rival Race Cars on the 2D Track Map
         for (const NPCCar& npc : engine.getTraffic()) {
@@ -3665,7 +3665,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setFont(QFont("Arial", 12, QFont::Bold));
         p.setPen(QColor(255, 220, 95));
         p.drawText(hdrRect, Qt::AlignCenter,
-                   QString("🏁  FINISH LINE — FINAL RACE STANDINGS (YOU: P%1/%2)  🏁")
+                   QString("FINISH LINE — FINAL RACE STANDINGS (YOU: P%1/%2)")
                        .arg(player.currentPosition)
                        .arg(player.totalRacers));
 
@@ -3735,7 +3735,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setPen(QColor(0, 240, 255));
         int playerCount = NetworkManager::instance().getConnectedPlayerCount();
         p.drawText(mpPill, Qt::AlignCenter,
-                   QString("🟢 MP: %1 (%2/8 PILOTS) • %3ms")
+                   QString("MP: %1 (%2/8 DRIVERS) • %3ms")
                        .arg(NetworkManager::instance().isHost() ? "HOST" : QString("P%1").arg(NetworkManager::instance().getMyPeerId() + 1))
                        .arg(playerCount)
                        .arg(NetworkManager::instance().getAveragePingMs()));
@@ -4262,7 +4262,7 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
             // Japanese Drift Graphic banner
             p.setFont(QFont("Arial", 6, QFont::Bold));
             p.setPen(QColor(255, 205, 55));
-            p.drawText(QRectF(-35 + yawShift * 0.42, -118, 70, 14), Qt::AlignCenter, "⚡ DRIFT SPEC ⚡");
+            p.drawText(QRectF(-35 + yawShift * 0.42, -118, 70, 14), Qt::AlignCenter, "DRIFT SPEC");
 
         } else if (carModel == 3) {
             // TITAN ENFORCER: Horizontal Armored Steel Window Louvers + Roof Emergency Strobe Bar

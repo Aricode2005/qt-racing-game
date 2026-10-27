@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QMap>
 #include <QVector>
+#include <QSet>
 #include <QElapsedTimer>
 #include "GameEngine.h"
 
@@ -61,14 +62,17 @@ struct RemotePeerInfo {
 };
 
 struct DiscoveredHost {
+    QString roomId;
     QString hostName;
     QHostAddress address;
-    quint16 port;
+    quint16 port = 7777;
+    quint16 udpPort = 7778;
     int playerCount = 1;
     int maxPlayers = 8;
     int trackTheme = 0;
     int timeOfDay = 0;
     int carModel = 0;
+    bool passwordProtected = false;
     qint64 lastSeenMs = 0;
 };
 
@@ -98,13 +102,14 @@ public:
     static NetworkManager& instance();
 
     bool isConnected() const { return m_role != NET_ROLE_NONE && m_state != MP_STATE_DISCONNECTED; }
+    bool isSearchingRoom() const { return m_isSearchingRoom; }
     bool isHost() const { return m_role == NET_ROLE_HOST; }
     bool isClient() const { return m_role == NET_ROLE_CLIENT; }
     NetworkRole getRole() const { return m_role; }
     MultiplayerState getState() const { return m_state; }
 
     int getMyPeerId() const { return m_myPeerId; }
-    int getConnectedPlayerCount() const { return m_peers.size() + 1; } // Peers + Local
+    int getConnectedPlayerCount() const { return isConnected() ? (m_peers.size() + 1) : 1; }
     const QMap<int, RemotePeerInfo>& getPeers() const { return m_peers; }
     const QVector<DiscoveredHost>& getDiscoveredHosts() const { return m_discoveredHosts; }
     QString getLocalIpAddress() const;
@@ -113,9 +118,11 @@ public:
 
     void setLocalPlayerName(const QString& name) { m_localName = name; }
     const QString& getLocalPlayerName() const { return m_localName; }
+    bool isLocalReady() const { return m_localReady; }
 
-    // Custom Room controls (Room ID & Password)
+    // Room ID & Password controls (No IP required)
     bool startHostRoom(const QString& roomId, const QString& password = QString(), quint16 tcpPort = 7777, quint16 udpPort = 7778);
+    bool joinRoom(const QString& roomId, const QString& password = QString());
     bool joinCustomRoom(const QString& hostAddress, const QString& roomId, const QString& password = QString(), quint16 tcpPort = 7777, quint16 udpPort = 7780);
 
     // Legacy controls (forward to custom room methods)
@@ -128,6 +135,10 @@ public:
     const QString& getRoomPassword() const { return m_roomPassword; }
     void setRoomPassword(const QString& pwd) { m_roomPassword = pwd; }
     bool isPasswordProtected() const { return !m_roomPassword.isEmpty(); }
+
+    // Grid & Lobby synchronization helpers
+    static void getGridSlotPosition(int peerId, qreal& outX, qreal& outZ);
+    void resetPeersToStartingGrid(GameEngine& engine);
 
     // Lobby actions
     void setReady(bool ready);
@@ -162,22 +173,40 @@ private slots:
     void onUdpReadyRead();
     void onBeaconTimer();
     void onPingTimer();
+    void onSearchTimeout();
 
 private:
     NetworkManager();
     ~NetworkManager();
 
+    static QHostAddress normalizeIPv4(const QHostAddress& addr);
     void sendTcpJson(const QJsonObject& json, QTcpSocket* dest = nullptr);
     void broadcastTcpJson(const QJsonObject& json, QTcpSocket* exclude = nullptr);
     void processTcpMessage(const QJsonObject& json, QTcpSocket* senderSocket);
-    void sendBeaconBroadcast();
+    void sendBeaconBroadcast(const QHostAddress& directTarget = QHostAddress(), quint16 directPort = 0);
+    void sendRoomQueryBroadcast();
+    void handleBeaconJson(const QJsonObject& obj, const QHostAddress& senderAddr);
+    void probeCandidateEndpoint(const QHostAddress& address, quint16 port);
+    void cleanupProbeSockets(QTcpSocket* keepSocket = nullptr);
+    void initPeerTargetOnGrid(int peerId, int carModel);
 
+    quint64 m_instanceId = 0;
     NetworkRole m_role = NET_ROLE_NONE;
     MultiplayerState m_state = MP_STATE_DISCONNECTED;
     int m_myPeerId = 0; // 0 for host, assigned 1-7 for clients
     QString m_localName = "Driver 1";
     QString m_roomId = "APEX-101";
     QString m_roomPassword = "1234";
+    int m_localCarModel = 0;
+    int m_hostTrackTheme = 0;
+    int m_hostTimeOfDay = 1;
+    bool m_localReady = false;
+
+    bool m_isSearchingRoom = false;
+    QString m_lastRejectReason;
+    QList<QTcpSocket*> m_probeSockets;
+    QSet<QString> m_probedEndpoints;
+    QTimer* m_searchTimer = nullptr;
 
     QTcpServer* m_tcpServer = nullptr;
     QTcpSocket* m_clientTcpSocket = nullptr; // For client connecting to host
@@ -198,6 +227,7 @@ private:
     QTimer* m_pingTimer = nullptr;
     QElapsedTimer m_uptime;
     uint32_t m_packetSequence = 0;
+    qint64 m_lastTcpTelemetryMs = 0;
 
     // Countdown sync
     qreal m_countdownTimer = -1.0;

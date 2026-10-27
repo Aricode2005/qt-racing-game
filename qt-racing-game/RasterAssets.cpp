@@ -1760,7 +1760,7 @@ void RasterAssets::generateSceneryAssets() {
         QFont mf1("Arial", 11, QFont::Bold);
         p1.setFont(mf1);
         p1.setPen(QColor(0, 245, 255));
-        p1.drawText(QRect(16, 64, W1 - 32, 24), Qt::AlignCenter, "⚡ HYPERDRIVE HIGHWAY ⚡");
+        p1.drawText(QRect(16, 64, W1 - 32, 24), Qt::AlignCenter, "HYPERDRIVE HIGHWAY");
 
         // Electronic Speed Radar Advisory Display Box
         p1.setBrush(QColor(25, 12, 12));
@@ -1861,7 +1861,7 @@ void RasterAssets::generateSceneryAssets() {
         QFont hf2("Arial", 14, QFont::Black);
         p2.setFont(hf2);
         p2.setPen(QColor(255, 60, 60));
-        p2.drawText(QRect(16, 34, W2 - 32, 28), Qt::AlignCenter, "⚡ TURBO CHARGED NITRO ⚡");
+        p2.drawText(QRect(16, 34, W2 - 32, 28), Qt::AlignCenter, "TURBO CHARGED NITRO");
 
         QFont mf2("Arial", 11, QFont::Bold);
         p2.setFont(mf2);
@@ -1960,7 +1960,7 @@ void RasterAssets::generateSceneryAssets() {
         QFont hf3("Arial", 15, QFont::Black);
         p3.setFont(hf3);
         p3.setPen(QColor(255, 215, 50));
-        p3.drawText(QRect(14, 32, W3 - 28, 28), Qt::AlignCenter, "🏁 NITRO RACING RADIALS 🏁");
+        p3.drawText(QRect(14, 32, W3 - 28, 28), Qt::AlignCenter, "NITRO RACING RADIALS");
 
         QFont mf3("Arial", 11, QFont::Bold);
         p3.setFont(mf3);
