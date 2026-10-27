@@ -97,7 +97,16 @@ An arcade and circuit motorsport racing simulator engineered from the ground up 
   - `🎵 MUSIC`: Real-time 44.1 kHz procedural PCM Synthwave Radio with 4 stations and a 16-band live spectrum analyzer.
   - `🧭 GPS`: In-dash track sector radar.
   - `🚗 CAR`: Live G-force meter, tire temperatures, and chassis integrity diagnostics.
-- **Interactive On-Screen Pedals & Mouse Driving**: Hold **Left Mouse Button** (or click the on-screen **GAS** pedal) to accelerate and **Right Mouse Button** (or **BRAKE** pedal) to brake.
+### 9. Custom Rooms Multiplayer Arena (<kbd>O</kbd> / Main Menu MP Tab)
+- **Private Authenticated Custom Rooms (Up to 8 Racers)**:
+  - Direct peer-to-peer / host-client multiplayer architecture supporting 1 Host and up to 7 remote racers across LAN, VPN (ZeroTier/Hamachi), or Internet (Port-Forwarded IP / `127.0.0.1` Localhost).
+  - **Room ID & Password Protection**:
+    - **Host**: Customize your Room ID (or click **`[🎲 RANDOM]`** to generate a code like `APEX-742`), specify an optional room password (or leave blank for open access), and host instantly on port `7777`.
+    - **Client**: Enter the Host IP, target Room ID, and Password. Rejections (invalid Room ID, incorrect password) display clear on-screen alert banners.
+  - **Interactive 8-Player Lobby Grid**:
+    - Clickable Pilot Callsign editor (`[✏️ Click to edit]`).
+    - 8-Slot visual grid with real-time ping, vehicle selection, and `READY` status.
+    - Synchronized race start countdown and 60 Hz UDP car telemetry relay.
 
 ---
 
@@ -105,6 +114,7 @@ An arcade and circuit motorsport racing simulator engineered from the ground up 
 
 | Key / Input | Action | Description |
 | :--- | :--- | :--- |
+| <kbd>O</kbd> | **Multiplayer Command Center** | Opens the Custom Rooms Multiplayer tab to host or join private rooms |
 | <kbd>W</kbd> / <kbd>↑</kbd> / **Left-Click** | **Accelerate (Gas)** | Opens throttle; launches from starting grid; builds RPM & boost |
 | <kbd>S</kbd> / <kbd>↓</kbd> / **Right-Click** | **Brake / Reverse** | Hydraulic braking; tilts active rear wing airbrake |
 | <kbd>A</kbd> / <kbd>←</kbd> | **Steer Left** | Responsive turn-in left across the 4 racing lanes |

@@ -72,3 +72,24 @@ target_link_libraries(capture_screenshots PRIVATE
     Qt6::Network
 )
 
+add_executable(network_auth_test
+    network_auth_test.cpp
+    NetworkManager.h
+    NetworkManager.cpp
+    GameEngine.h
+    GameEngine.cpp
+    Track.h
+    Track.cpp
+    RasterAssets.h
+    RasterAssets.cpp
+    AudioSynthesizer.h
+    AudioSynthesizer.cpp
+)
+
+target_link_libraries(network_auth_test PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Multimedia
+)
+

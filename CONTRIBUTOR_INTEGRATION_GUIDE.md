@@ -61,3 +61,26 @@ During a race, look at the **4 glowing buttons right below the top bar** (`y = 5
 | **Drive & Steer** | **<kbd>W</kbd> / <kbd>S</kbd>** (or **<kbd>↑</kbd> / <kbd>↓</kbd>**) & **<kbd>A</kbd> / <kbd>D</kbd>** (or **<kbd>←</kbd> / <kbd>→</kbd>**) | Accelerate, brake/reverse, and steer across the 4 highway lanes (or click the on-screen Gas/Brake pedals). |
 | **Select Level (`6`, `10`, `16` Cars)** | Press **<kbd>M</kbd>** (or **<kbd>Esc</kbd>**) → Click **Level 1 / Level 2 / Level 3** | • **Level 1 (Rookie)**: `6` Participating Cars<br>• **Level 2 (Pro Racer)**: `10` Participating Cars<br>• **Level 3 (Hyper Speed)**: `16` Participating Cars |
 | **Restart / Auto-Level Promotion** | Press **<kbd>R</kbd>** | Resets to the starting grid (automatically promotes you to the next level if you finished in **P1–P3**). |
+
+---
+
+### C. Custom Rooms Multiplayer (ID & Password Private Lobbies)
+
+Apex Velocity includes a complete **Custom Rooms Multiplayer Architecture** (`NetworkManager.h`, `NetworkManager.cpp`, `GameWindow.cpp`) that replaces unauthenticated LAN broadcast matchmaking with private rooms:
+
+1. **Host Flow**:
+   - Press **<kbd>O</kbd>** (or click `🌐 CUSTOM ROOMS` in the Main Menu).
+   - Enter a custom **Room ID** (e.g. `APEX-101`) or click **`[🎲 RANDOM]`** to generate a code.
+   - Enter an optional **Room Password** (leave blank for open access).
+   - Click **`[🚀 CREATE & HOST CUSTOM ROOM]`**.
+   - Your local LAN IP (`net.getLocalIpAddress()`) and Room ID are displayed to share with friends.
+2. **Client Flow**:
+   - Enter the Host's IP address (or click **`[💻 127.0.0.1]`** for local two-instance testing).
+   - Enter the matching **Room ID** (case-insensitive) and **Password**.
+   - Click **`[🏁 ENTER & JOIN ROOM]`**.
+   - If Room ID or Password is invalid, the server sends `AUTH_FAILED` with the exact reason and displays a red on-screen warning banner.
+3. **8-Racer Room Lobby**:
+   - Once connected, both Host and Clients transition to the active Room Lobby.
+   - Click **`[👍 TOGGLE READY]`** to signal readiness.
+   - Host clicks **`[🏁 LAUNCH RACE]`** to trigger synchronized countdown and start the Grand Prix with 60 Hz peer telemetry interpolation.
+

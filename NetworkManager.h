@@ -114,10 +114,20 @@ public:
     void setLocalPlayerName(const QString& name) { m_localName = name; }
     const QString& getLocalPlayerName() const { return m_localName; }
 
-    // Session controls
+    // Custom Room controls (Room ID & Password)
+    bool startHostRoom(const QString& roomId, const QString& password = QString(), quint16 tcpPort = 7777, quint16 udpPort = 7778);
+    bool joinCustomRoom(const QString& hostAddress, const QString& roomId, const QString& password = QString(), quint16 tcpPort = 7777, quint16 udpPort = 7780);
+
+    // Legacy controls (forward to custom room methods)
     bool startHost(quint16 tcpPort = 7777, quint16 udpPort = 7778);
     bool connectToHost(const QString& hostAddress, quint16 tcpPort = 7777, quint16 udpPort = 7780);
     void disconnectSession();
+
+    const QString& getRoomId() const { return m_roomId; }
+    void setRoomId(const QString& id) { m_roomId = id; }
+    const QString& getRoomPassword() const { return m_roomPassword; }
+    void setRoomPassword(const QString& pwd) { m_roomPassword = pwd; }
+    bool isPasswordProtected() const { return !m_roomPassword.isEmpty(); }
 
     // Lobby actions
     void setReady(bool ready);
@@ -132,6 +142,7 @@ public:
     void update(qreal dt, GameEngine& engine);
 
 signals:
+    void authFailed(const QString& reason);
     void hostDiscovered(const DiscoveredHost& host);
     void peerJoined(int peerId, const QString& peerName);
     void peerLeft(int peerId, const QString& peerName);
@@ -165,9 +176,12 @@ private:
     MultiplayerState m_state = MP_STATE_DISCONNECTED;
     int m_myPeerId = 0; // 0 for host, assigned 1-7 for clients
     QString m_localName = "Driver 1";
+    QString m_roomId = "APEX-101";
+    QString m_roomPassword = "1234";
 
     QTcpServer* m_tcpServer = nullptr;
     QTcpSocket* m_clientTcpSocket = nullptr; // For client connecting to host
+    QList<QTcpSocket*> m_pendingClients;     // Unauthenticated sockets awaiting AUTH
     QUdpSocket* m_udpSocket = nullptr;
     QUdpSocket* m_beaconSocket = nullptr;
 

@@ -4,6 +4,8 @@
 #include <QFont>
 #include <QRandomGenerator>
 
+#include <QInputDialog>
+
 GameWindow::GameWindow(QWidget *parent)
     : QWidget(parent)
 {
@@ -27,6 +29,13 @@ GameWindow::GameWindow(QWidget *parent)
 
     // Multiplayer Network Signals
     NetworkManager& net = NetworkManager::instance();
+    connect(&net, &NetworkManager::authFailed, this, [this](const QString& reason) {
+        m_lastAuthError = reason;
+        m_authErrorTimer = 6.0;
+        m_engine.getPlayerMutable().lastAnnouncement = QString("❌ AUTH FAILED: %1").arg(reason);
+        m_engine.getPlayerMutable().announcementTimer = 3.5;
+        update();
+    });
     connect(&net, &NetworkManager::peerJoined, this, [this](int peerId, const QString& peerName) {
         m_engine.getPlayerMutable().lastAnnouncement = QString("🔥 PILOT [P%1] %2 JOINED ROOM!").arg(peerId + 1).arg(peerName);
         m_engine.getPlayerMutable().announcementTimer = 3.5;
@@ -80,6 +89,10 @@ void GameWindow::onGameLoop() {
     qint64 elapsedMs = m_frameTimer.restart();
     qreal rawDt = elapsedMs / 1000.0;
     if (rawDt > 0.05) rawDt = 0.05;
+
+    if (m_authErrorTimer > 0) {
+        m_authErrorTimer -= rawDt;
+    }
 
     // High-framerate responsive delta filter: eliminates timer quantization jitter without clamping to 30 FPS
     if (m_smoothDt <= 0.001) m_smoothDt = 0.0166;
@@ -403,49 +416,108 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
 
         if (m_showMultiplayerTab) {
             NetworkManager& net = NetworkManager::instance();
-            if (m_hostBtn.contains(pos)) {
-                if (!net.isHost()) {
-                    net.startHost(7777, 7778);
+
+            if (m_editNameBtn.contains(pos)) {
+                bool ok = false;
+                QString text = QInputDialog::getText(this, "Pilot Callsign", "Enter your Pilot Callsign:", QLineEdit::Normal, net.getLocalPlayerName(), &ok);
+                if (ok && !text.trimmed().isEmpty()) {
+                    net.setLocalPlayerName(text.trimmed());
+                    update();
                 }
-                update();
                 return;
             }
-            if (m_joinLocalBtn.contains(pos)) {
-                if (net.isHost()) {
-                    return; // Already hosting, waiting for peer
+
+            if (!net.isConnected()) {
+                if (m_hostRoomIdBox.contains(pos)) {
+                    bool ok = false;
+                    QString text = QInputDialog::getText(this, "Custom Room ID", "Enter Custom Room ID / Name:", QLineEdit::Normal, m_hostRoomId, &ok);
+                    if (ok && !text.trimmed().isEmpty()) {
+                        m_hostRoomId = text.trimmed().toUpper();
+                        update();
+                    }
+                    return;
                 }
-                const auto& hosts = net.getDiscoveredHosts();
-                if (!hosts.isEmpty()) {
-                    net.connectToHost(hosts.first().address.toString(), hosts.first().port, 7780);
-                } else {
-                    net.connectToHost("127.0.0.1", 7777, 7780);
+                if (m_hostRandomIdBtn.contains(pos)) {
+                    static const QString prefixes[] = { "APEX", "TURBO", "VORTEX", "DRIFT", "NITRO", "CYBER", "HYPER", "MACH" };
+                    int pfx = QRandomGenerator::global()->generate() % 8;
+                    int num = QRandomGenerator::global()->bounded(100, 999);
+                    m_hostRoomId = QString("%1-%2").arg(prefixes[pfx]).arg(num);
+                    update();
+                    return;
                 }
-                update();
-                return;
-            }
-            if (m_joinDirectBtn.contains(pos)) {
-                net.connectToHost("127.0.0.1", 7777, 7780);
-                update();
-                return;
-            }
-            if (m_readyBtn.contains(pos)) {
-                static bool s_ready = false;
-                s_ready = !s_ready;
-                net.setReady(s_ready);
-                update();
-                return;
-            }
-            if (m_startMpBtn.contains(pos)) {
-                if (net.isHost()) {
-                    net.startRaceCountdown();
+                if (m_hostPassBox.contains(pos)) {
+                    bool ok = false;
+                    QString text = QInputDialog::getText(this, "Room Password", "Enter Room Password (leave blank for open room):", QLineEdit::Normal, m_hostRoomPassword, &ok);
+                    if (ok) {
+                        m_hostRoomPassword = text.trimmed();
+                        update();
+                    }
+                    return;
                 }
-                update();
-                return;
-            }
-            if (m_disconnectBtn.contains(pos)) {
-                net.disconnectSession();
-                update();
-                return;
+                if (m_createRoomBtn.contains(pos)) {
+                    m_lastAuthError.clear();
+                    net.startHostRoom(m_hostRoomId, m_hostRoomPassword, 7777, 7778);
+                    update();
+                    return;
+                }
+                if (m_joinIpBox.contains(pos)) {
+                    bool ok = false;
+                    QString text = QInputDialog::getText(this, "Target Host IP", "Enter Host IP address (or domain):", QLineEdit::Normal, m_joinTargetIp, &ok);
+                    if (ok && !text.trimmed().isEmpty()) {
+                        m_joinTargetIp = text.trimmed();
+                        update();
+                    }
+                    return;
+                }
+                if (m_joinLocalhostQuickBtn.contains(pos)) {
+                    m_joinTargetIp = "127.0.0.1";
+                    update();
+                    return;
+                }
+                if (m_joinRoomIdBox.contains(pos)) {
+                    bool ok = false;
+                    QString text = QInputDialog::getText(this, "Room ID to Join", "Enter Room ID to join:", QLineEdit::Normal, m_joinRoomId, &ok);
+                    if (ok && !text.trimmed().isEmpty()) {
+                        m_joinRoomId = text.trimmed().toUpper();
+                        update();
+                    }
+                    return;
+                }
+                if (m_joinPassBox.contains(pos)) {
+                    bool ok = false;
+                    QString text = QInputDialog::getText(this, "Room Password", "Enter Room Password:", QLineEdit::Password, m_joinRoomPassword, &ok);
+                    if (ok) {
+                        m_joinRoomPassword = text.trimmed();
+                        update();
+                    }
+                    return;
+                }
+                if (m_enterRoomBtn.contains(pos)) {
+                    m_lastAuthError.clear();
+                    net.joinCustomRoom(m_joinTargetIp, m_joinRoomId, m_joinRoomPassword, 7777, 7780);
+                    update();
+                    return;
+                }
+            } else {
+                if (m_readyBtn.contains(pos)) {
+                    static bool s_ready = false;
+                    s_ready = !s_ready;
+                    net.setReady(s_ready);
+                    update();
+                    return;
+                }
+                if (m_startMpBtn.contains(pos)) {
+                    if (net.isHost()) {
+                        net.startRaceCountdown();
+                    }
+                    update();
+                    return;
+                }
+                if (m_disconnectBtn.contains(pos)) {
+                    net.disconnectSession();
+                    update();
+                    return;
+                }
             }
             if (m_resumeBtn.contains(pos)) {
                 m_showMainMenu = false;
@@ -782,233 +854,357 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
     p.setPen(QPen(m_showMultiplayerTab ? mpAccent : QColor(45, 55, 75), m_showMultiplayerTab ? 2 : 1));
     p.drawRoundedRect(m_mpTabBtn, 5, 5);
     p.setPen(m_showMultiplayerTab ? mpAccent : (hasPeer ? QColor(45, 240, 110) : QColor(150, 170, 195)));
-    p.drawText(m_mpTabBtn, Qt::AlignCenter, hasPeer ? "🟢 LIVE 1V1 MULTIPLAYER (CONNECTED)" : "🌐 LIVE 1V1 MULTIPLAYER (KEY O)");
+    p.drawText(m_mpTabBtn, Qt::AlignCenter, hasPeer ? "🟢 CUSTOM ROOM (CONNECTED)" : "🌐 CUSTOM ROOMS (KEY O)");
 
     if (m_showMultiplayerTab) {
         NetworkManager& net = NetworkManager::instance();
-        int paneW = qMin(960, w - 80);
+        int paneW = qMin(980, w - 60);
         int paneX = (w - paneW) / 2;
-        int paneY = 90;
+        int paneY = 88;
 
-        // 1. Callsign & Network Identity Header Card
-        QRect idCard(paneX, paneY, paneW, 58);
+        // 1. Identity & Callsign Header Card
+        QRect idCard(paneX, paneY, paneW, 52);
         p.setBrush(QColor(12, 17, 26, 230));
         p.setPen(QPen(QColor(38, 52, 74), 1));
         p.drawRoundedRect(idCard, 8, 8);
 
-        p.setFont(QFont("Arial", 10, QFont::Bold));
+        // Pilot Callsign (clickable to edit)
+        m_editNameBtn = QRect(paneX + 14, paneY + 8, 250, 36);
+        p.setBrush(QColor(18, 26, 38));
+        p.setPen(QPen(QColor(0, 200, 240, 120), 1));
+        p.drawRoundedRect(m_editNameBtn, 5, 5);
+        p.setFont(QFont("Arial", 8, QFont::Bold));
         p.setPen(QColor(0, 230, 255));
-        p.drawText(paneX + 16, paneY + 24, QString("PILOT CALLSIGN:  %1").arg(net.getLocalPlayerName()));
-
-        p.setFont(QFont("Arial", 8, QFont::Normal));
-        p.setPen(QColor(160, 180, 205));
-        p.drawText(paneX + 16, paneY + 44, QString("SELECTED VEHICLE: %1 (Press F1-F4 to change)").arg(m_engine.getPlayer().carModelName));
-
-        // Network Info on the right
-        p.setFont(QFont("Arial", 9, QFont::Bold));
-        p.setPen(QColor(255, 205, 55));
-        p.drawText(QRect(paneX + paneW - 320, paneY + 8, 305, 22), Qt::AlignRight, QString("📡 LOCAL LAN IP:  %1").arg(net.getLocalIpAddress()));
-        p.setFont(QFont("Arial", 8, QFont::Normal));
-        p.setPen(QColor(140, 160, 185));
-        p.drawText(QRect(paneX + paneW - 320, paneY + 30, 305, 20), Qt::AlignRight, QString("TCP Port: 7777 • UDP Telemetry: 60 Hz"));
-
-        // 2. Action Modes (3 Cards side by side)
-        int cardY = paneY + 70;
-        int cardW = (paneW - 2 * 14) / 3;
-        int cardH = 120;
-
-        // Mode 1: Host LAN Race
-        m_hostBtn = QRect(paneX, cardY, cardW, cardH);
-        bool isHostActive = (net.getRole() == NET_ROLE_HOST);
-        p.setBrush(isHostActive ? QColor(20, 38, 28) : QColor(14, 20, 30));
-        p.setPen(QPen(isHostActive ? QColor(45, 240, 110) : QColor(45, 60, 85), isHostActive ? 2 : 1));
-        p.drawRoundedRect(m_hostBtn, 8, 8);
-        p.setFont(QFont("Arial", 10, QFont::Bold));
-        p.setPen(isHostActive ? QColor(45, 240, 110) : Qt::white);
-        p.drawText(paneX + 14, cardY + 26, "📡 1. HOST LAN RACE");
-        p.setFont(QFont("Arial", 7, QFont::Normal));
-        p.setPen(QColor(150, 170, 195));
-        p.drawText(QRect(paneX + 14, cardY + 36, cardW - 28, 42), Qt::AlignLeft | Qt::TextWordWrap,
-                   "Create a local server on port 7777 and broadcast beacon over your Wi-Fi.");
-        // Host Status pill
-        QRect hPill(paneX + 14, cardY + cardH - 32, cardW - 28, 22);
-        p.setBrush(isHostActive ? QColor(45, 240, 110, 45) : QColor(25, 36, 52));
-        p.setPen(Qt::NoPen);
-        p.drawRoundedRect(hPill, 4, 4);
-        p.setFont(QFont("Arial", 7, QFont::Bold));
-        p.setPen(isHostActive ? QColor(45, 240, 110) : QColor(180, 200, 225));
-        p.drawText(hPill, Qt::AlignCenter, isHostActive ? "ACTIVE: LISTENING ✓" : "CLICK TO HOST RACE");
-
-        // Mode 2: Quick-Join Local Race
-        m_joinLocalBtn = QRect(paneX + cardW + 14, cardY, cardW, cardH);
-        const auto& hosts = net.getDiscoveredHosts();
-        bool hasDiscovered = !hosts.isEmpty();
-        bool isClientActive = (net.getRole() == NET_ROLE_CLIENT);
-        p.setBrush(isClientActive ? QColor(20, 38, 52) : QColor(14, 20, 30));
-        p.setPen(QPen(isClientActive ? QColor(0, 230, 255) : (hasDiscovered ? QColor(255, 205, 55) : QColor(45, 60, 85)), (isClientActive || hasDiscovered) ? 2 : 1));
-        p.drawRoundedRect(m_joinLocalBtn, 8, 8);
-        p.setFont(QFont("Arial", 10, QFont::Bold));
-        p.setPen(isClientActive ? QColor(0, 230, 255) : (hasDiscovered ? QColor(255, 205, 55) : Qt::white));
-        p.drawText(paneX + cardW + 14 + 14, cardY + 26, "🔍 2. QUICK-JOIN LAN");
-        p.setFont(QFont("Arial", 7, QFont::Normal));
-        p.setPen(QColor(150, 170, 195));
-        QString joinDesc = isHostActive
-            ? "You are currently HOSTING. Tell Player 2 to click 'QUICK-JOIN' on their PC!"
-            : (hasDiscovered
-                ? QString("FOUND: %1 on %2:%3!").arg(hosts.first().hostName).arg(hosts.first().address.toString()).arg(hosts.first().port)
-                : "Auto-scanning Wi-Fi broadcast for available games... (Click to join)");
-        p.drawText(QRect(paneX + cardW + 14 + 14, cardY + 36, cardW - 28, 42), Qt::AlignLeft | Qt::TextWordWrap, joinDesc);
-        QRect jPill(paneX + cardW + 14 + 14, cardY + cardH - 32, cardW - 28, 22);
-        p.setBrush((hasDiscovered && !isHostActive) ? QColor(255, 205, 55, 45) : QColor(25, 36, 52));
-        p.setPen(Qt::NoPen);
-        p.drawRoundedRect(jPill, 4, 4);
-        p.setFont(QFont("Arial", 7, QFont::Bold));
-        p.setPen((hasDiscovered && !isHostActive) ? QColor(255, 205, 55) : QColor(180, 200, 225));
-        QString pillText = isHostActive
-            ? "CURRENTLY HOSTING"
-            : (isClientActive ? "CONNECTED ✓" : (hasDiscovered ? "ONE-CLICK JOIN ✓" : "SCAN & CONNECT"));
-        p.drawText(jPill, Qt::AlignCenter, pillText);
-
-        // Mode 3: Localhost Loopback (127.0.0.1)
-        m_joinDirectBtn = QRect(paneX + 2 * (cardW + 14), cardY, cardW, cardH);
-        p.setBrush(QColor(14, 20, 30));
-        p.setPen(QPen(QColor(45, 60, 85), 1));
-        p.drawRoundedRect(m_joinDirectBtn, 8, 8);
+        p.drawText(m_editNameBtn.adjusted(10, 4, -10, -18), Qt::AlignLeft, "PILOT CALLSIGN  [✏️ Click to edit]:");
         p.setFont(QFont("Arial", 10, QFont::Bold));
         p.setPen(Qt::white);
-        p.drawText(paneX + 2 * (cardW + 14) + 14, cardY + 26, "💻 3. LOCAL LOOPBACK");
-        p.setFont(QFont("Arial", 7, QFont::Normal));
-        p.setPen(QColor(150, 170, 195));
-        p.drawText(QRect(paneX + 2 * (cardW + 14) + 14, cardY + 36, cardW - 28, 42), Qt::AlignLeft | Qt::TextWordWrap,
-                   "Connect to 127.0.0.1. Open two game windows to test multiplayer on 1 PC!");
-        QRect lPill(paneX + 2 * (cardW + 14) + 14, cardY + cardH - 32, cardW - 28, 22);
-        p.setBrush(QColor(25, 36, 52));
-        p.setPen(Qt::NoPen);
-        p.drawRoundedRect(lPill, 4, 4);
-        p.setFont(QFont("Arial", 7, QFont::Bold));
-        p.setPen(QColor(180, 200, 225));
-        p.drawText(lPill, Qt::AlignCenter, "CONNECT 127.0.0.1");
+        p.drawText(m_editNameBtn.adjusted(10, 18, -10, -2), Qt::AlignLeft, net.getLocalPlayerName());
 
-        // 3. Matchmaking / Connected Status Panel (Supports up to 8 racers)
-        int lobbyY = cardY + cardH + 12;
-        int lobbyH = 162;
-        QRect lobbyCard(paneX, lobbyY, paneW, lobbyH);
-        p.setBrush(QColor(12, 17, 26, 240));
-        p.setPen(QPen(hasPeer ? QColor(45, 240, 110, 180) : QColor(38, 52, 74), hasPeer ? 2 : 1));
-        p.drawRoundedRect(lobbyCard, 8, 8);
+        // Vehicle info
+        p.setFont(QFont("Arial", 8, QFont::Normal));
+        p.setPen(QColor(160, 180, 205));
+        p.drawText(paneX + 278, paneY + 22, QString("VEHICLE: %1 (F1-F4)").arg(m_engine.getPlayer().carModelName));
+        p.setPen(QColor(110, 130, 155));
+        p.drawText(paneX + 278, paneY + 38, "Private Custom Room Protocol • Up to 8 Racers");
 
-        p.setFont(QFont("Arial", 8, QFont::Bold));
-        p.setPen(QColor(0, 240, 255));
-        int totalConnected = net.getConnectedPlayerCount();
-        p.drawText(paneX + 16, lobbyY + 20, QString("🏁 ROOM ROSTER: %1 / 8 PLAYERS CONNECTED • %2")
-            .arg(totalConnected)
-            .arg(net.isHost() ? "HOSTING SESSION" : QString("CONNECTED AS PLAYER %1").arg(net.getMyPeerId() + 1)));
-
+        // Network IP on right
+        p.setFont(QFont("Arial", 9, QFont::Bold));
+        p.setPen(QColor(255, 205, 55));
+        p.drawText(QRect(paneX + paneW - 320, paneY + 10, 305, 18), Qt::AlignRight, QString("📡 YOUR IP:  %1").arg(net.getLocalIpAddress()));
         p.setFont(QFont("Arial", 8, QFont::Normal));
         p.setPen(QColor(140, 160, 185));
-        p.drawText(QRect(paneX + paneW - 320, lobbyY + 8, 305, 18), Qt::AlignRight,
-            QString("Avg Ping: %1 ms • 60Hz UDP Relay").arg(net.getAveragePingMs()));
+        p.drawText(QRect(paneX + paneW - 320, paneY + 28, 305, 18), Qt::AlignRight, "TCP: 7777 • UDP Telemetry: 7778/7780");
 
-        // 8-Player Slot Grid (2 rows x 4 columns)
-        int slotCols = 4;
-        int slotGap = 8;
-        int slotW = (paneW - 32 - (slotCols - 1) * slotGap) / slotCols;
-        int slotH = 40;
-        const auto& peers = net.getPeers();
+        int currentY = paneY + 58;
 
-        for (int slot = 0; slot < 8; ++slot) {
-            int col = slot % slotCols;
-            int row = slot / slotCols;
-            int sx = paneX + 16 + col * (slotW + slotGap);
-            int sy = lobbyY + 28 + row * (slotH + 6);
-            QRect sRect(sx, sy, slotW, slotH);
-
-            if (slot == net.getMyPeerId()) {
-                // Local player (YOU)
-                p.setBrush(QColor(18, 32, 48));
-                p.setPen(QPen(QColor(0, 240, 255), 1.5));
-                p.drawRoundedRect(sRect, 5, 5);
-                p.setFont(QFont("Arial", 8, QFont::Bold));
-                p.setPen(QColor(0, 240, 255));
-                p.drawText(sx + 8, sy + 16, QString("👑 [P%1] %2 (YOU)").arg(slot + 1).arg(net.getLocalPlayerName()));
-                p.setFont(QFont("Arial", 7, QFont::Normal));
-                p.setPen(QColor(160, 190, 220));
-                p.drawText(sx + 8, sy + 32, QString("%1 • READY ✓").arg(m_engine.getPlayer().carModelName));
-            } else if (peers.contains(slot)) {
-                // Connected Remote Peer
-                const auto& pr = peers[slot];
-                p.setBrush(QColor(22, 28, 38));
-                p.setPen(QPen(QColor(255, 205, 55), 1.2));
-                p.drawRoundedRect(sRect, 5, 5);
-                p.setFont(QFont("Arial", 8, QFont::Bold));
-                p.setPen(QColor(255, 205, 55));
-                p.drawText(sx + 8, sy + 16, QString("👑 [P%1] %2").arg(slot + 1).arg(pr.name));
-                p.setFont(QFont("Arial", 7, QFont::Normal));
-                p.setPen(QColor(160, 180, 205));
-                const char* carNames[4] = { "APEX GT-R", "VORTEX V12", "DRIFT SPEC-R", "TITAN ENFORCER" };
-                QString cName = (pr.carModel >= 0 && pr.carModel < 4) ? carNames[pr.carModel] : "APEX GT-R";
-                p.drawText(sx + 8, sy + 32, QString("%1 • %2ms").arg(cName).arg(pr.pingMs));
-            } else {
-                // Empty Open Slot
-                p.setBrush(QColor(14, 18, 25, 140));
-                p.setPen(QPen(QColor(35, 45, 62), 1, Qt::DashLine));
-                p.drawRoundedRect(sRect, 5, 5);
-                p.setFont(QFont("Arial", 7, QFont::Normal));
-                p.setPen(QColor(80, 100, 130));
-                p.drawText(sRect, Qt::AlignCenter, QString("[ Slot %1 Open ]").arg(slot + 1));
-            }
+        // 2. Authentication Error Alert Banner (if any)
+        if (m_authErrorTimer > 0.0 && !m_lastAuthError.isEmpty()) {
+            QRect errRect(paneX, currentY, paneW, 36);
+            p.setBrush(QColor(180, 25, 35, 235));
+            p.setPen(QPen(QColor(255, 75, 85), 2));
+            p.drawRoundedRect(errRect, 6, 6);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(Qt::white);
+            p.drawText(errRect, Qt::AlignCenter, QString("⚠️ AUTHENTICATION REJECTED: %1 (Verify Room ID & Password)").arg(m_lastAuthError));
+            currentY += 42;
         }
 
-        // Action Controls Bar
-        int actY = lobbyY + 122;
-        int actH = 30;
+        // 3. Custom Room Creation & Join Panels (when not connected)
+        if (!net.isConnected()) {
+            int cardGap = 16;
+            int cardW = (paneW - cardGap) / 2;
+            int cardH = 265;
 
-        // Ready toggle button on left
-        m_readyBtn = QRect(paneX + 16, actY, 130, actH);
-        p.setBrush(QColor(24, 36, 52));
-        p.setPen(QPen(QColor(0, 230, 255), 1.2));
-        p.drawRoundedRect(m_readyBtn, 5, 5);
-        p.setFont(QFont("Arial", 7, QFont::Bold));
-        p.setPen(QColor(0, 240, 255));
-        p.drawText(m_readyBtn, Qt::AlignCenter, "👍 TOGGLE READY");
+            // --- LEFT CARD: HOST CUSTOM ROOM ---
+            QRect hostCard(paneX, currentY, cardW, cardH);
+            p.setBrush(QColor(14, 20, 30, 230));
+            p.setPen(QPen(QColor(45, 60, 85), 1.5));
+            p.drawRoundedRect(hostCard, 8, 8);
 
-        // Start Race in Center
-        int startW = 320;
-        m_startMpBtn = QRect(paneX + (paneW - startW) / 2, actY, startW, actH);
-        bool canStart = (net.isHost() && totalConnected >= 2);
-        QLinearGradient sGrad(m_startMpBtn.topLeft(), m_startMpBtn.bottomRight());
-        if (canStart) {
-            sGrad.setColorAt(0.0, QColor(0, 220, 120));
-            sGrad.setColorAt(1.0, QColor(0, 160, 75));
-        } else if (net.isHost()) {
-            sGrad.setColorAt(0.0, QColor(60, 110, 80));
-            sGrad.setColorAt(1.0, QColor(40, 80, 55));
+            // Card Header
+            p.setFont(QFont("Arial", 11, QFont::Bold));
+            p.setPen(QColor(0, 230, 255));
+            p.drawText(hostCard.x() + 16, currentY + 26, "🚀 1. HOST CUSTOM PRIVATE ROOM");
+            p.setFont(QFont("Arial", 7, QFont::Normal));
+            p.setPen(QColor(150, 170, 195));
+            p.drawText(hostCard.x() + 16, currentY + 42, "Create a private session with custom Room ID & Password.");
+
+            // Host Room ID Input
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(180, 200, 225));
+            p.drawText(hostCard.x() + 16, currentY + 62, "ROOM ID / CODE (Click to edit):");
+            int idBtnW = 100;
+            m_hostRoomIdBox = QRect(hostCard.x() + 16, currentY + 68, cardW - 32 - idBtnW - 8, 30);
+            p.setBrush(QColor(20, 28, 42));
+            p.setPen(QPen(QColor(0, 200, 240, 140), 1));
+            p.drawRoundedRect(m_hostRoomIdBox, 4, 4);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(QColor(0, 240, 255));
+            p.drawText(m_hostRoomIdBox.adjusted(10, 0, -10, 0), Qt::AlignVCenter | Qt::AlignLeft, m_hostRoomId);
+
+            // Randomize ID Button
+            m_hostRandomIdBtn = QRect(hostCard.x() + cardW - 16 - idBtnW, currentY + 68, idBtnW, 30);
+            p.setBrush(QColor(28, 40, 60));
+            p.setPen(QPen(QColor(60, 90, 130), 1));
+            p.drawRoundedRect(m_hostRandomIdBtn, 4, 4);
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(180, 210, 245));
+            p.drawText(m_hostRandomIdBtn, Qt::AlignCenter, "🎲 RANDOM");
+
+            // Host Room Password Input
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(180, 200, 225));
+            p.drawText(hostCard.x() + 16, currentY + 114, "ROOM PASSWORD (Click to edit • Blank = Open to anyone):");
+            m_hostPassBox = QRect(hostCard.x() + 16, currentY + 120, cardW - 32, 30);
+            p.setBrush(QColor(20, 28, 42));
+            p.setPen(QPen(QColor(0, 200, 240, 140), 1));
+            p.drawRoundedRect(m_hostPassBox, 4, 4);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(m_hostRoomPassword.isEmpty() ? QColor(100, 130, 160) : QColor(255, 205, 55));
+            p.drawText(m_hostPassBox.adjusted(10, 0, -10, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                       m_hostRoomPassword.isEmpty() ? "• (Open Room - No Password Required)" : QString("••••••••  (Pass: %1)").arg(m_hostRoomPassword));
+
+            // Connection Share Info
+            QRect infoBox(hostCard.x() + 16, currentY + 160, cardW - 32, 42);
+            p.setBrush(QColor(10, 15, 24, 180));
+            p.setPen(QPen(QColor(30, 42, 60), 1));
+            p.drawRoundedRect(infoBox, 4, 4);
+            p.setFont(QFont("Arial", 7, QFont::Normal));
+            p.setPen(QColor(130, 155, 185));
+            p.drawText(infoBox.adjusted(8, 4, -8, -4), Qt::AlignVCenter | Qt::AlignLeft,
+                       QString("Share your IP [%1] + Room ID [%2] with friends.\nWorks over LAN, Hamachi/ZeroTier, or Port-Forwarded Public IP.")
+                       .arg(net.getLocalIpAddress()).arg(m_hostRoomId));
+
+            // Create & Host Button
+            m_createRoomBtn = QRect(hostCard.x() + 16, currentY + cardH - 52, cardW - 32, 40);
+            QLinearGradient hostGrad(m_createRoomBtn.topLeft(), m_createRoomBtn.bottomRight());
+            hostGrad.setColorAt(0.0, QColor(0, 180, 220));
+            hostGrad.setColorAt(1.0, QColor(0, 110, 180));
+            p.setBrush(hostGrad);
+            p.setPen(QPen(QColor(0, 240, 255), 1.5));
+            p.drawRoundedRect(m_createRoomBtn, 6, 6);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(Qt::white);
+            p.drawText(m_createRoomBtn, Qt::AlignCenter, "🚀 CREATE & HOST CUSTOM ROOM");
+
+            // --- RIGHT CARD: JOIN CUSTOM ROOM ---
+            QRect joinCard(paneX + cardW + cardGap, currentY, cardW, cardH);
+            p.setBrush(QColor(14, 20, 30, 230));
+            p.setPen(QPen(QColor(45, 60, 85), 1.5));
+            p.drawRoundedRect(joinCard, 8, 8);
+
+            // Card Header
+            p.setFont(QFont("Arial", 11, QFont::Bold));
+            p.setPen(QColor(255, 205, 55));
+            p.drawText(joinCard.x() + 16, currentY + 26, "🏁 2. JOIN CUSTOM PRIVATE ROOM");
+            p.setFont(QFont("Arial", 7, QFont::Normal));
+            p.setPen(QColor(150, 170, 195));
+            p.drawText(joinCard.x() + 16, currentY + 42, "Connect to a host with their Room ID and matching Password.");
+
+            // Host IP Address Input
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(180, 200, 225));
+            p.drawText(joinCard.x() + 16, currentY + 62, "HOST IP ADDRESS (Click to edit):");
+            int quickIpBtnW = 105;
+            m_joinIpBox = QRect(joinCard.x() + 16, currentY + 68, cardW - 32 - quickIpBtnW - 8, 30);
+            p.setBrush(QColor(20, 28, 42));
+            p.setPen(QPen(QColor(255, 195, 30, 140), 1));
+            p.drawRoundedRect(m_joinIpBox, 4, 4);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(QColor(255, 205, 55));
+            p.drawText(m_joinIpBox.adjusted(10, 0, -10, 0), Qt::AlignVCenter | Qt::AlignLeft, m_joinTargetIp);
+
+            // Localhost 127.0.0.1 Quick Button
+            m_joinLocalhostQuickBtn = QRect(joinCard.x() + cardW - 16 - quickIpBtnW, currentY + 68, quickIpBtnW, 30);
+            p.setBrush(QColor(28, 40, 60));
+            p.setPen(QPen(QColor(60, 90, 130), 1));
+            p.drawRoundedRect(m_joinLocalhostQuickBtn, 4, 4);
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(180, 210, 245));
+            p.drawText(m_joinLocalhostQuickBtn, Qt::AlignCenter, "💻 127.0.0.1");
+
+            // Target Room ID Input
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(180, 200, 225));
+            p.drawText(joinCard.x() + 16, currentY + 104, "ROOM ID (Click to edit • Case-insensitive):");
+            m_joinRoomIdBox = QRect(joinCard.x() + 16, currentY + 110, cardW - 32, 28);
+            p.setBrush(QColor(20, 28, 42));
+            p.setPen(QPen(QColor(255, 195, 30, 140), 1));
+            p.drawRoundedRect(m_joinRoomIdBox, 4, 4);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(QColor(255, 205, 55));
+            p.drawText(m_joinRoomIdBox.adjusted(10, 0, -10, 0), Qt::AlignVCenter | Qt::AlignLeft, m_joinRoomId);
+
+            // Target Room Password Input
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.setPen(QColor(180, 200, 225));
+            p.drawText(joinCard.x() + 16, currentY + 146, "ROOM PASSWORD (Click to edit):");
+            m_joinPassBox = QRect(joinCard.x() + 16, currentY + 152, cardW - 32, 28);
+            p.setBrush(QColor(20, 28, 42));
+            p.setPen(QPen(QColor(255, 195, 30, 140), 1));
+            p.drawRoundedRect(m_joinPassBox, 4, 4);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(m_joinRoomPassword.isEmpty() ? QColor(100, 130, 160) : QColor(255, 205, 55));
+            p.drawText(m_joinPassBox.adjusted(10, 0, -10, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                       m_joinRoomPassword.isEmpty() ? "• (No Password / Empty)" : QString("••••••••  (Pass: %1)").arg(m_joinRoomPassword));
+
+            // Enter & Join Button
+            m_enterRoomBtn = QRect(joinCard.x() + 16, currentY + cardH - 52, cardW - 32, 40);
+            QLinearGradient joinGrad(m_enterRoomBtn.topLeft(), m_enterRoomBtn.bottomRight());
+            joinGrad.setColorAt(0.0, QColor(240, 160, 20));
+            joinGrad.setColorAt(1.0, QColor(180, 100, 10));
+            p.setBrush(joinGrad);
+            p.setPen(QPen(QColor(255, 205, 55), 1.5));
+            p.drawRoundedRect(m_enterRoomBtn, 6, 6);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(Qt::white);
+            p.drawText(m_enterRoomBtn, Qt::AlignCenter, "🏁 ENTER & JOIN ROOM");
+
+            currentY += cardH + 14;
+
+            // Tip Banner at bottom
+            QRect tipCard(paneX, currentY, paneW, 36);
+            p.setBrush(QColor(12, 16, 24, 200));
+            p.setPen(QPen(QColor(32, 44, 60), 1));
+            p.drawRoundedRect(tipCard, 6, 6);
+            p.setFont(QFont("Arial", 8, QFont::Normal));
+            p.setPen(QColor(150, 175, 200));
+            p.drawText(tipCard, Qt::AlignCenter,
+                       "💡 Single-PC Test: Click [CREATE & HOST] in one window, open a 2nd game instance, and click [ENTER & JOIN ROOM] (127.0.0.1 : APEX-101 : 1234).");
+
+            currentY += 46;
         } else {
-            sGrad.setColorAt(0.0, QColor(30, 45, 65));
-            sGrad.setColorAt(1.0, QColor(20, 30, 45));
-        }
-        p.setBrush(sGrad);
-        p.setPen(QPen(canStart ? QColor(100, 255, 180) : QColor(50, 75, 105), canStart ? 2 : 1));
-        p.drawRoundedRect(m_startMpBtn, 5, 5);
-        p.setFont(QFont("Arial", 8, QFont::Bold));
-        p.setPen(canStart ? QColor(8, 20, 12) : QColor(160, 180, 205));
-        QString startText = net.isHost()
-            ? (totalConnected >= 2 ? QString("🏁 LAUNCH RACE (%1 RACERS)").arg(totalConnected) : "⏳ WAITING FOR RACERS TO JOIN...")
-            : "⏳ WAITING FOR HOST TO LAUNCH RACE...";
-        p.drawText(m_startMpBtn, Qt::AlignCenter, startText);
+            // 4. ACTIVE ROOM LOBBY ROSTER & CONTROLS (when connected)
+            int lobbyH = 250;
+            QRect lobbyCard(paneX, currentY, paneW, lobbyH);
+            p.setBrush(QColor(12, 17, 26, 245));
+            p.setPen(QPen(QColor(45, 240, 110, 180), 2));
+            p.drawRoundedRect(lobbyCard, 8, 8);
 
-        // Disconnect on Right
-        int discW = 140;
-        m_disconnectBtn = QRect(paneX + paneW - 16 - discW, actY, discW, actH);
-        p.setBrush(QColor(80, 24, 28));
-        p.setPen(QPen(QColor(220, 60, 60), 1));
-        p.drawRoundedRect(m_disconnectBtn, 5, 5);
-        p.setFont(QFont("Arial", 7, QFont::Bold));
-        p.setPen(QColor(255, 180, 180));
-        p.drawText(m_disconnectBtn, Qt::AlignCenter, net.isHost() ? "CANCEL HOSTING" : "❌ DISCONNECT");
+            // Room Info Header Banner inside lobby
+            QRect roomBadge(paneX + 16, currentY + 12, 220, 28);
+            p.setBrush(QColor(20, 48, 30));
+            p.setPen(QPen(QColor(45, 240, 110), 1.5));
+            p.drawRoundedRect(roomBadge, 5, 5);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(QColor(45, 240, 110));
+            p.drawText(roomBadge, Qt::AlignCenter, QString("🔒 ROOM ID: %1").arg(net.getRoomId().isEmpty() ? m_hostRoomId : net.getRoomId()));
+
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(Qt::white);
+            int totalConnected = net.getConnectedPlayerCount();
+            p.drawText(paneX + 250, currentY + 30, QString("ROSTER: %1 / 8 PLAYERS CONNECTED • %2")
+                .arg(totalConnected)
+                .arg(net.isHost() ? "👑 YOU ARE HOST" : QString("RACER (SLOT %1)").arg(net.getMyPeerId() + 1)));
+
+            p.setFont(QFont("Arial", 8, QFont::Normal));
+            p.setPen(QColor(140, 160, 185));
+            p.drawText(QRect(paneX + paneW - 320, currentY + 16, 305, 18), Qt::AlignRight,
+                QString("Avg Ping: %1 ms • 60Hz UDP Relay").arg(net.getAveragePingMs()));
+
+            // 8-Player Slot Grid (2 rows x 4 columns)
+            int slotCols = 4;
+            int slotGap = 8;
+            int slotW = (paneW - 32 - (slotCols - 1) * slotGap) / slotCols;
+            int slotH = 46;
+            const auto& peers = net.getPeers();
+
+            for (int slot = 0; slot < 8; ++slot) {
+                int col = slot % slotCols;
+                int row = slot / slotCols;
+                int sx = paneX + 16 + col * (slotW + slotGap);
+                int sy = currentY + 50 + row * (slotH + 8);
+                QRect sRect(sx, sy, slotW, slotH);
+
+                if (slot == net.getMyPeerId()) {
+                    // Local player (YOU)
+                    p.setBrush(QColor(18, 36, 54));
+                    p.setPen(QPen(QColor(0, 240, 255), 1.8));
+                    p.drawRoundedRect(sRect, 6, 6);
+                    p.setFont(QFont("Arial", 8, QFont::Bold));
+                    p.setPen(QColor(0, 240, 255));
+                    p.drawText(sx + 8, sy + 18, QString("👑 [P%1] %2 (YOU)").arg(slot + 1).arg(net.getLocalPlayerName()));
+                    p.setFont(QFont("Arial", 7, QFont::Normal));
+                    p.setPen(QColor(160, 190, 220));
+                    p.drawText(sx + 8, sy + 36, QString("%1 • READY ✓").arg(m_engine.getPlayer().carModelName));
+                } else if (peers.contains(slot)) {
+                    // Connected Remote Peer
+                    const auto& pr = peers[slot];
+                    p.setBrush(QColor(22, 30, 42));
+                    p.setPen(QPen(QColor(255, 205, 55), 1.5));
+                    p.drawRoundedRect(sRect, 6, 6);
+                    p.setFont(QFont("Arial", 8, QFont::Bold));
+                    p.setPen(QColor(255, 205, 55));
+                    p.drawText(sx + 8, sy + 18, QString("🏎️ [P%1] %2").arg(slot + 1).arg(pr.name));
+                    p.setFont(QFont("Arial", 7, QFont::Normal));
+                    p.setPen(QColor(160, 180, 205));
+                    const char* carNames[4] = { "APEX GT-R", "VORTEX V12", "DRIFT SPEC-R", "TITAN ENFORCER" };
+                    QString cName = (pr.carModel >= 0 && pr.carModel < 4) ? carNames[pr.carModel] : "APEX GT-R";
+                    p.drawText(sx + 8, sy + 36, QString("%1 • %2ms %3").arg(cName).arg(pr.pingMs).arg(pr.isReady ? "• READY" : ""));
+                } else {
+                    // Empty Open Slot
+                    p.setBrush(QColor(14, 18, 25, 140));
+                    p.setPen(QPen(QColor(35, 45, 62), 1, Qt::DashLine));
+                    p.drawRoundedRect(sRect, 6, 6);
+                    p.setFont(QFont("Arial", 7, QFont::Normal));
+                    p.setPen(QColor(80, 100, 130));
+                    p.drawText(sRect, Qt::AlignCenter, QString("[ Slot %1 Open ]").arg(slot + 1));
+                }
+            }
+
+            // Action Controls Bar
+            int actY = currentY + lobbyH - 52;
+            int actH = 38;
+
+            // Ready toggle button on left
+            m_readyBtn = QRect(paneX + 16, actY, 140, actH);
+            p.setBrush(QColor(24, 38, 56));
+            p.setPen(QPen(QColor(0, 230, 255), 1.5));
+            p.drawRoundedRect(m_readyBtn, 6, 6);
+            p.setFont(QFont("Arial", 8, QFont::Bold));
+            p.setPen(QColor(0, 240, 255));
+            p.drawText(m_readyBtn, Qt::AlignCenter, "👍 TOGGLE READY");
+
+            // Start Race in Center
+            int startW = 340;
+            m_startMpBtn = QRect(paneX + (paneW - startW) / 2, actY, startW, actH);
+            bool canStart = (net.isHost() && totalConnected >= 2);
+            QLinearGradient sGrad(m_startMpBtn.topLeft(), m_startMpBtn.bottomRight());
+            if (canStart) {
+                sGrad.setColorAt(0.0, QColor(0, 220, 120));
+                sGrad.setColorAt(1.0, QColor(0, 160, 75));
+            } else if (net.isHost()) {
+                sGrad.setColorAt(0.0, QColor(60, 110, 80));
+                sGrad.setColorAt(1.0, QColor(40, 80, 55));
+            } else {
+                sGrad.setColorAt(0.0, QColor(30, 45, 65));
+                sGrad.setColorAt(1.0, QColor(20, 30, 45));
+            }
+            p.setBrush(sGrad);
+            p.setPen(QPen(canStart ? QColor(100, 255, 180) : QColor(50, 75, 105), canStart ? 2 : 1));
+            p.drawRoundedRect(m_startMpBtn, 6, 6);
+            p.setFont(QFont("Arial", 9, QFont::Bold));
+            p.setPen(canStart ? QColor(8, 20, 12) : QColor(160, 180, 205));
+            QString startText = net.isHost()
+                ? (totalConnected >= 2 ? QString("🏁 LAUNCH RACE (%1 RACERS)").arg(totalConnected) : "⏳ WAITING FOR RACERS TO JOIN...")
+                : "⏳ WAITING FOR HOST TO LAUNCH RACE...";
+            p.drawText(m_startMpBtn, Qt::AlignCenter, startText);
+
+            // Disconnect / Leave Room on Right
+            int discW = 160;
+            m_disconnectBtn = QRect(paneX + paneW - 16 - discW, actY, discW, actH);
+            p.setBrush(QColor(80, 24, 28));
+            p.setPen(QPen(QColor(220, 60, 60), 1.5));
+            p.drawRoundedRect(m_disconnectBtn, 6, 6);
+            p.setFont(QFont("Arial", 8, QFont::Bold));
+            p.setPen(QColor(255, 180, 180));
+            p.drawText(m_disconnectBtn, Qt::AlignCenter, net.isHost() ? "🛑 CLOSE ROOM" : "❌ LEAVE ROOM");
+
+            currentY += lobbyH + 16;
+        }
 
         // Return button at bottom of multiplayer tab
-        m_resumeBtn = QRect(paneX + paneW / 2 - 110, lobbyY + lobbyH + 14, 220, 34);
+        m_resumeBtn = QRect(paneX + paneW / 2 - 120, currentY, 240, 34);
         p.setBrush(QColor(28, 38, 54));
         p.setPen(QPen(QColor(55, 75, 105), 1.5));
         p.drawRoundedRect(m_resumeBtn, 6, 6);

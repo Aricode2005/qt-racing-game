@@ -64,12 +64,31 @@ private:
     bool m_showMultiplayerTab = false;
     QRect m_soloTabBtn;
     QRect m_mpTabBtn;
-    QRect m_hostBtn;
-    QRect m_joinLocalBtn;
-    QRect m_joinDirectBtn;
     QRect m_readyBtn;
     QRect m_startMpBtn;
     QRect m_disconnectBtn;
+
+    // Custom Room variables & state
+    QString m_hostRoomId = "APEX-101";
+    QString m_hostRoomPassword = "1234";
+    QString m_joinRoomId = "APEX-101";
+    QString m_joinRoomPassword = "1234";
+    QString m_joinTargetIp = "127.0.0.1";
+    QString m_lastAuthError;
+    qreal m_authErrorTimer = 0.0;
+
+    // Custom Room UI Rectangles
+    QRect m_editNameBtn;
+    QRect m_hostRoomIdBox;
+    QRect m_hostRandomIdBtn;
+    QRect m_hostPassBox;
+    QRect m_createRoomBtn;
+
+    QRect m_joinIpBox;
+    QRect m_joinLocalhostQuickBtn;
+    QRect m_joinRoomIdBox;
+    QRect m_joinPassBox;
+    QRect m_enterRoomBtn;
 };
 
 #endif // GAMEWINDOW_H
