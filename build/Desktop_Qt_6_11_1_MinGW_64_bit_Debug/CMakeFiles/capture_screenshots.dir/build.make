@@ -195,6 +195,21 @@ CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.s"
 	C:\Qt\Tools\mingw1310_64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\AudioSynthesizer.cpp -o CMakeFiles\capture_screenshots.dir\AudioSynthesizer.cpp.s
 
+CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj: CMakeFiles/capture_screenshots.dir/flags.make
+CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj: CMakeFiles/capture_screenshots.dir/includes_CXX.rsp
+CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj: C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/NetworkManager.cpp
+CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj: CMakeFiles/capture_screenshots.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\build\Desktop_Qt_6_11_1_MinGW_64_bit_Debug\CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj"
+	C:\Qt\Tools\mingw1310_64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj -MF CMakeFiles\capture_screenshots.dir\NetworkManager.cpp.obj.d -o CMakeFiles\capture_screenshots.dir\NetworkManager.cpp.obj -c C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\NetworkManager.cpp
+
+CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.i"
+	C:\Qt\Tools\mingw1310_64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\NetworkManager.cpp > CMakeFiles\capture_screenshots.dir\NetworkManager.cpp.i
+
+CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.s"
+	C:\Qt\Tools\mingw1310_64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\NetworkManager.cpp -o CMakeFiles\capture_screenshots.dir\NetworkManager.cpp.s
+
 # Object files for target capture_screenshots
 capture_screenshots_OBJECTS = \
 "CMakeFiles/capture_screenshots.dir/capture_screenshots_autogen/mocs_compilation.cpp.obj" \
@@ -204,7 +219,8 @@ capture_screenshots_OBJECTS = \
 "CMakeFiles/capture_screenshots.dir/Track.cpp.obj" \
 "CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.obj" \
 "CMakeFiles/capture_screenshots.dir/RasterRenderer.cpp.obj" \
-"CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.obj"
+"CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.obj" \
+"CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj"
 
 # External object files for target capture_screenshots
 capture_screenshots_EXTERNAL_OBJECTS =
@@ -217,16 +233,17 @@ capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/Track.cpp.obj
 capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.obj
 capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/RasterRenderer.cpp.obj
 capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.obj
+capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj
 capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/build.make
 capture_screenshots.exe: C:/Qt/6.11.1/mingw_64/lib/libQt6Widgets.a
 capture_screenshots.exe: C:/Qt/6.11.1/mingw_64/lib/libQt6Multimedia.a
-capture_screenshots.exe: C:/Qt/6.11.1/mingw_64/lib/libQt6Gui.a
 capture_screenshots.exe: C:/Qt/6.11.1/mingw_64/lib/libQt6Network.a
+capture_screenshots.exe: C:/Qt/6.11.1/mingw_64/lib/libQt6Gui.a
 capture_screenshots.exe: C:/Qt/6.11.1/mingw_64/lib/libQt6Core.a
 capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/linkLibs.rsp
 capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/objects1.rsp
 capture_screenshots.exe: CMakeFiles/capture_screenshots.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\build\Desktop_Qt_6_11_1_MinGW_64_bit_Debug\CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Linking CXX executable capture_screenshots.exe"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\build\Desktop_Qt_6_11_1_MinGW_64_bit_Debug\CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Linking CXX executable capture_screenshots.exe"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles\capture_screenshots.dir\link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

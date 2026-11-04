@@ -2,3 +2,4 @@
 #include "EWIEGA46WW/moc_AudioSynthesizer.cpp"
 #include "EWIEGA46WW/moc_GameEngine.cpp"
 #include "EWIEGA46WW/moc_GameWindow.cpp"
+#include "EWIEGA46WW/moc_NetworkManager.cpp"

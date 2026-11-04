@@ -425,12 +425,13 @@ CMakeFiles/capture_screenshots.dir/capture_screenshots.cpp.obj: \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QSizeF \
  C:/Qt/6.11.1/mingw_64/include/QtGui/QTransform \
  C:/Qt/6.11.1/mingw_64/include/QtGui/qscreen_platform.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QVector \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qvector.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QPoint \
  C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\GameEngine.h \
  C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\Track.h \
  C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\RasterAssets.h \
  C:/Qt/6.11.1/mingw_64/include/QtGui/QImage \
- C:/Qt/6.11.1/mingw_64/include/QtCore/QVector \
- C:/Qt/6.11.1/mingw_64/include/QtCore/qvector.h \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QMap \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QString \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QObject \
@@ -447,4 +448,34 @@ CMakeFiles/capture_screenshots.dir/capture_screenshots.cpp.obj: \
  C:/Qt/6.11.1/mingw_64/include/QtMultimedia/qaudiodevice.h \
  C:/Qt/6.11.1/mingw_64/include/QtMultimedia/qtaudio.h \
  C:/Qt/6.11.1/mingw_64/include/QtMultimedia/qaudio.h \
- C:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+ C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\NetworkManager.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpServer \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpserver.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkglobal.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetwork-config.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkexports.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qabstractsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qhostaddress.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpSocket \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QUdpSocket \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qudpsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QHostAddress \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QNetworkInterface \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qnetworkinterface.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonObject \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonobject.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonvalue.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcborvalue.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcborcommon.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qregularexpression.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/quuid.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsondocument.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonparseerror.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonArray \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonarray.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonDocument \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QSet

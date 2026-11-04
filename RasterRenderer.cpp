@@ -191,6 +191,9 @@ void RasterRenderer::renderBackdrop(QPainter& p, const GameEngine& engine, int w
         }
     }
 
+    // 1b. 3D Gouraud & Phong Shaded Approaching Mountain Ranges along Horizon
+    renderApproachingMountains(p, engine, w, h, currentHorizon);
+
     // 2. Soft atmospheric distance horizon haze gradient blending sky into asphalt
     QLinearGradient haze(0, currentHorizon - 25, 0, currentHorizon + 35);
     if (tod == TIME_NIGHT) {
@@ -208,20 +211,25 @@ void RasterRenderer::renderBackdrop(QPainter& p, const GameEngine& engine, int w
     }
     p.fillRect(0, qRound(currentHorizon - 25), w, 60, haze);
 
-    // 3. Dynamic drifting atmospheric cloud layers
+    // 3. Dynamic drifting atmospheric cloud layers with Gouraud vertical shading & Phong silver-lining rim
     if (tod != TIME_NIGHT) {
         p.save();
         p.setRenderHint(QPainter::Antialiasing, true);
         qreal cloudShift = player.distanceTraveled * 80.0 + m_rainAnimTime * 25.0;
-        QColor cloudCol = (tod == TIME_SUNSET) ? QColor(255, 190, 150, 65) : QColor(255, 255, 255, 75);
-        p.setBrush(cloudCol);
-        p.setPen(Qt::NoPen);
+        QColor topCol = (tod == TIME_SUNSET) ? QColor(255, 225, 185, 105) : QColor(255, 255, 255, 115);
+        QColor botCol = (tod == TIME_SUNSET) ? QColor(195, 110, 95, 55)   : QColor(175, 195, 220, 60);
 
         for (int c = 0; c < 5; ++c) {
             qreal cx = fmod(c * 260.0 + cloudShift * (0.35 + c * 0.12) - (m_cameraHeading * 240.0), w + 300.0) - 150.0;
             qreal cy = 18 + (c % 3) * 22 + (int)(pitchOffset * 0.4);
             int cw = 150 + (c % 3) * 45;
             int ch = 34 + (c % 2) * 14;
+            QLinearGradient cGrad(cx, cy - 12, cx, cy + ch);
+            cGrad.setColorAt(0.0, topCol);
+            cGrad.setColorAt(0.65, (tod == TIME_SUNSET) ? QColor(245, 165, 125, 80) : QColor(235, 242, 252, 85));
+            cGrad.setColorAt(1.0, botCol);
+            p.setBrush(cGrad);
+            p.setPen(QPen(QColor(255, 255, 245, 90), 1.2)); // Phong forward-scattered silver lining
             p.drawRoundedRect(QRectF(cx, cy, cw, ch), ch / 2.0, ch / 2.0);
             p.drawRoundedRect(QRectF(cx + 25, cy - 12, cw * 0.55, ch * 0.9), ch * 0.45, ch * 0.45);
         }
@@ -336,17 +344,25 @@ void RasterRenderer::renderApproachingMountains(QPainter& p, const GameEngine& e
         qreal peakRightX = peakBaseX + 320.0;
         qreal peakRidgeX = peakBaseX + 135.0;
 
-        // Lit Left Facet
+        // Lit Left Facet (Gouraud Vertex-Interpolated Illumination + Phong Ridge Specular)
         QPolygonF litPoly;
         litPoly << QPointF(peakLeftX, horizonY) << QPointF(peakApexX, peakApexY) << QPointF(peakRidgeX, horizonY);
-        p.setBrush(farLit);
+        QLinearGradient farLitGrad(peakApexX, peakApexY, (peakLeftX + peakRidgeX) * 0.5, horizonY);
+        farLitGrad.setColorAt(0.0, farLit.lighter(132)); // High-altitude Phong sun glint at apex vertex
+        farLitGrad.setColorAt(0.45, farLit);
+        farLitGrad.setColorAt(1.0, farShad.lighter(115));
+        p.setBrush(farLitGrad);
         p.setPen(Qt::NoPen);
         p.drawPolygon(litPoly);
 
-        // Shadowed Right Facet
+        // Shadowed Right Facet (Gouraud Vertex-Interpolated Ambient-Diffuse Transition)
         QPolygonF shadPoly;
         shadPoly << QPointF(peakRidgeX, horizonY) << QPointF(peakApexX, peakApexY) << QPointF(peakRightX, horizonY);
-        p.setBrush(farShad);
+        QLinearGradient farShadGrad(peakApexX, peakApexY, peakRightX, horizonY);
+        farShadGrad.setColorAt(0.0, farShad.lighter(118));
+        farShadGrad.setColorAt(0.55, farShad);
+        farShadGrad.setColorAt(1.0, farShad.darker(135));
+        p.setBrush(farShadGrad);
         p.drawPolygon(shadPoly);
 
         // Snow Cap / Mesa Top / Neon Spire
@@ -358,12 +374,18 @@ void RasterRenderer::renderApproachingMountains(QPainter& p, const GameEngine& e
 
             QPolygonF snowLitPoly;
             snowLitPoly << QPointF(capLeftX, capY) << QPointF(peakApexX, peakApexY) << QPointF(peakRidgeX, capY);
-            p.setBrush(snowLit);
+            QLinearGradient sLitG(peakApexX, peakApexY, capLeftX, capY);
+            sLitG.setColorAt(0.0, QColor(255, 255, 255)); // Phong specular ice glint
+            sLitG.setColorAt(1.0, snowLit);
+            p.setBrush(sLitG);
             p.drawPolygon(snowLitPoly);
 
             QPolygonF snowShadPoly;
             snowShadPoly << QPointF(peakRidgeX, capY) << QPointF(peakApexX, peakApexY) << QPointF(capRightX, capY);
-            p.setBrush(snowShad);
+            QLinearGradient sShadG(peakApexX, peakApexY, capRightX, capY);
+            sShadG.setColorAt(0.0, snowLit);
+            sShadG.setColorAt(1.0, snowShad);
+            p.setBrush(sShadG);
             p.drawPolygon(snowShadPoly);
         } else if (theme == THEME_RED_ROCK) {
             p.setPen(QPen(rimCol, 2));
@@ -393,22 +415,32 @@ void RasterRenderer::renderApproachingMountains(QPainter& p, const GameEngine& e
         qreal peakRightX = peakBaseX + 380.0;
         qreal peakRidgeX = peakBaseX + 170.0;
 
-        // Lit Left Slope
+        // Lit Left Slope (Gouraud Vertex-Interpolated + Phong Specular Crest Lobe)
         QPolygonF litPoly;
         litPoly << QPointF(peakLeftX, horizonY) << QPointF(peakApexX, peakApexY) << QPointF(peakRidgeX, horizonY);
-        p.setBrush(nearLit);
+        QLinearGradient nearLitGrad(peakApexX - 18.0, peakApexY, peakLeftX + 40.0, horizonY);
+        nearLitGrad.setColorAt(0.0, nearLit.lighter(145)); // Phong specular crest hotspot
+        nearLitGrad.setColorAt(0.38, nearLit.lighter(112));
+        nearLitGrad.setColorAt(1.0, nearShad.lighter(115));
+        p.setBrush(nearLitGrad);
         p.setPen(Qt::NoPen);
         p.drawPolygon(litPoly);
 
-        // Shadowed Right Slope
+        // Shadowed Right Slope (Gouraud Vertex-Interpolated Deep Valley Shadow)
         QPolygonF shadPoly;
         shadPoly << QPointF(peakRidgeX, horizonY) << QPointF(peakApexX, peakApexY) << QPointF(peakRightX, horizonY);
-        p.setBrush(nearShad);
+        QLinearGradient nearShadGrad(peakApexX, peakApexY, peakRightX, horizonY);
+        nearShadGrad.setColorAt(0.0, nearLit.darker(115));
+        nearShadGrad.setColorAt(0.45, nearShad);
+        nearShadGrad.setColorAt(1.0, nearShad.darker(145));
+        p.setBrush(nearShadGrad);
         p.drawPolygon(shadPoly);
 
-        // Dramatic Mountain Crest Highlights
-        p.setPen(QPen(rimCol, 1.5));
+        // Dramatic Phong Specular Mountain Crest & Ridge Highlights
+        p.setPen(QPen(rimCol, 1.8));
         p.drawLine(QPointF(peakLeftX, horizonY), QPointF(peakApexX, peakApexY));
+        p.setPen(QPen(QColor(rimCol.red(), rimCol.green(), rimCol.blue(), 135), 1.3));
+        p.drawLine(QPointF(peakApexX, peakApexY), QPointF(peakRidgeX, horizonY));
         p.setPen(Qt::NoPen);
 
         // Snow Cap / Mesa Strata / Neon Grid
@@ -420,12 +452,19 @@ void RasterRenderer::renderApproachingMountains(QPainter& p, const GameEngine& e
 
             QPolygonF snowLitPoly;
             snowLitPoly << QPointF(capLeftX, capY) << QPointF(peakApexX, peakApexY) << QPointF(peakRidgeX, capY);
-            p.setBrush(snowLit);
+            QLinearGradient nSnowLit(peakApexX, peakApexY, capLeftX, capY);
+            nSnowLit.setColorAt(0.0, QColor(255, 255, 255));
+            nSnowLit.setColorAt(0.55, snowLit.lighter(112));
+            nSnowLit.setColorAt(1.0, snowLit);
+            p.setBrush(nSnowLit);
             p.drawPolygon(snowLitPoly);
 
             QPolygonF snowShadPoly;
             snowShadPoly << QPointF(peakRidgeX, capY) << QPointF(peakApexX, peakApexY) << QPointF(capRightX, capY);
-            p.setBrush(snowShad);
+            QLinearGradient nSnowShad(peakApexX, peakApexY, capRightX, capY);
+            nSnowShad.setColorAt(0.0, snowLit);
+            nSnowShad.setColorAt(1.0, snowShad.darker(120));
+            p.setBrush(nSnowShad);
             p.drawPolygon(snowShadPoly);
         } else if (theme == THEME_RED_ROCK) {
             p.setPen(QPen(rimCol, 2));
@@ -463,7 +502,11 @@ void RasterRenderer::renderApproachingMountains(QPainter& p, const GameEngine& e
     QColor footColor = (theme == THEME_RED_ROCK) ? QColor(95, 42, 22) :
                        (theme == THEME_ALPINE_CLIMB ? QColor(36, 48, 38) :
                        (theme == THEME_SUNSET_COAST ? QColor(48, 62, 45) : QColor(18, 22, 35)));
-    p.fillPath(foothills, footColor);
+    QLinearGradient footGouraud(0, horizonY - 46.0, 0, horizonY + 2.0);
+    footGouraud.setColorAt(0.0, footColor.lighter(145));
+    footGouraud.setColorAt(0.5, footColor);
+    footGouraud.setColorAt(1.0, footColor.darker(140));
+    p.fillPath(foothills, footGouraud);
 
     // Soft atmospheric haze band across the mountain base
     QLinearGradient hazeGrad(0, horizonY - 45, 0, horizonY + 2);
@@ -619,10 +662,139 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             }
         }
 
-        const qreal fog = fogAmount(s.p1.camZ);
-        p.fillRect(0, s.p2.screenY, w, s.p1.screenY - s.p2.screenY + 1, fogMix(terrainColor, fog));
+        const qreal fog1 = fogAmount(s.p1.camZ);
+        const qreal fog2 = fogAmount(s.p2.camZ);
+        const qreal fog  = fog1;
 
-        // Gravel / dirt shoulder just outside the kerbs (grounds the road into the terrain)
+        // Per-Vertex 3D Surface Normals N1 (at near edge p1) and N2 (at far edge p2) for Gouraud & Phong Shading
+        qreal slope1 = (s.p2.worldY - s.p1.worldY) / (qreal)segLen;
+        qreal slope2 = (n + 1 < segs.size()) ? ((segs[n + 1].p2.worldY - segs[n + 1].p1.worldY) / (qreal)segLen) : slope1;
+        qreal bankNext = (n + 1 < segs.size()) ? segs[n + 1].roadBank : s.roadBank;
+
+        // Directional Sun/Moon Light Vector L = (lx, ly, lz) & Halfway Vector H = normalize(L + V)
+        qreal sunAzimuth = (tod == TIME_SUNSET) ? -0.25 : 0.32;
+        qreal lx = sunAzimuth - m_cameraHeading * 0.15;
+        qreal ly = (tod == TIME_SUNSET) ? 0.55 : ((tod == TIME_NIGHT) ? 0.72 : 0.82);
+        qreal lz = 0.52;
+
+        // Vertex 1 & Vertex 2 Gouraud Lambertian (N.L) factors
+        qreal nDotL1 = qBound(0.55, 1.0 + slope1 * 2.8 - s.roadBank * lx * 0.45, 1.42);
+        qreal nDotL2 = qBound(0.55, 1.0 + slope2 * 2.8 - bankNext * lx * 0.45, 1.42);
+
+        // Gouraud-interpolated terrain strip (smoothly interpolates vertex lighting & atmospheric fog from p2 to p1)
+        {
+            QColor tCol1 = fogMix(QColor(
+                qBound(6, qRound(terrainColor.red()   * nDotL1), 245),
+                qBound(6, qRound(terrainColor.green() * nDotL1), 245),
+                qBound(8, qRound(terrainColor.blue()  * nDotL1), 250)), fog1);
+            QColor tCol2 = fogMix(QColor(
+                qBound(6, qRound(terrainColor.red()   * nDotL2 * 0.92), 245),
+                qBound(6, qRound(terrainColor.green() * nDotL2 * 0.92), 245),
+                qBound(8, qRound(terrainColor.blue()  * nDotL2 * 0.92), 250)), fog2);
+            QLinearGradient terrainGouraud(0, s.p2.screenY, 0, s.p1.screenY + 1);
+            terrainGouraud.setColorAt(0.0, tCol2);
+            terrainGouraud.setColorAt(1.0, tCol1);
+            p.fillRect(0, s.p2.screenY, w, s.p1.screenY - s.p2.screenY + 1, terrainGouraud);
+        }
+
+        // 3D Sculpted Roadside Terrain Embankments / Canyon Berms with Gouraud Facet & Phong Ridge Lighting
+        if (!isMirror && n < 56 && s.p1.screenW > 18) {
+            qreal bIn1 = s.p1.screenW * 1.28;
+            qreal bIn2 = s.p2.screenW * 1.28;
+            qreal bMid1 = s.p1.screenW * 1.92;
+            qreal bMid2 = s.p2.screenW * 1.92;
+            qreal bOut1 = s.p1.screenW * 2.85;
+            qreal bOut2 = s.p2.screenW * 2.85;
+
+            // Procedural 3D terrain ridge elevation modulated along track index
+            qreal ridgeWave1 = 0.65 + 0.35 * qSin(s.index * 0.35);
+            qreal ridgeWave2 = 0.65 + 0.35 * qSin((s.index + 1) * 0.35);
+            qreal ridgeH1 = s.p1.screenW * 0.24 * ridgeWave1;
+            qreal ridgeH2 = s.p2.screenW * 0.24 * ridgeWave2;
+
+            QColor baseBerm = (tod == TIME_NIGHT) ? QColor(18, 22, 30)
+                            : (theme == THEME_RED_ROCK ? QColor(138, 72, 42)
+                            : (theme == THEME_ALPINE_CLIMB ? QColor(175, 192, 212)
+                            : (theme == THEME_NEON_METROPOLIS ? QColor(34, 38, 52)
+                            : QColor(58, 78, 48))));
+            if (s.index % 2) baseBerm = baseBerm.darker(107);
+
+            // Evaluate 3D surface normal N of left & right inner embankment slopes for Gouraud + Phong
+            // Left embankment faces right (+X) and up (+Y); Right embankment faces left (-X) and up (+Y)
+            qreal leftNdotL  = qBound(0.42, 0.88 + 0.45 * lx + slope1 * 1.8, 1.48);
+            qreal rightNdotL = qBound(0.42, 0.88 - 0.45 * lx + slope1 * 1.8, 1.48);
+            qreal leftPhong  = qPow(qBound(0.0, 0.72 + 0.28 * lx, 1.0), 16.0) * (1.0 - fog1);
+            qreal rightPhong = qPow(qBound(0.0, 0.72 - 0.28 * lx, 1.0), 16.0) * (1.0 - fog1);
+
+            QColor leftInner1 = fogMix(baseBerm.lighter(qRound(100 * leftNdotL + leftPhong * 38.0)), fog1);
+            QColor leftInner2 = fogMix(baseBerm.lighter(qRound(94 * leftNdotL)), fog2);
+            QColor leftOuter  = fogMix(baseBerm.darker(128), fog1);
+
+            QColor rightInner1 = fogMix(baseBerm.lighter(qRound(100 * rightNdotL + rightPhong * 38.0)), fog1);
+            QColor rightInner2 = fogMix(baseBerm.lighter(qRound(94 * rightNdotL)), fog2);
+            QColor rightOuter  = fogMix(baseBerm.darker(128), fog1);
+
+            p.setPen(Qt::NoPen);
+            // Left 3D Embankment Inner Slope (Roadside -> Ridge Crest)
+            QPointF leftSlope[4] = {
+                QPointF(s.p1.screenX - bMid1, s.p1.screenY - ridgeH1),
+                QPointF(s.p2.screenX - bMid2, s.p2.screenY - ridgeH2),
+                QPointF(s.p2.screenX - bIn2,  s.p2.screenY),
+                QPointF(s.p1.screenX - bIn1,  s.p1.screenY)
+            };
+            QLinearGradient lgSlope(s.p1.screenX - bMid1, s.p1.screenY - ridgeH1, s.p1.screenX - bIn1, s.p1.screenY);
+            lgSlope.setColorAt(0.0, leftInner1);
+            lgSlope.setColorAt(1.0, leftInner2.darker(115));
+            p.setBrush(lgSlope);
+            p.drawPolygon(leftSlope, 4);
+
+            // Left 3D Embankment Outer Back-Slope (Ridge Crest -> Outer Terrain)
+            QPointF leftBack[4] = {
+                QPointF(s.p1.screenX - bOut1, s.p1.screenY),
+                QPointF(s.p2.screenX - bOut2, s.p2.screenY),
+                QPointF(s.p2.screenX - bMid2, s.p2.screenY - ridgeH2),
+                QPointF(s.p1.screenX - bMid1, s.p1.screenY - ridgeH1)
+            };
+            p.setBrush(leftOuter);
+            p.drawPolygon(leftBack, 4);
+
+            // Right 3D Embankment Inner Slope (Roadside -> Ridge Crest)
+            QPointF rightSlope[4] = {
+                QPointF(s.p1.screenX + bIn1,  s.p1.screenY),
+                QPointF(s.p2.screenX + bIn2,  s.p2.screenY),
+                QPointF(s.p2.screenX + bMid2, s.p2.screenY - ridgeH2),
+                QPointF(s.p1.screenX + bMid1, s.p1.screenY - ridgeH1)
+            };
+            QLinearGradient rgSlope(s.p1.screenX + bMid1, s.p1.screenY - ridgeH1, s.p1.screenX + bIn1, s.p1.screenY);
+            rgSlope.setColorAt(0.0, rightInner1);
+            rgSlope.setColorAt(1.0, rightInner2.darker(115));
+            p.setBrush(rgSlope);
+            p.drawPolygon(rightSlope, 4);
+
+            // Right 3D Embankment Outer Back-Slope
+            QPointF rightBack[4] = {
+                QPointF(s.p1.screenX + bMid1, s.p1.screenY - ridgeH1),
+                QPointF(s.p2.screenX + bMid2, s.p2.screenY - ridgeH2),
+                QPointF(s.p2.screenX + bOut2, s.p2.screenY),
+                QPointF(s.p1.screenX + bOut1, s.p1.screenY)
+            };
+            p.setBrush(rightOuter);
+            p.drawPolygon(rightBack, 4);
+
+            // 3D Phong Specular Ridge Crest Rim Line along both Embankment Peaks
+            if (n < 32) {
+                QColor ridgeSpec = fogMix((tod == TIME_SUNSET) ? QColor(255, 200, 130, 120)
+                                        : (tod == TIME_NIGHT ? QColor(110, 175, 255, 95) : QColor(235, 245, 255, 115)), fog1);
+                p.setPen(QPen(ridgeSpec, qMax(1.0, s.p1.screenW * 0.008)));
+                p.drawLine(QPointF(s.p2.screenX - bMid2, s.p2.screenY - ridgeH2),
+                           QPointF(s.p1.screenX - bMid1, s.p1.screenY - ridgeH1));
+                p.drawLine(QPointF(s.p2.screenX + bMid2, s.p2.screenY - ridgeH2),
+                           QPointF(s.p1.screenX + bMid1, s.p1.screenY - ridgeH1));
+                p.setPen(Qt::NoPen);
+            }
+        }
+
+        // Gravel / dirt shoulder with Gouraud lateral bevel shading
         {
             QColor shoulderCol = (tod == TIME_NIGHT) ? QColor(22, 22, 26)
                                : (theme == THEME_RED_ROCK ? QColor(120, 74, 44) : QColor(86, 80, 66));
@@ -636,31 +808,51 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
                 QPointF(s.p1.screenX + o1, s.p1.screenY)
             };
             p.setPen(Qt::NoPen);
-            p.setBrush(fogMix(shoulderCol, fog));
+            QColor shLit = fogMix(shoulderCol.lighter(qRound(100 * nDotL1)), fog1);
+            QColor shEdge = fogMix(shoulderCol.darker(132), fog2);
+            QLinearGradient shGrad(s.p1.screenX - o1, s.p1.screenY, s.p1.screenX + o1, s.p1.screenY);
+            shGrad.setColorAt(0.0, shEdge);
+            shGrad.setColorAt(0.18, shLit);
+            shGrad.setColorAt(0.82, shLit);
+            shGrad.setColorAt(1.0, shEdge);
+            p.setBrush(shGrad);
             p.drawPolygon(shoulderPts, 4);
         }
 
-        // Rumble Strips (stack array - zero heap allocations)
+        // 3D Beveled Rumble Strips / Kerbs (Raised 3D Lip + Gouraud Top Face + Phong Specular Edge)
         qreal r1w = s.p1.screenW * 1.12;
         qreal r2w = s.p2.screenW * 1.12;
+        qreal kerbLip1 = qMax(1.0, s.p1.screenW * 0.016);
+        qreal kerbLip2 = qMax(0.8, s.p2.screenW * 0.016);
         QColor rumbleColor;
         if (tod == TIME_NIGHT) {
-            rumbleColor = s.isRumbleRed ? QColor(160, 25, 25) : QColor(150, 150, 160);
+            rumbleColor = s.isRumbleRed ? QColor(170, 28, 32) : QColor(160, 165, 178);
         } else {
-            rumbleColor = s.isRumbleRed ? QColor(220, 38, 38) : QColor(245, 245, 245);
+            rumbleColor = s.isRumbleRed ? QColor(228, 38, 42) : QColor(248, 248, 252);
         }
 
+        // Top 3D raised kerb face
         QPointF rumblePts[4] = {
-            QPointF(s.p1.screenX - r1w, s.p1.screenY),
-            QPointF(s.p2.screenX - r2w, s.p2.screenY),
-            QPointF(s.p2.screenX + r2w, s.p2.screenY),
-            QPointF(s.p1.screenX + r1w, s.p1.screenY)
+            QPointF(s.p1.screenX - r1w, s.p1.screenY - kerbLip1),
+            QPointF(s.p2.screenX - r2w, s.p2.screenY - kerbLip2),
+            QPointF(s.p2.screenX + r2w, s.p2.screenY - kerbLip2),
+            QPointF(s.p1.screenX + r1w, s.p1.screenY - kerbLip1)
         };
-        p.setBrush(fogMix(rumbleColor, fog));
+        QColor kerbTopCol = fogMix(rumbleColor.lighter(qRound(104 * nDotL1)), fog1);
+        p.setBrush(kerbTopCol);
         p.setPen(Qt::NoPen);
         p.drawPolygon(rumblePts, 4);
 
-        // Asphalt Road Surface with 3D Lambertian (N.L) Slope Shading & 3D Curve Camber/Banking
+        // Outer 3D vertical bevel lip of the kerb
+        if (!isMirror && n < 36) {
+            QColor kerbBevel = fogMix(rumbleColor.darker(155), fog1);
+            p.setPen(QPen(kerbBevel, qMax(1.2, kerbLip1)));
+            p.drawLine(QPointF(s.p2.screenX - r2w, s.p2.screenY), QPointF(s.p1.screenX - r1w, s.p1.screenY));
+            p.drawLine(QPointF(s.p2.screenX + r2w, s.p2.screenY), QPointF(s.p1.screenX + r1w, s.p1.screenY));
+            p.setPen(Qt::NoPen);
+        }
+
+        // Asphalt Road Surface with 3D Per-Vertex Gouraud Shading & Blinn-Phong Specular Reflection
         QColor roadColor;
         if (tod == TIME_NIGHT) {
             roadColor = (s.index % 2 == 0) ? QColor(20, 22, 28) : QColor(16, 18, 24);
@@ -670,16 +862,30 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             roadColor = (s.index % 2 == 0) ? QColor(44, 46, 52) : QColor(38, 40, 46);
         }
 
-        // 3D Lambertian (N.L) directional slope lighting on uneven road hills (Sayanaditya 3D Feature)
-        qreal segSlope = (s.p2.worldY - s.p1.worldY) / (qreal)segLen;
-        if (player.zBuffer3DMode && qAbs(segSlope) > 0.005) {
-            int lumaDelta = qBound(-18, qRound(segSlope * 68.0), 22);
-            roadColor = QColor(
-                qBound(8, roadColor.red()   + lumaDelta, 245),
-                qBound(8, roadColor.green() + lumaDelta, 245),
-                qBound(10, roadColor.blue() + lumaDelta, 250)
-            );
-        }
+        // Evaluate 3D Blinn-Phong Specular Factor (N . H)^alpha on Road Surface
+        // View vector V from camera eye to segment center, Halfway vector H = normalize(L + V)
+        qreal viewDistNorm = qBound(0.0, s.p1.camZ / (fogFar * 0.85), 1.0);
+        qreal nDotH = qBound(0.0, 0.86 + slope1 * 1.45 - qAbs(viewDistNorm - 0.38) * 0.42, 1.0);
+        bool isWetRoad = (player.wipersActive || (theme == THEME_NEON_METROPOLIS));
+        qreal phongExp = isWetRoad ? 24.0 : 36.0;
+        qreal phongSpec = qPow(nDotH, phongExp) * (isWetRoad ? 1.85 : 0.95);
+        int specBoost1 = qRound(phongSpec * (tod == TIME_SUNSET ? 46.0 : (tod == TIME_NIGHT ? 28.0 : 34.0)));
+        int specBoost2 = qRound(phongSpec * 0.82 * (tod == TIME_SUNSET ? 46.0 : (tod == TIME_NIGHT ? 28.0 : 34.0)));
+
+        int luma1 = qBound(-20, qRound((nDotL1 - 1.0) * 68.0), 28);
+        int luma2 = qBound(-20, qRound((nDotL2 - 1.0) * 68.0), 28);
+
+        QColor roadVertex1 = fogMix(QColor(
+            qBound(8, roadColor.red()   + luma1 + specBoost1, 245),
+            qBound(8, roadColor.green() + luma1 + qRound(specBoost1 * (tod == TIME_SUNSET ? 0.72 : 0.95)), 245),
+            qBound(10, roadColor.blue() + luma1 + qRound(specBoost1 * (tod == TIME_SUNSET ? 0.50 : 1.05)), 250)
+        ), fog1);
+
+        QColor roadVertex2 = fogMix(QColor(
+            qBound(8, roadColor.red()   + luma2 + specBoost2, 245),
+            qBound(8, roadColor.green() + luma2 + qRound(specBoost2 * (tod == TIME_SUNSET ? 0.72 : 0.95)), 245),
+            qBound(10, roadColor.blue() + luma2 + qRound(specBoost2 * (tod == TIME_SUNSET ? 0.50 : 1.05)), 250)
+        ), fog2);
 
         // 3D Road Camber / Banking & Uneven Crown Tilt on road edges
         qreal bank1 = player.zBuffer3DMode ? (s.roadBank * s.p1.screenW * 0.045) : 0.0;
@@ -691,8 +897,41 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
             QPointF(s.p2.screenX + s.p2.screenW, s.p2.screenY + bank2),
             QPointF(s.p1.screenX + s.p1.screenW, s.p1.screenY + bank1)
         };
-        p.setBrush(fogMix(roadColor, fog));
+
+        // Smooth Gouraud Vertex Interpolation across the 3D Road Quad (p2 -> p1 + lateral crown)
+        if (!isMirror && n < 45) {
+            QLinearGradient roadGouraud(s.p2.screenX, s.p2.screenY, s.p1.screenX, s.p1.screenY);
+            roadGouraud.setColorAt(0.0, roadVertex2);
+            roadGouraud.setColorAt(1.0, roadVertex1);
+            p.setBrush(roadGouraud);
+        } else {
+            p.setBrush(roadVertex1);
+        }
         p.drawPolygon(roadPts, 4);
+
+        // Real-Time Lateral Phong Specular Reflection Lobe across Asphalt Crown
+        if (!isMirror && n < 34 && s.p1.screenW > 28 && specBoost1 > 3) {
+            qreal specCenterRatio = qBound(-0.55, lx * 0.65 - s.roadBank * 0.25, 0.55);
+            qreal sc1 = s.p1.screenX + s.p1.screenW * specCenterRatio;
+            qreal sc2 = s.p2.screenX + s.p2.screenW * specCenterRatio;
+            qreal lobeW1 = s.p1.screenW * (isWetRoad ? 0.52 : 0.34);
+            qreal lobeW2 = s.p2.screenW * (isWetRoad ? 0.52 : 0.34);
+            QPointF specQuad[4] = {
+                QPointF(sc1 - lobeW1, s.p1.screenY),
+                QPointF(sc2 - lobeW2, s.p2.screenY),
+                QPointF(sc2 + lobeW2, s.p2.screenY),
+                QPointF(sc1 + lobeW1, s.p1.screenY)
+            };
+            int peakAlpha = qBound(0, qRound(specBoost1 * (isWetRoad ? 2.4 : 1.35) * (1.0 - fog1)), 135);
+            QColor specHighlight = (tod == TIME_SUNSET) ? QColor(255, 185, 115, peakAlpha) :
+                                   (tod == TIME_NIGHT  ? QColor(125, 185, 255, peakAlpha) : QColor(225, 238, 255, peakAlpha));
+            QLinearGradient phongLobeGrad(sc1 - lobeW1, s.p1.screenY, sc1 + lobeW1, s.p1.screenY);
+            phongLobeGrad.setColorAt(0.0, QColor(specHighlight.red(), specHighlight.green(), specHighlight.blue(), 0));
+            phongLobeGrad.setColorAt(0.5, specHighlight);
+            phongLobeGrad.setColorAt(1.0, QColor(specHighlight.red(), specHighlight.green(), specHighlight.blue(), 0));
+            p.setBrush(phongLobeGrad);
+            p.drawPolygon(specQuad, 4);
+        }
 
         // Solid white edge lines along both road edges (real highway marking)
         {
@@ -838,24 +1077,32 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
                     p.fillRect(QRectF(gx1 - pw * 0.5, s.p1.screenY - railH1, pw, railH1), postCol);
                 }
 
-                // Upper corrugated W-beam strip (lit)
+                // Upper corrugated W-beam strip (Phong Metallic Specular + Gouraud Slope Interpolation)
                 QPointF upperBeam[4] = {
                     QPointF(gx1, s.p1.screenY - railH1),
                     QPointF(gx2, s.p2.screenY - railH2),
                     QPointF(gx2, s.p2.screenY - railH2 + beamH2 * 0.55),
                     QPointF(gx1, s.p1.screenY - railH1 + beamH1 * 0.55)
                 };
-                p.setBrush(railLit);
+                QLinearGradient upperPhong(gx1, s.p1.screenY - railH1, gx1, s.p1.screenY - railH1 + beamH1 * 0.55);
+                upperPhong.setColorAt(0.0, railLit.lighter(132)); // Sharp Phong metallic specular ridge
+                upperPhong.setColorAt(0.55, railLit);
+                upperPhong.setColorAt(1.0, railShd);
+                p.setBrush(upperPhong);
                 p.drawPolygon(upperBeam, 4);
 
-                // Lower corrugated W-beam recess (shaded)
+                // Lower corrugated W-beam recess (Gouraud Shaded Recess + Secondary Specular Lip)
                 QPointF lowerBeam[4] = {
                     QPointF(gx1, s.p1.screenY - railH1 + beamH1 * 0.55),
                     QPointF(gx2, s.p2.screenY - railH2 + beamH2 * 0.55),
                     QPointF(gx2, s.p2.screenY - railH2 + beamH2),
                     QPointF(gx1, s.p1.screenY - railH1 + beamH1)
                 };
-                p.setBrush(railShd);
+                QLinearGradient lowerPhong(gx1, s.p1.screenY - railH1 + beamH1 * 0.55, gx1, s.p1.screenY - railH1 + beamH1);
+                lowerPhong.setColorAt(0.0, railShd.darker(118));
+                lowerPhong.setColorAt(0.65, railShd);
+                lowerPhong.setColorAt(1.0, railLit);
+                p.setBrush(lowerPhong);
                 p.drawPolygon(lowerBeam, 4);
             }
         }
@@ -1189,8 +1436,92 @@ void RasterRenderer::renderSceneryAndCars(QPainter& p, const GameEngine& engine,
             p.drawEllipse(QPointF( s.width * 0.26, poolY), poolRx, poolRy);
         }
 
+        // 3D Ground Contact Ambient Occlusion Shadow for Roadside Scenery Objects (Trees, Rocks, Arches, Poles)
+        if (!s.isCar && s.width >= 22 && s.camZ < 2200.0) {
+            qreal contactY = s.height * s.anchorYRatio;
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(6, 8, 14, 115));
+            p.drawEllipse(QPointF(0, contactY), s.width * 0.34, qMax(2.5, s.height * 0.045));
+        }
+
         QRect destRect(-s.width / 2, 0, s.width, s.height);
         p.drawImage(destRect, s.sprite);
+
+        // Real-Time 3D Phong Specular Sun/Moon Rim & Volumetric Canopy Highlight on Surroundings
+        if (!s.isCar && s.width >= 32 && s.camZ < 1900.0) {
+            TimeOfDay scTod = engine.getTimeOfDay();
+            // Sun/Moon directional light vector L relative to object screen X
+            qreal sunBias = (scTod == TIME_SUNSET) ? -0.35 : 0.30;
+            qreal rimX = sunBias * (s.width * 0.22);
+            qreal rimY = s.height * 0.28;
+            qreal rimRx = s.width * 0.26;
+            qreal rimRy = s.height * 0.22;
+            QColor scSpecCol = (scTod == TIME_SUNSET) ? QColor(255, 195, 115, 64)
+                             : (scTod == TIME_NIGHT  ? QColor(120, 190, 255, 48) : QColor(255, 252, 230, 58));
+            QRadialGradient scPhong(rimX, rimY, qMax(rimRx, rimRy));
+            scPhong.setColorAt(0.0, scSpecCol);
+            scPhong.setColorAt(0.55, QColor(scSpecCol.red(), scSpecCol.green(), scSpecCol.blue(), scSpecCol.alpha() / 3));
+            scPhong.setColorAt(1.0, QColor(255, 255, 255, 0));
+            p.setPen(Qt::NoPen);
+            p.setBrush(scPhong);
+            p.drawEllipse(QPointF(rimX, rimY), rimRx, rimRy);
+        }
+
+        // Real-Time Dynamic 3D Multi-Lobe Phong Clear-Coat & Gouraud Lateral Shading on Traffic/Multiplayer Cars
+        // Shifts physically across the car roof dome, left/right 3D fender haunches, and C-pillars based on V and L
+        if (s.isCar && s.width >= 24) {
+            qreal viewLateral = qBound(-1.0, (s.screenX - w * 0.5) / (w * 0.45), 1.0);
+            qreal specShiftX = -viewLateral * (s.width * 0.16);
+            qreal roofCrownY = s.height * 0.34;
+            qreal specRadX = s.width * 0.29;
+            qreal specRadY = s.height * 0.14;
+
+            TimeOfDay carTod = engine.getTimeOfDay();
+            QColor phongCol = (carTod == TIME_SUNSET) ? QColor(255, 220, 165, 138) :
+                              (carTod == TIME_NIGHT  ? QColor(165, 225, 255, 118) : QColor(255, 255, 255, 142));
+            p.setPen(Qt::NoPen);
+
+            // 1. Primary 3D Roof Dome Blinn-Phong Hotspot (N . H)^64
+            QRadialGradient roofPhong(specShiftX, roofCrownY, specRadX);
+            roofPhong.setColorAt(0.0, phongCol);
+            roofPhong.setColorAt(0.45, QColor(phongCol.red(), phongCol.green(), phongCol.blue(), phongCol.alpha() / 3));
+            roofPhong.setColorAt(1.0, QColor(255, 255, 255, 0));
+            p.setBrush(roofPhong);
+            p.drawEllipse(QPointF(specShiftX, roofCrownY), specRadX, specRadY);
+
+            // 2. Left & Right 3D Widebody Fender Haunch Phong Lobes (curved shoulder volume)
+            qreal haunchY = s.height * 0.56;
+            qreal haunchRx = s.width * 0.15;
+            qreal haunchRy = s.height * 0.10;
+            for (int side = -1; side <= 1; side += 2) {
+                qreal sideBoost = qBound(0.35, 1.0 - side * viewLateral * 0.55, 1.35);
+                int hAlpha = qBound(20, qRound(phongCol.alpha() * 0.82 * sideBoost), 175);
+                QPointF hPt(side * s.width * 0.33 + specShiftX * 0.35, haunchY);
+                QRadialGradient hGrad(hPt, haunchRx);
+                hGrad.setColorAt(0.0, QColor(phongCol.red(), phongCol.green(), phongCol.blue(), hAlpha));
+                hGrad.setColorAt(0.55, QColor(phongCol.red(), phongCol.green(), phongCol.blue(), hAlpha / 3));
+                hGrad.setColorAt(1.0, QColor(255, 255, 255, 0));
+                p.setBrush(hGrad);
+                p.drawEllipse(hPt, haunchRx, haunchRy);
+            }
+
+            // 3. 3D Beltline Horizon-Crease Specular Ribbon & C-Pillar Fresnel Rim
+            if (s.width >= 38) {
+                qreal creaseY = s.height * 0.52;
+                QLinearGradient creaseGrad(-s.width * 0.40, creaseY, s.width * 0.40, creaseY);
+                creaseGrad.setColorAt(0.0, QColor(255, 255, 255, 0));
+                creaseGrad.setColorAt(0.22, QColor(phongCol.red(), phongCol.green(), phongCol.blue(), 110));
+                creaseGrad.setColorAt(0.50, QColor(255, 255, 255, 45));
+                creaseGrad.setColorAt(0.78, QColor(phongCol.red(), phongCol.green(), phongCol.blue(), 110));
+                creaseGrad.setColorAt(1.0, QColor(255, 255, 255, 0));
+                p.fillRect(QRectF(-s.width * 0.40, creaseY, s.width * 0.80, qMax(1.5, s.height * 0.032)), creaseGrad);
+
+                // C-Pillar & Roofline 3D Fresnel Edge Highlights
+                p.setPen(QPen(QColor(phongCol.red(), phongCol.green(), phongCol.blue(), 125), qMax(1.0, s.width * 0.015), Qt::SolidLine, Qt::RoundCap));
+                p.drawLine(QPointF(-s.width * 0.24, s.height * 0.28), QPointF(-s.width * 0.35, s.height * 0.50));
+                p.drawLine(QPointF( s.width * 0.24, s.height * 0.28), QPointF( s.width * 0.35, s.height * 0.50));
+            }
+        }
 
         // 3D Volumetric Low-Poly Prism & Wireframe Mesh Pass (Sayanaditya 3D Feature [1]/[Z])
         if (player.zBuffer3DMode && s.isCar && s.width >= 18) {
@@ -3265,12 +3596,18 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.drawText(navPill, Qt::AlignCenter, "▲ EXPRESSWAY SPEEDWAY ▲");
     }
 
-    // Controls cheatsheet pill below turn advisory
-    QFont cf("Arial", 7, QFont::Bold);
-    p.setFont(cf);
-    p.setPen(QColor(150, 210, 245));
-    p.drawText(QRect(cx - 310, 31, 620, 15), Qt::AlignCenter,
-               "FEATURES: [1/Z] 3D MESH  •  [2/G] ADAS ASSIST  •  [3/F] AR GAP RAILS  •  [4/J] PIXEL (1-6px)  •  [Y] REPAIR  •  [C] CAM");
+    // Compact center-aligned quick-keys status badge (strictly bounded to 260px width so it never overlaps POS/TIME badge)
+    {
+        QRect centerHintPill(cx - 130, 30, 260, 17);
+        p.setBrush(QColor(14, 20, 30, 205));
+        p.setPen(QPen(QColor(55, 75, 105, 180), 1));
+        p.drawRoundedRect(centerHintPill, 4, 4);
+        QFont cf("Arial", 7, QFont::Bold);
+        p.setFont(cf);
+        p.setPen(QColor(165, 215, 245));
+        p.drawText(centerHintPill, Qt::AlignCenter,
+                   "[Y] REPAIR  •  [N] LIGHTING  •  [M] MENU");
+    }
 
     // -------------------------------------------------------------
     // INTERACTIVE FEATURE BUTTONS BAR (1, 2, 3, 4) + LIVE ADAS HUD
@@ -3281,7 +3618,7 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         int btnGap = 8;
         int totalW = 4 * btnW + 3 * btnGap;
         int startX = cx - totalW / 2;
-        int btnY = 50;
+        int btnY = 56; // Positioned cleanly below the top header bar accent border (y=50)
 
         struct FeatPill {
             QString label;
@@ -3298,17 +3635,17 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.setFont(QFont("Arial", 7, QFont::Bold));
         for (int i = 0; i < 4; ++i) {
             QRect r(startX + i * (btnW + btnGap), btnY, btnW, btnH);
-            p.setBrush(pills[i].active ? QColor(pills[i].col.red(), pills[i].col.green(), pills[i].col.blue(), 52)
-                                       : QColor(14, 18, 28, 200));
+            p.setBrush(pills[i].active ? QColor(pills[i].col.red(), pills[i].col.green(), pills[i].col.blue(), 58)
+                                       : QColor(14, 18, 28, 215));
             p.setPen(QPen(pills[i].active ? pills[i].col : QColor(70, 84, 108), 1.4));
             p.drawRoundedRect(r, 5, 5);
-            p.setPen(pills[i].active ? Qt::white : QColor(150, 168, 192));
+            p.setPen(pills[i].active ? Qt::white : QColor(160, 178, 202));
             p.drawText(r, Qt::AlignCenter, pills[i].label);
         }
 
         // Live Windshield ADAS Autopilot Banner when ADAS ([2]/[G]) is ON
         if (player.adasEnabled) {
-            QRect adasBox(cx - 195, 76, 390, 24);
+            QRect adasBox(cx - 195, 82, 390, 24);
             bool intervening = player.adasInterventionActive || (player.adasRadarDistM < 65.0);
             QColor aCol = intervening ? QColor(255, 195, 40) : QColor(45, 240, 130);
             p.setBrush(QColor(10, 18, 26, 215));
@@ -3925,25 +4262,39 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
         qreal rightTireX = W * 0.45 - tireW;
         qreal tireY = -tireH + 2;
 
-        auto drawRearTire = [&](qreal tx) {
+        auto drawRearTire = [&](qreal tx, bool isLeftTire) {
+            // 3D Cylindrical Tire Barrel Shading (Gouraud crown + Phong rubber sheen)
             QLinearGradient tGrad(tx, tireY, tx + tireW, tireY);
-            tGrad.setColorAt(0.0, QColor(12, 14, 18));
-            tGrad.setColorAt(0.35, QColor(28, 31, 38));
-            tGrad.setColorAt(0.65, QColor(24, 27, 34));
-            tGrad.setColorAt(1.0, QColor(10, 12, 15));
+            tGrad.setColorAt(0.0, QColor(8, 10, 14));
+            tGrad.setColorAt(0.28, QColor(36, 40, 50));
+            tGrad.setColorAt(0.52, QColor(52, 58, 72)); // 3D cylindrical Phong rubber highlight
+            tGrad.setColorAt(0.76, QColor(26, 30, 38));
+            tGrad.setColorAt(1.0, QColor(8, 10, 14));
             p.setBrush(tGrad);
-            p.setPen(QPen(QColor(8, 9, 12), 1.5));
-            p.drawRoundedRect(QRectF(tx, tireY, tireW, tireH), 8, 8);
+            p.setPen(QPen(QColor(6, 8, 12), 1.5));
+            p.drawRoundedRect(QRectF(tx, tireY, tireW, tireH), 9, 9);
 
-            // Animated spinning tread sipes
-            p.setPen(QPen(QColor(42, 46, 56, 180), 1.5));
+            // 3D Outer Sidewall Shoulder Bevel & Foreshortened Deep-Dish Alloy Rim Lip during Cornering
+            qreal outerEdgeX = isLeftTire ? (tx + 4.0) : (tx + tireW - 10.0);
+            QLinearGradient rimLipGrad(outerEdgeX, tireY + 5, outerEdgeX, tireY + tireH - 5);
+            rimLipGrad.setColorAt(0.0, QColor(195, 208, 228, 200));
+            rimLipGrad.setColorAt(0.5, QColor(75, 84, 100, 180));
+            rimLipGrad.setColorAt(1.0, QColor(175, 190, 210, 190));
+            p.setBrush(rimLipGrad);
+            p.setPen(Qt::NoPen);
+            p.drawRoundedRect(QRectF(outerEdgeX, tireY + 6, 5.5, tireH - 12), 2.5, 2.5);
+
+            // Animated spinning 3D tread sipes + specular groove edge
             int treadOffset = (int)(player.distanceTraveled * 2400.0) % 10;
             for (int ty = (int)tireY + 6 + treadOffset; ty < (int)(tireY + tireH - 4); ty += 10) {
-                p.drawLine(QPointF(tx + 6, ty), QPointF(tx + tireW - 6, ty));
+                p.setPen(QPen(QColor(14, 16, 22, 220), 2.0));
+                p.drawLine(QPointF(tx + 7, ty), QPointF(tx + tireW - 7, ty));
+                p.setPen(QPen(QColor(78, 86, 104, 145), 1.0));
+                p.drawLine(QPointF(tx + 9, ty + 1.5), QPointF(tx + tireW - 9, ty + 1.5));
             }
         };
-        drawRearTire(leftTireX);
-        drawRearTire(rightTireX);
+        drawRearTire(leftTireX, true);
+        drawRearTire(rightTireX, false);
     }
 
     // Apply dynamic suspension roll to the sprung supercar chassis
@@ -4151,46 +4502,144 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
             lowerBody.closeSubpath();
         }
 
-        QLinearGradient bodyGrad(0, -96, 0, -24);
+        // 4a. True 3D Foreshortened Receding Left & Right Side Door Flanks & NACA Air Intakes
+        // Gives the car unmistakable 3D depth from front fenders back to the wide rear haunches
+        {
+            QColor flankLight, flankDark;
+            if (carModel == 1)      { flankLight = QColor(235, 48, 58);  flankDark = QColor(58, 8, 14); }
+            else if (carModel == 2) { flankLight = QColor(245, 182, 48); flankDark = QColor(62, 38, 8); }
+            else if (carModel == 3) { flankLight = QColor(58, 148, 106); flankDark = QColor(14, 34, 24); }
+            else                    { flankLight = QColor(118, 130, 148); flankDark = QColor(24, 28, 36); }
+
+            for (int side = -1; side <= 1; side += 2) {
+                QPolygonF sideFlank;
+                qreal rearOutX  = side * W * 0.49;
+                qreal rearTopX  = side * W * 0.38 + yawShift * 0.25;
+                qreal frontOutX = side * W * 0.36 + yawShift * 0.65;
+                qreal frontTopX = side * W * 0.29 + yawShift * 0.60;
+                sideFlank << QPointF(rearOutX,  -42)
+                          << QPointF(frontOutX, -76)
+                          << QPointF(frontTopX, -104)
+                          << QPointF(rearTopX,  -92);
+                QLinearGradient fGrad(frontTopX, -104, rearOutX, -42);
+                qreal sideNdotL = qBound(0.45, 0.90 - side * (player.steerAngle * 0.42 + player.rollG * 0.45), 1.35);
+                fGrad.setColorAt(0.0, flankLight.lighter(qRound(105 * sideNdotL)));
+                fGrad.setColorAt(0.55, flankLight.darker(115));
+                fGrad.setColorAt(1.0, flankDark);
+                p.setBrush(fGrad);
+                p.setPen(QPen(flankLight.lighter(135), 1.1));
+                p.drawPolygon(sideFlank);
+
+                // 3D Recessed NACA Side Air Intake Duct behind the doors
+                QPolygonF nacaDuct;
+                nacaDuct << QPointF(side * W * 0.41 + yawShift * 0.30, -68)
+                         << QPointF(side * W * 0.35 + yawShift * 0.45, -86)
+                         << QPointF(side * W * 0.32 + yawShift * 0.42, -88)
+                         << QPointF(side * W * 0.37 + yawShift * 0.28, -66);
+                p.setBrush(QColor(10, 12, 16, 230));
+                p.setPen(QPen(flankLight.lighter(150), 1.0));
+                p.drawPolygon(nacaDuct);
+            }
+        }
+
+        // Dynamic 3D Gouraud + Horizon-Band Metallic Shader on Widebody Rear Haunches
+        qreal lightShiftX = -yawShift * 1.8 - bodyRollDeg * 3.5;
+        qreal pitchLightBoost = qBound(0.85, 1.0 - player.pitchG * 0.45, 1.25);
+        QLinearGradient bodyGrad(lightShiftX, -98, -lightShiftX * 0.5, -22);
         if (player.selectedCar == 1) { // VORTEX V12 (Rosso Corsa Crimson)
-            bodyGrad.setColorAt(0.0, QColor(215, 38, 48));
-            bodyGrad.setColorAt(0.28, QColor(165, 22, 32));
-            bodyGrad.setColorAt(0.65, QColor(98, 14, 22));
-            bodyGrad.setColorAt(1.0, QColor(42, 8, 12));
+            bodyGrad.setColorAt(0.0,  QColor(255, 88, 96).lighter(qRound(100 * pitchLightBoost)));
+            bodyGrad.setColorAt(0.18, QColor(235, 38, 48));
+            bodyGrad.setColorAt(0.34, QColor(68, 8, 14));   // 3D Automotive Dark Horizon Reflection Band
+            bodyGrad.setColorAt(0.48, QColor(215, 32, 42)); // Lower bumper secondary sky bounce
+            bodyGrad.setColorAt(0.76, QColor(115, 14, 22));
+            bodyGrad.setColorAt(1.0,  QColor(28, 4, 8));
         } else if (player.selectedCar == 2) { // DRIFT SPEC-R (Solar Amber-Gold)
-            bodyGrad.setColorAt(0.0, QColor(235, 168, 38));
-            bodyGrad.setColorAt(0.28, QColor(185, 122, 22));
-            bodyGrad.setColorAt(0.65, QColor(112, 72, 14));
-            bodyGrad.setColorAt(1.0, QColor(48, 30, 8));
+            bodyGrad.setColorAt(0.0,  QColor(255, 222, 98).lighter(qRound(100 * pitchLightBoost)));
+            bodyGrad.setColorAt(0.18, QColor(232, 162, 32));
+            bodyGrad.setColorAt(0.34, QColor(74, 44, 6));   // 3D Automotive Dark Horizon Reflection Band
+            bodyGrad.setColorAt(0.48, QColor(212, 142, 26));
+            bodyGrad.setColorAt(0.76, QColor(118, 74, 12));
+            bodyGrad.setColorAt(1.0,  QColor(34, 20, 4));
         } else if (player.selectedCar == 3) { // TITAN ENFORCER (Tactical Emerald-Obsidian)
-            bodyGrad.setColorAt(0.0, QColor(48, 138, 98));
-            bodyGrad.setColorAt(0.28, QColor(32, 96, 68));
-            bodyGrad.setColorAt(0.65, QColor(20, 58, 42));
-            bodyGrad.setColorAt(1.0, QColor(12, 30, 22));
+            bodyGrad.setColorAt(0.0,  QColor(92, 202, 148).lighter(qRound(100 * pitchLightBoost)));
+            bodyGrad.setColorAt(0.18, QColor(52, 142, 102));
+            bodyGrad.setColorAt(0.34, QColor(14, 38, 28));  // 3D Automotive Dark Horizon Reflection Band
+            bodyGrad.setColorAt(0.48, QColor(44, 118, 84));
+            bodyGrad.setColorAt(0.76, QColor(20, 58, 42));
+            bodyGrad.setColorAt(1.0,  QColor(8, 20, 14));
         } else { // APEX GT-R (Liquid Gunmetal Metallic)
-            bodyGrad.setColorAt(0.0, QColor(102, 112, 126));
-            bodyGrad.setColorAt(0.28, QColor(64, 72, 84));
-            bodyGrad.setColorAt(0.65, QColor(36, 40, 48));
-            bodyGrad.setColorAt(1.0, QColor(20, 23, 28));
+            bodyGrad.setColorAt(0.0,  QColor(172, 186, 208).lighter(qRound(100 * pitchLightBoost)));
+            bodyGrad.setColorAt(0.18, QColor(104, 116, 134));
+            bodyGrad.setColorAt(0.34, QColor(24, 28, 36));  // 3D Automotive Dark Horizon Reflection Band
+            bodyGrad.setColorAt(0.48, QColor(86, 96, 114));
+            bodyGrad.setColorAt(0.76, QColor(38, 44, 54));
+            bodyGrad.setColorAt(1.0,  QColor(14, 16, 22));
         }
         p.setBrush(bodyGrad);
-        p.setPen(QPen(QColor(135, 145, 162), 1.5));
+        p.setPen(QPen(QColor(155, 168, 188), 1.6));
         p.drawPath(lowerBody);
 
-        // Muscular wheel-arch fender flare sky-reflection highlights
+        // Real-Time 3D Multi-Lobe Blinn-Phong Specular Clear-Coat on Left & Right Widebody Rear Haunches
+        // Evaluates primary (N . H)^64 white-hot core + secondary (N . H)^16 metallic sheen + Fresnel rim
+        p.save();
+        p.setClipPath(lowerBody);
+        p.setPen(Qt::NoPen);
+        TimeOfDay carTod = engine.getTimeOfDay();
+        QColor specTone = (carTod == TIME_SUNSET) ? QColor(255, 220, 168, 195) :
+                          (carTod == TIME_NIGHT  ? QColor(175, 230, 255, 175) : QColor(255, 255, 255, 210));
+        for (int side = -1; side <= 1; side += 2) {
+            qreal sideNdotH = qBound(0.40, 0.88 - side * (player.steerAngle * 0.45 + player.rollG * 0.55), 1.30);
+            int lobeAlpha = qBound(40, qRound(specTone.alpha() * sideNdotH), 245);
+            QPointF haunchSpecCenter(side * W * 0.38 + yawShift * 0.18 - bodyRollDeg * 1.4, -77.0);
+
+            // Broad anisotropic metallic sheen lobe (N . H)^16
+            QRadialGradient broadPhong(haunchSpecCenter, 58.0);
+            broadPhong.setColorAt(0.0, QColor(specTone.red(), specTone.green(), specTone.blue(), lobeAlpha));
+            broadPhong.setColorAt(0.42, QColor(specTone.red(), specTone.green(), specTone.blue(), lobeAlpha / 2));
+            broadPhong.setColorAt(1.0, QColor(255, 255, 255, 0));
+            p.setBrush(broadPhong);
+            p.drawEllipse(haunchSpecCenter, 58.0, 22.0);
+
+            // Tight mirror clear-coat hotspot (N . H)^64
+            QPointF corePt = haunchSpecCenter + QPointF(-side * 6.0, -3.0);
+            QRadialGradient corePhong(corePt, 24.0);
+            corePhong.setColorAt(0.0, QColor(255, 255, 255, qMin(255, lobeAlpha + 30)));
+            corePhong.setColorAt(0.5, QColor(specTone.red(), specTone.green(), specTone.blue(), lobeAlpha / 2));
+            corePhong.setColorAt(1.0, QColor(255, 255, 255, 0));
+            p.setBrush(corePhong);
+            p.drawEllipse(corePt, 24.0, 9.5);
+        }
+        // Horizontal Phong beltline horizon crease reflection
+        QLinearGradient creasePhong(-W * 0.47, -87, W * 0.47, -87);
+        creasePhong.setColorAt(0.0, QColor(255, 255, 255, 0));
+        creasePhong.setColorAt(0.18, QColor(255, 255, 255, 185));
+        creasePhong.setColorAt(0.50, QColor(specTone.red(), specTone.green(), specTone.blue(), 85));
+        creasePhong.setColorAt(0.82, QColor(255, 255, 255, 185));
+        creasePhong.setColorAt(1.0, QColor(255, 255, 255, 0));
+        p.fillRect(QRectF(-W * 0.47, -90, W * 0.94, 5.5), creasePhong);
+        p.restore();
+
+        // Muscular 3D wheel-arch fender flare Fresnel sky-reflection highlights
         p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(QColor(200, 215, 235, 150), 2.2, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(QPointF(-W * 0.45, -78), QPointF(-W * 0.34, -88));
-        p.drawLine(QPointF( W * 0.45, -78), QPointF( W * 0.34, -88));
+        p.setPen(QPen(QColor(235, 245, 255, 215), 2.6, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(QPointF(-W * 0.47, -75), QPointF(-W * 0.34, -89));
+        p.drawLine(QPointF( W * 0.47, -75), QPointF( W * 0.34, -89));
     }
 
-    // 5. Tapered Fastback Cabin, Roof Styling & Exterior Wing Mirrors (Customized per Car)
+    // 5. Tapered 3D Fastback Cabin, Sculpted Flying Buttress C-Pillars & Exterior Wing Mirrors
     {
-        // Left & Right aerodynamic exterior wing mirrors
-        p.setBrush(QColor(38, 42, 50));
-        p.setPen(QPen(QColor(165, 158, 142), 1.2));
-        p.drawRoundedRect(QRectF(-W * 0.41 + yawShift * 0.35, -112, 24, 11), 4, 4);
-        p.drawRoundedRect(QRectF( W * 0.41 - 24 + yawShift * 0.35, -112, 24, 11), 4, 4);
+        // Left & Right aerodynamic exterior wing mirrors with 3D stalk & Phong specular cap
+        for (int side = -1; side <= 1; side += 2) {
+            qreal mx = (side < 0) ? (-W * 0.42 + yawShift * 0.35) : (W * 0.42 - 25 + yawShift * 0.35);
+            QRectF mirRect(mx, -114, 25, 11);
+            QLinearGradient mGrad(mirRect.topLeft(), mirRect.bottomLeft());
+            mGrad.setColorAt(0.0, QColor(145, 158, 178));
+            mGrad.setColorAt(0.45, QColor(42, 48, 58));
+            mGrad.setColorAt(1.0, QColor(18, 20, 26));
+            p.setBrush(mGrad);
+            p.setPen(QPen(QColor(210, 222, 240), 1.2));
+            p.drawRoundedRect(mirRect, 4, 4);
+        }
 
         QPainterPath cabinPath;
         cabinPath.moveTo(-W * 0.36 + yawShift * 0.25, -92);
@@ -4199,27 +4648,64 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
         cabinPath.cubicTo( W * 0.23 + yawShift * 0.55, -138,  W * 0.31 + yawShift * 0.45, -124,  W * 0.36 + yawShift * 0.25, -92);
         cabinPath.closeSubpath();
 
-        QLinearGradient roofGrad(0, -140, 0, -92);
+        qreal roofLightShiftX = -yawShift * 1.4 - bodyRollDeg * 3.0;
+        QLinearGradient roofGrad(roofLightShiftX, -140, -roofLightShiftX * 0.4, -92);
         if (carModel == 1) { // VORTEX V12
-            roofGrad.setColorAt(0.0, QColor(195, 26, 36));
-            roofGrad.setColorAt(0.5, QColor(118, 14, 20));
+            roofGrad.setColorAt(0.0, QColor(250, 68, 78));
+            roofGrad.setColorAt(0.42, QColor(165, 22, 32));
             roofGrad.setColorAt(1.0, QColor(36, 8, 12));
         } else if (carModel == 2) { // DRIFT SPEC-R Carbon Roof
-            roofGrad.setColorAt(0.0, QColor(38, 42, 48));
-            roofGrad.setColorAt(0.5, QColor(22, 24, 28));
+            roofGrad.setColorAt(0.0, QColor(95, 104, 118));
+            roofGrad.setColorAt(0.42, QColor(32, 36, 44));
             roofGrad.setColorAt(1.0, QColor(12, 14, 16));
         } else if (carModel == 3) { // TITAN ENFORCER
-            roofGrad.setColorAt(0.0, QColor(42, 75, 58));
-            roofGrad.setColorAt(0.5, QColor(26, 48, 38));
+            roofGrad.setColorAt(0.0, QColor(88, 152, 118));
+            roofGrad.setColorAt(0.42, QColor(34, 68, 52));
             roofGrad.setColorAt(1.0, QColor(14, 26, 20));
         } else { // APEX GT-R
-            roofGrad.setColorAt(0.0, QColor(92, 102, 116));
-            roofGrad.setColorAt(0.45, QColor(52, 58, 68));
-            roofGrad.setColorAt(1.0, QColor(32, 36, 44));
+            roofGrad.setColorAt(0.0, QColor(162, 176, 198));
+            roofGrad.setColorAt(0.42, QColor(68, 78, 92));
+            roofGrad.setColorAt(1.0, QColor(24, 28, 36));
         }
         p.setBrush(roofGrad);
-        p.setPen(QPen(QColor(145, 155, 172), 1.5));
+        p.setPen(QPen(QColor(175, 188, 208), 1.6));
         p.drawPath(cabinPath);
+
+        // 3D Sculpted Flying-Buttress C-Pillar Sail Panels & Raised Central Power Dome
+        {
+            p.save();
+            p.setClipPath(cabinPath);
+            p.setPen(Qt::NoPen);
+
+            // Raised 3D Central Roof / Engine Spine Dome
+            QPolygonF powerDome;
+            powerDome << QPointF(-18 + yawShift * 0.58, -140)
+                      << QPointF( 18 + yawShift * 0.58, -140)
+                      << QPointF( 26 + yawShift * 0.28, -92)
+                      << QPointF(-26 + yawShift * 0.28, -92);
+            QLinearGradient domeGrad(-24 + yawShift * 0.4, -120, 24 + yawShift * 0.4, -120);
+            domeGrad.setColorAt(0.0, QColor(0, 0, 0, 75));
+            domeGrad.setColorAt(0.35, QColor(255, 255, 255, 65));
+            domeGrad.setColorAt(0.55, QColor(255, 255, 255, 95));
+            domeGrad.setColorAt(1.0, QColor(0, 0, 0, 85));
+            p.setBrush(domeGrad);
+            p.drawPolygon(powerDome);
+
+            // Dual-Lobe 3D Phong Specular Crown Hotspot on Fastback Roof Dome
+            QPointF roofSpecPt(yawShift * 0.52 - bodyRollDeg * 2.2, -133.0);
+            QRadialGradient roofPhong(roofSpecPt, 62.0);
+            roofPhong.setColorAt(0.0, QColor(255, 255, 255, 210));
+            roofPhong.setColorAt(0.38, QColor(225, 240, 255, 95));
+            roofPhong.setColorAt(1.0, QColor(255, 255, 255, 0));
+            p.setBrush(roofPhong);
+            p.drawEllipse(roofSpecPt, 62.0, 16.0);
+            p.restore();
+
+            // Left & Right 3D Flying-Buttress C-Pillar Specular Bevel Ribs
+            p.setPen(QPen(QColor(240, 248, 255, 195), 2.2, Qt::SolidLine, Qt::RoundCap));
+            p.drawLine(QPointF(-W * 0.16 + yawShift * 0.58, -138), QPointF(-W * 0.34 + yawShift * 0.26, -93));
+            p.drawLine(QPointF( W * 0.16 + yawShift * 0.58, -138), QPointF( W * 0.34 + yawShift * 0.26, -93));
+        }
 
         if (carModel == 1) {
             // VORTEX V12: Transparent Engine Canopy with Red V12 Cylinder Heads & Le Mans Dorsal Shark Fin
@@ -4325,14 +4811,35 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
             p.drawRoundedRect(QRectF(-18 + yawShift * 0.42, -124, 15, 22), 3, 3);
             p.drawRoundedRect(QRectF(  3 + yawShift * 0.42, -124, 15, 22), 3, 3);
 
-            // 5 Horizontal Carbon Engine Bay Louvers
-            p.setPen(QPen(QColor(36, 40, 48), 2.2));
+            // 5 Horizontal Carbon Engine Bay Louvers with 3D top-edge Phong highlight
             for (int lv = 0; lv < 5; ++lv) {
                 qreal ly = -127.0 + lv * 6.8;
                 qreal halfSpan = 42.0 + lv * 4.2;
                 qreal lxShift = yawShift * (0.52 - lv * 0.04);
+                p.setPen(QPen(QColor(22, 25, 32), 2.6));
                 p.drawLine(QPointF(-halfSpan + lxShift, ly), QPointF(halfSpan + lxShift, ly));
+                p.setPen(QPen(QColor(155, 170, 195, 115), 1.0));
+                p.drawLine(QPointF(-halfSpan + 4 + lxShift, ly - 1.2), QPointF(halfSpan - 4 + lxShift, ly - 1.2));
             }
+        }
+
+        // Curved Automotive Rear Glass S-Curve Phong Sky-Reflection Ribbon (across all models)
+        {
+            QPainterPath glassSpec;
+            qreal gx = -W * 0.11 + yawShift * 0.45 - bodyRollDeg * 1.5;
+            glassSpec.moveTo(gx - 8, -131);
+            glassSpec.lineTo(gx + 14, -131);
+            glassSpec.cubicTo(gx + 4, -118, gx - 4, -106, gx - 16, -95);
+            glassSpec.lineTo(gx - 30, -95);
+            glassSpec.cubicTo(gx - 18, -106, gx - 12, -118, gx - 8, -131);
+            glassSpec.closeSubpath();
+            QLinearGradient gSpecGrad(0, -131, 0, -95);
+            gSpecGrad.setColorAt(0.0, QColor(235, 248, 255, 95));
+            gSpecGrad.setColorAt(0.5, QColor(200, 230, 255, 45));
+            gSpecGrad.setColorAt(1.0, QColor(235, 248, 255, 80));
+            p.setBrush(gSpecGrad);
+            p.setPen(Qt::NoPen);
+            p.drawPath(glassSpec);
         }
     }
 

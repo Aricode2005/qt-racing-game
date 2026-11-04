@@ -352,6 +352,14 @@
 		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Multimedia/Qt6QWindowsMediaPluginTargets-relwithdebinfo.cmake",
 		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Multimedia/Qt6QWindowsMediaPluginAdditionalTargetInfo.cmake",
 		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Multimedia/Qt6MultimediaVersionlessAliasTargets.cmake",
+		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Network/Qt6NetworkConfigVersion.cmake",
+		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Network/Qt6NetworkConfigVersionImpl.cmake",
+		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Network/Qt6NetworkConfig.cmake",
+		"C:/Qt/Tools/CMake_64/share/cmake-3.30/Modules/CMakeFindDependencyMacro.cmake",
+		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Network/Qt6NetworkDependencies.cmake",
+		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Network/Qt6NetworkTargetsPrecheck.cmake",
+		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Network/Qt6NetworkPlugins.cmake",
+		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6Network/Qt6NetworkVersionlessAliasTargets.cmake",
 		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6/Qt6ConfigVersion.cmake",
 		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6/Qt6ConfigVersionImpl.cmake",
 		"C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6/Qt6Config.cmake",
@@ -424,6 +432,12 @@
 			"C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/GameWindow.h",
 			"MU",
 			"EWIEGA46WW/moc_GameWindow.cpp",
+			null
+		],
+		[
+			"C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/NetworkManager.h",
+			"MU",
+			"EWIEGA46WW/moc_NetworkManager.cpp",
 			null
 		],
 		[
@@ -532,6 +546,11 @@
 		],
 		[
 			"C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/GameWindow.cpp",
+			"MU",
+			null
+		],
+		[
+			"C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/NetworkManager.cpp",
 			"MU",
 			null
 		],

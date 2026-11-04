@@ -1,9 +1,11 @@
 #include "GameWindow.h"
 #include <QPainter>
+#include <QPainterPath>
 #include <QMouseEvent>
 #include <QFont>
 #include <QRandomGenerator>
 #include <QInputDialog>
+#include <QtMath>
 
 GameWindow::GameWindow(QWidget *parent)
     : QWidget(parent)
@@ -12,6 +14,7 @@ GameWindow::GameWindow(QWidget *parent)
     resize(1280, 720);
     setMinimumSize(960, 540);
     setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
     setAttribute(Qt::WA_OpaquePaintEvent, true);
     setAttribute(Qt::WA_NoSystemBackground, true);
 
@@ -64,13 +67,11 @@ GameWindow::GameWindow(QWidget *parent)
         update();
     });
     connect(&net, &NetworkManager::countdownStarted, this, [this](qreal) {
-        m_showMainMenu = false;
-        m_engine.resetPlayer();
-        NetworkManager::instance().resetPeersToStartingGrid(m_engine);
+        startTransitionToRace(true);
         update();
     });
     connect(&net, &NetworkManager::raceStarted, this, [this]() {
-        m_showMainMenu = false;
+        startTransitionToRace(false);
         m_engine.getPlayerMutable().lastAnnouncement = "GREEN LIGHT - RACE STARTED";
         m_engine.getPlayerMutable().announcementTimer = 2.0;
         update();
@@ -98,6 +99,31 @@ GameWindow::GameWindow(QWidget *parent)
     m_loopTimer.start(8);
 }
 
+void GameWindow::startTransitionToRace(bool resetPlayerFirst) {
+    if (resetPlayerFirst) {
+        m_engine.resetPlayer();
+        if (NetworkManager::instance().isConnected()) {
+            NetworkManager::instance().resetPeersToStartingGrid(m_engine);
+        }
+    }
+    if (m_showMainMenu) {
+        m_isTransitioningToRace = true;
+        if (m_menuOpacity < 0.2) {
+            m_menuOpacity = 1.0;
+        }
+        m_raceTransitionFlash = 1.0;
+        if (m_engine.getPlayer().announcementTimer <= 0.1) {
+            m_engine.getPlayerMutable().lastAnnouncement =
+                QString("IGNITION SEQUENCE // %1").arg(m_engine.getTrack().getInfo().name.toUpper());
+            m_engine.getPlayerMutable().announcementTimer = 2.2;
+        }
+    } else {
+        m_isTransitioningToRace = false;
+        m_menuOpacity = 0.0;
+        m_raceTransitionFlash = 0.65;
+    }
+}
+
 void GameWindow::onGameLoop() {
     qint64 elapsedMs = m_frameTimer.restart();
     qreal rawDt = elapsedMs / 1000.0;
@@ -112,8 +138,28 @@ void GameWindow::onGameLoop() {
     m_smoothDt = m_smoothDt * 0.35 + qBound(0.004, rawDt, 0.040) * 0.65;
     qreal dt = m_smoothDt;
     m_lastDt = dt;
+    m_menuAnimTime += dt;
+
+    // Smooth Menu-to-Race Fade & Ignition Transition
+    if (m_isTransitioningToRace) {
+        m_menuOpacity -= dt * 1.85; // ~0.54s smooth cinematic fade-out to race view
+        if (m_menuOpacity <= 0.0) {
+            m_menuOpacity = 0.0;
+            m_isTransitioningToRace = false;
+            m_showMainMenu = false;
+        }
+    } else if (m_showMainMenu) {
+        m_menuOpacity = qMin(1.0, m_menuOpacity + dt * 4.5);
+    } else {
+        m_menuOpacity = qMax(0.0, m_menuOpacity - dt * 4.5);
+    }
+
+    if (m_raceTransitionFlash > 0.0) {
+        m_raceTransitionFlash = qMax(0.0, m_raceTransitionFlash - dt * 1.35);
+    }
 
     NetworkManager& net = NetworkManager::instance();
+    bool activeGameplay = (!m_showMainMenu || m_isTransitioningToRace);
 
     // Hold vehicles on starting grid during pre-race 3-2-1 countdown
     bool countdownLocked = net.isConnected() && (net.getCountdownTimer() > 0.5);
@@ -121,7 +167,7 @@ void GameWindow::onGameLoop() {
         m_engine.setThrottle(false);
         m_engine.setBrake(false);
         m_engine.getPlayerMutable().speed = 0.0;
-    } else if (!m_showMainMenu) {
+    } else if (activeGameplay) {
         m_engine.setThrottle(m_keyGas || m_mouseGas);
         m_engine.setBrake(m_keyBrake || m_mouseBrake);
     }
@@ -132,7 +178,7 @@ void GameWindow::onGameLoop() {
         net.sendTelemetry(m_engine.getPlayer());
     }
 
-    if (!m_showMainMenu) {
+    if (activeGameplay) {
         if (!countdownLocked) {
             m_engine.update(dt);
         }
@@ -141,7 +187,7 @@ void GameWindow::onGameLoop() {
         m_audio.updateEngine(p.rpm, p.isAccelerating, p.isBraking, p.speed);
         m_audio.setHorn(p.hornActive);
     } else {
-        m_audio.updateEngine(800, false, false, 0); // Idle engine purr in menu
+        m_audio.updateEngine(850, false, false, 0); // Subtle showroom idle purr in menu
         m_audio.setHorn(false);
     }
 
@@ -160,7 +206,7 @@ void GameWindow::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
 
     int pSize = m_engine.getPlayer().pixelSize;
-    if (pSize > 1 && !m_showMainMenu) {
+    if (pSize > 1 && (!m_showMainMenu || m_isTransitioningToRace)) {
         static QImage s_fullImg;
         if (s_fullImg.size() != size()) {
             s_fullImg = QImage(width(), height(), QImage::Format_RGB32);
@@ -180,10 +226,81 @@ void GameWindow::paintEvent(QPaintEvent *event) {
         m_renderer.render(painter, m_engine, width(), height(), m_lastDt);
     }
 
-    // Render Main Menu & Difficulty Overlay if open
-    if (m_showMainMenu) {
+    // Render Main Menu & Difficulty Overlay with smooth cubic fade opacity
+    if (m_showMainMenu || m_menuOpacity > 0.005) {
+        painter.save();
+        qreal clamped = qBound(0.0, m_menuOpacity, 1.0);
+        qreal easedOpacity = clamped * clamped * (3.0 - 2.0 * clamped);
+        painter.setOpacity(easedOpacity);
         renderMainMenuOverlay(painter);
+        painter.restore();
     }
+
+    // Render cinematic Menu-to-Race Ignition & Visor Fade Transition Overlay
+    if (m_isTransitioningToRace || m_raceTransitionFlash > 0.005) {
+        renderRaceTransitionOverlay(painter);
+    }
+}
+
+void GameWindow::renderRaceTransitionOverlay(QPainter& p) {
+    int w = width();
+    int h = height();
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    qreal flash = qBound(0.0, m_raceTransitionFlash, 1.0);
+    // Smooth bell curve peaking mid-transition when menu crossfades into cockpit
+    qreal bell = qSin(flash * M_PI);
+
+    // 1. Deep Visor Vignette & Cinema Shutter Bars that retract smoothly
+    int shutterH = qRound(bell * 34.0);
+    if (shutterH > 0) {
+        p.fillRect(0, 0, w, shutterH, QColor(4, 7, 12, qRound(220 * bell)));
+        p.fillRect(0, h - shutterH, w, shutterH, QColor(4, 7, 12, qRound(220 * bell)));
+        p.fillRect(0, shutterH, w, 2, QColor(0, 230, 255, qRound(190 * bell)));
+        p.fillRect(0, h - shutterH - 2, w, 2, QColor(40, 235, 130, qRound(190 * bell)));
+    }
+
+    // 2. Subtle Cyan-Emerald Ignition Flash Veil
+    QRadialGradient veilGrad(w * 0.5, h * 0.5, qMax(w, h) * 0.65);
+    veilGrad.setColorAt(0.0, QColor(0, 225, 255, qRound(38 * bell)));
+    veilGrad.setColorAt(0.6, QColor(8, 16, 28, qRound(85 * bell)));
+    veilGrad.setColorAt(1.0, QColor(3, 6, 12, qRound(165 * bell)));
+    p.fillRect(0, 0, w, h, veilGrad);
+
+    // 3. Telemetry Ignition HUD Banner
+    if (flash > 0.05) {
+        int bannerW = qMin(560, w - 80);
+        int bannerH = 44;
+        int bannerX = (w - bannerW) / 2;
+        int bannerY = shutterH + 18;
+
+        p.setOpacity(qBound(0.0, flash * 1.25, 1.0));
+        QRect bannerRect(bannerX, bannerY, bannerW, bannerH);
+        p.setBrush(QColor(8, 14, 24, 225));
+        p.setPen(QPen(QColor(0, 230, 255, 190), 1.5));
+        p.drawRoundedRect(bannerRect, 6, 6);
+
+        // Animated progress sweep bar at bottom of banner
+        qreal prog = 1.0 - flash;
+        int fillW = qRound((bannerW - 16) * qBound(0.0, prog, 1.0));
+        p.fillRect(QRect(bannerX + 8, bannerY + bannerH - 6, bannerW - 16, 3), QColor(24, 38, 56));
+        p.fillRect(QRect(bannerX + 8, bannerY + bannerH - 6, fillW, 3), QColor(40, 235, 135));
+
+        p.setFont(QFont("Arial", 8, QFont::Bold));
+        p.setPen(QColor(40, 235, 135));
+        p.drawText(bannerRect.adjusted(14, 6, -14, -18), Qt::AlignLeft | Qt::AlignVCenter,
+                   "IGNITION SEQUENCE  //  ENTERING LIVE COCKPIT");
+
+        p.setFont(QFont("Arial", 8, QFont::Bold));
+        p.setPen(Qt::white);
+        p.drawText(bannerRect.adjusted(14, 6, -14, -18), Qt::AlignRight | Qt::AlignVCenter,
+                   QString("%1  @  %2")
+                       .arg(m_engine.getPlayer().carModelName)
+                       .arg(m_engine.getTrack().getInfo().name.toUpper()));
+    }
+
+    p.restore();
 }
 
 void GameWindow::keyPressEvent(QKeyEvent *event) {
@@ -266,13 +383,27 @@ void GameWindow::keyPressEvent(QKeyEvent *event) {
         case Qt::Key_Tab:
             m_engine.cycleInfotainmentMode();
             break;
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+            if (m_showMainMenu && !m_isTransitioningToRace) {
+                startTransitionToRace(false);
+                update();
+            }
+            break;
         case Qt::Key_M:
         case Qt::Key_T:
         case Qt::Key_Escape:
-            m_showMainMenu = !m_showMainMenu;
+            if (m_showMainMenu && !m_isTransitioningToRace) {
+                startTransitionToRace(false);
+            } else {
+                m_isTransitioningToRace = false;
+                m_showMainMenu = true;
+            }
+            update();
             break;
         case Qt::Key_O:
             m_showMultiplayerTab = true;
+            m_isTransitioningToRace = false;
             m_showMainMenu = true;
             update();
             break;
@@ -433,8 +564,9 @@ void GameWindow::focusOutEvent(QFocusEvent *event) {
 
 void GameWindow::mousePressEvent(QMouseEvent *event) {
     QPoint pos = event->pos();
+    m_mousePos = pos;
 
-    if (m_showMainMenu) {
+    if (m_showMainMenu && !m_isTransitioningToRace) {
         if (m_soloTabBtn.contains(pos)) {
             m_showMultiplayerTab = false;
             update();
@@ -457,6 +589,27 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
                     update();
                 }
                 return;
+            }
+
+            // Multiplayer Lobby Supercar Selector (available to all players)
+            for (int c = 0; c < 4; ++c) {
+                if (m_mpCarButtons[c].contains(pos)) {
+                    m_engine.setSelectedCar(c);
+                    net.notifyCarChange(c);
+                    update();
+                    return;
+                }
+            }
+
+            // Multiplayer Lobby Circuit Selector (available pre-connection or to Host)
+            for (int t = 0; t < 4; ++t) {
+                if (m_mpTrackButtons[t].contains(pos)) {
+                    if (!net.isConnected() || net.isHost()) {
+                        selectTrack(static_cast<TrackTheme>(t));
+                        update();
+                    }
+                    return;
+                }
             }
 
             if (!net.isConnected()) {
@@ -549,7 +702,7 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
                 }
             }
             if (m_resumeBtn.contains(pos)) {
-                m_showMainMenu = false;
+                startTransitionToRace(false);
                 update();
                 return;
             }
@@ -586,11 +739,11 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
             }
         }
 
-        // 3. Track Cards
+        // 3. Track Cards — Select Track & Smooth Fade Transition into Race
         for (int i = 0; i < 4; ++i) {
             if (m_trackCards[i].contains(pos)) {
                 selectTrack(static_cast<TrackTheme>(i));
-                m_showMainMenu = false;
+                startTransitionToRace(false);
                 update();
                 return;
             }
@@ -598,16 +751,12 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
 
         // 4. Quick Action Buttons
         if (m_resumeBtn.contains(pos)) {
-            m_showMainMenu = false;
+            startTransitionToRace(false);
             update();
             return;
         }
         if (m_repairBtn.contains(pos)) {
-            m_engine.resetPlayer();
-            if (NetworkManager::instance().isConnected()) {
-                NetworkManager::instance().resetPeersToStartingGrid(m_engine);
-            }
-            m_showMainMenu = false;
+            startTransitionToRace(true);
             update();
             return;
         }
@@ -659,7 +808,7 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
     QRect screenRect(sx, sy, sw, sh);
 
     // Top HUD Camera View Switch Button
-    QRect camSwitchBtn(288, 4, 156, 30);
+    QRect camSwitchBtn(292, 6, 148, 22);
     if (camSwitchBtn.contains(pos)) {
         m_engine.toggleCameraView();
         update();
@@ -671,7 +820,7 @@ void GameWindow::mousePressEvent(QMouseEvent *event) {
         int btnW = 132, btnH = 22, btnGap = 8;
         int totalW = 4 * btnW + 3 * btnGap;
         int startX = (w / 2) - totalW / 2;
-        int btnY = 50;
+        int btnY = 56;
         for (int i = 0; i < 4; ++i) {
             QRect r(startX + i * (btnW + btnGap), btnY, btnW, btnH);
             if (r.contains(pos)) {
@@ -812,6 +961,7 @@ void GameWindow::mouseReleaseEvent(QMouseEvent *event) {
 }
 
 void GameWindow::mouseMoveEvent(QMouseEvent *event) {
+    m_mousePos = event->pos();
     if (!m_showMainMenu) {
         int w = width();
         int h = height();
@@ -832,6 +982,8 @@ void GameWindow::mouseMoveEvent(QMouseEvent *event) {
                 update();
             }
         }
+    } else {
+        update();
     }
     QWidget::mouseMoveEvent(event);
 }
@@ -852,150 +1004,245 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
 
     p.save();
     p.setRenderHint(QPainter::Antialiasing, true);
+    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
-    // 1. Deep Carbon-Slate Telemetry Backdrop
+    // 1. Glassmorphic Showroom Backdrop (lets live 3D Gouraud/Phong scene subtly glow through)
     QLinearGradient bgGrad(0, 0, 0, h);
-    bgGrad.setColorAt(0.0, QColor(6, 9, 15, 248));
-    bgGrad.setColorAt(0.5, QColor(9, 13, 22, 246));
-    bgGrad.setColorAt(1.0, QColor(5, 8, 14, 250));
+    bgGrad.setColorAt(0.0, QColor(5, 8, 15, 232));
+    bgGrad.setColorAt(0.45, QColor(8, 13, 24, 214));
+    bgGrad.setColorAt(1.0, QColor(4, 7, 13, 238));
     p.fillRect(0, 0, w, h, bgGrad);
 
-    // Subtle geometric telemetry grid lines
-    p.setPen(QPen(QColor(0, 210, 255, 8), 1));
-    for (int gx = -h; gx < w + h; gx += 48) {
+    // Subtle animated diagonal telemetry laser lines
+    int gridShift = qRound(m_menuAnimTime * 18.0) % 56;
+    p.setPen(QPen(QColor(0, 215, 255, 10), 1));
+    for (int gx = -h + gridShift; gx < w + h; gx += 56) {
         p.drawLine(gx, 0, gx + h, h);
     }
 
-    // Top Accent Horizon Line
+    // Subtle radial spotlight behind center console
+    qreal pulse = 0.5 + 0.5 * qSin(m_menuAnimTime * 2.4);
+    QRadialGradient spotGrad(w * 0.5, h * 0.16, w * 0.45);
+    spotGrad.setColorAt(0.0, QColor(0, 210, 255, qRound(22 + 8 * pulse)));
+    spotGrad.setColorAt(1.0, QColor(0, 210, 255, 0));
+    p.fillRect(0, 0, w, h, spotGrad);
+
+    // Top & Bottom Accent Horizon Laser Lines
     QLinearGradient topBarGrad(0, 0, w, 0);
     topBarGrad.setColorAt(0.0, QColor(0, 210, 255, 0));
-    topBarGrad.setColorAt(0.3, QColor(0, 210, 255, 200));
-    topBarGrad.setColorAt(0.7, QColor(0, 210, 255, 200));
+    topBarGrad.setColorAt(0.25, QColor(0, 210, 255, 220));
+    topBarGrad.setColorAt(0.5, QColor(80, 250, 190, 255));
+    topBarGrad.setColorAt(0.75, QColor(0, 210, 255, 220));
     topBarGrad.setColorAt(1.0, QColor(0, 210, 255, 0));
     p.fillRect(0, 0, w, 3, topBarGrad);
+    p.fillRect(0, h - 2, w, 2, topBarGrad);
 
-    // Top Header Tag & Title
-    QRect headerPill(w / 2 - 150, 10, 300, 20);
-    p.setBrush(QColor(0, 210, 255, 20));
-    p.setPen(QPen(QColor(0, 210, 255, 130), 1));
-    p.drawRoundedRect(headerPill, 4, 4);
+    // Top Motorsport Header Bar
+    int contentW = qMin(1120, w - 64);
+    int contentX = (w - contentW) / 2;
+
+    // Left Brand Badge
+    QRect brandBadge(contentX, 10, 235, 38);
+    p.setBrush(QColor(11, 17, 28, 220));
+    p.setPen(QPen(QColor(0, 215, 255, 110), 1));
+    p.drawRoundedRect(brandBadge, 5, 5);
+    p.fillRect(QRect(brandBadge.x(), brandBadge.y() + 6, 3, 26), QColor(0, 230, 255));
     p.setFont(QFont("Arial", 7, QFont::Bold));
     p.setPen(QColor(0, 225, 255));
-    p.drawText(headerPill, Qt::AlignCenter, "APEX VELOCITY  //  MOTORSPORT TELEMETRY");
-
-    p.setFont(QFont("Arial", 18, QFont::Black));
+    p.drawText(brandBadge.adjusted(12, 4, -8, -18), Qt::AlignLeft | Qt::AlignVCenter, "APEX VELOCITY  //  SIMULATOR");
+    p.setFont(QFont("Arial", 9, QFont::Black));
     p.setPen(Qt::white);
-    p.drawText(QRect(0, 31, w, 24), Qt::AlignCenter, "RACE CONTROL COMMAND CENTER");
+    p.drawText(brandBadge.adjusted(12, 18, -8, -3), Qt::AlignLeft | Qt::AlignVCenter, "GRAND PRIX EDITION");
 
-    // Segmented Mode Navigation Bar: [ SOLO CHAMPIONSHIP ] | [ MULTIPLAYER ROOMS ]
-    int tabW = 248;
-    int tabH = 26;
-    m_soloTabBtn = QRect(w / 2 - tabW - 6, 57, tabW, tabH);
-    m_mpTabBtn   = QRect(w / 2 + 6, 57, tabW, tabH);
+    // Center Main Title
+    p.setFont(QFont("Arial", 7, QFont::Bold));
+    p.setPen(QColor(0, 225, 255));
+    p.drawText(QRect(0, 8, w, 14), Qt::AlignCenter, "FIA GRADE TELEMETRY  //  PHONG & GOURAUD SHADING ENGINE");
+
+    p.setFont(QFont("Arial", 17, QFont::Black));
+    p.setPen(Qt::white);
+    p.drawText(QRect(0, 22, w, 26), Qt::AlignCenter, "RACE CONTROL COMMAND CENTER");
+
+    // Right Active Loadout Summary Badge
+    QRect loadoutBadge(contentX + contentW - 255, 10, 255, 38);
+    p.setBrush(QColor(11, 17, 28, 220));
+    p.setPen(QPen(QColor(40, 230, 125, 110), 1));
+    p.drawRoundedRect(loadoutBadge, 5, 5);
+    p.fillRect(QRect(loadoutBadge.right() - 3, loadoutBadge.y() + 6, 3, 26), QColor(40, 230, 125));
+    p.setFont(QFont("Arial", 7, QFont::Bold));
+    p.setPen(QColor(40, 230, 125));
+    p.drawText(loadoutBadge.adjusted(10, 4, -12, -18), Qt::AlignRight | Qt::AlignVCenter,
+               QString("CHASSIS: %1").arg(m_engine.getPlayer().carModelName));
+    p.setFont(QFont("Arial", 8, QFont::Bold));
+    p.setPen(QColor(210, 225, 245));
+    p.drawText(loadoutBadge.adjusted(10, 18, -12, -3), Qt::AlignRight | Qt::AlignVCenter,
+               QString("CIRCUIT: %1").arg(m_engine.getTrack().getInfo().name.toUpper()));
+
+    // Segmented Mode Navigation Bar: [ SOLO CHAMPIONSHIP ] | [ MULTIPLAYER LOBBY ]
+    int tabW = 264;
+    int tabH = 28;
+    m_soloTabBtn = QRect(w / 2 - tabW - 6, 53, tabW, tabH);
+    m_mpTabBtn   = QRect(w / 2 + 6, 53, tabW, tabH);
 
     // Solo Tab
     bool soloActive = !m_showMultiplayerTab;
-    p.setBrush(soloActive ? QColor(0, 200, 245, 38) : QColor(14, 20, 30, 200));
-    p.setPen(QPen(soloActive ? QColor(0, 225, 255) : QColor(42, 54, 72), soloActive ? 1.8 : 1.0));
-    p.drawRoundedRect(m_soloTabBtn, 4, 4);
+    bool soloHover = m_soloTabBtn.contains(m_mousePos);
+    p.setBrush(soloActive ? QColor(0, 200, 245, 48) : (soloHover ? QColor(22, 32, 48, 230) : QColor(14, 20, 30, 210)));
+    p.setPen(QPen(soloActive ? QColor(0, 230, 255) : (soloHover ? QColor(0, 195, 240) : QColor(44, 58, 78)), soloActive ? 1.8 : 1.2));
+    p.drawRoundedRect(m_soloTabBtn, 5, 5);
     if (soloActive) {
         p.fillRect(QRect(m_soloTabBtn.x() + 6, m_soloTabBtn.y() + 6, 3, tabH - 12), QColor(0, 235, 255));
     }
     p.setFont(QFont("Arial", 8, QFont::Bold));
-    p.setPen(soloActive ? QColor(0, 235, 255) : QColor(145, 165, 190));
-    p.drawText(m_soloTabBtn, Qt::AlignCenter, "SOLO CHAMPIONSHIP");
+    p.setPen(soloActive ? QColor(0, 240, 255) : (soloHover ? Qt::white : QColor(155, 175, 200)));
+    p.drawText(m_soloTabBtn, Qt::AlignCenter, "SOLO CHAMPIONSHIP  //  GARAGE");
 
     // Multiplayer Tab
     bool hasPeer = NetworkManager::instance().isConnected();
-    QColor mpAccent = hasPeer ? QColor(40, 230, 115) : QColor(255, 185, 40);
-    p.setBrush(m_showMultiplayerTab ? QColor(mpAccent.red(), mpAccent.green(), mpAccent.blue(), 38) : QColor(14, 20, 30, 200));
-    p.setPen(QPen(m_showMultiplayerTab ? mpAccent : QColor(42, 54, 72), m_showMultiplayerTab ? 1.8 : 1.0));
-    p.drawRoundedRect(m_mpTabBtn, 4, 4);
+    bool mpHover = m_mpTabBtn.contains(m_mousePos);
+    QColor mpAccent = hasPeer ? QColor(40, 230, 115) : QColor(255, 190, 40);
+    p.setBrush(m_showMultiplayerTab ? QColor(mpAccent.red(), mpAccent.green(), mpAccent.blue(), 48)
+                                    : (mpHover ? QColor(26, 34, 48, 230) : QColor(14, 20, 30, 210)));
+    p.setPen(QPen(m_showMultiplayerTab ? mpAccent : (mpHover ? mpAccent : QColor(44, 58, 78)), m_showMultiplayerTab ? 1.8 : 1.2));
+    p.drawRoundedRect(m_mpTabBtn, 5, 5);
     if (m_showMultiplayerTab || hasPeer) {
         p.fillRect(QRect(m_mpTabBtn.x() + 6, m_mpTabBtn.y() + 6, 3, tabH - 12), mpAccent);
     }
-    p.setPen(m_showMultiplayerTab ? mpAccent : (hasPeer ? QColor(40, 230, 115) : QColor(145, 165, 190)));
-    p.drawText(m_mpTabBtn, Qt::AlignCenter, hasPeer ? "MULTIPLAYER LOBBY  [ONLINE]" : "MULTIPLAYER ROOMS  [KEY O]");
+    p.setPen(m_showMultiplayerTab ? mpAccent : (hasPeer ? QColor(40, 230, 115) : (mpHover ? Qt::white : QColor(155, 175, 200))));
+    p.drawText(m_mpTabBtn, Qt::AlignCenter, hasPeer ? "MULTIPLAYER LOBBY  [ONLINE]" : "MULTIPLAYER LOBBY  [KEY O]");
 
     if (m_showMultiplayerTab) {
         NetworkManager& net = NetworkManager::instance();
         m_discoveredRoomChips.clear();
 
-        int paneW = qMin(980, w - 60);
+        int paneW = qMin(1040, w - 60);
         int paneX = (w - paneW) / 2;
-        int paneY = 90;
+        int paneY = 86;
 
         // 1. Driver Profile & Session Telemetry Bar
-        QRect idCard(paneX, paneY, paneW, 54);
-        p.setBrush(QColor(13, 18, 28, 235));
-        p.setPen(QPen(QColor(38, 52, 74), 1));
+        QRect idCard(paneX, paneY, paneW, 50);
+        p.setBrush(QColor(12, 18, 28, 238));
+        p.setPen(QPen(QColor(40, 56, 80), 1.2));
         p.drawRoundedRect(idCard, 6, 6);
-        p.fillRect(QRect(paneX, paneY + 8, 3, 38), QColor(0, 220, 255));
+        p.fillRect(QRect(paneX, paneY + 8, 3, 34), QColor(0, 220, 255));
 
         // Driver Callsign (clickable to edit)
-        m_editNameBtn = QRect(paneX + 14, paneY + 8, 255, 38);
-        p.setBrush(QColor(19, 27, 40));
-        p.setPen(QPen(QColor(0, 200, 240, 110), 1));
+        m_editNameBtn = QRect(paneX + 12, paneY + 7, 245, 36);
+        bool nameHover = m_editNameBtn.contains(m_mousePos);
+        p.setBrush(nameHover ? QColor(24, 36, 54) : QColor(18, 26, 38));
+        p.setPen(QPen(nameHover ? QColor(0, 235, 255) : QColor(0, 200, 240, 120), 1.2));
         p.drawRoundedRect(m_editNameBtn, 4, 4);
         p.setFont(QFont("Arial", 7, QFont::Bold));
         p.setPen(QColor(0, 220, 255));
-        p.drawText(m_editNameBtn.adjusted(10, 5, -10, -19), Qt::AlignLeft, "DRIVER CALLSIGN  [CLICK TO EDIT]");
+        p.drawText(m_editNameBtn.adjusted(10, 4, -10, -18), Qt::AlignLeft, "DRIVER CALLSIGN  [CLICK TO EDIT]");
         p.setFont(QFont("Arial", 10, QFont::Bold));
         p.setPen(Qt::white);
-        p.drawText(m_editNameBtn.adjusted(10, 19, -10, -3), Qt::AlignLeft, net.getLocalPlayerName());
+        p.drawText(m_editNameBtn.adjusted(10, 17, -10, -2), Qt::AlignLeft, net.getLocalPlayerName());
 
-        // Vehicle & Circuit Spec
+        // Interactive Supercar & Circuit Summary
         p.setFont(QFont("Arial", 8, QFont::Bold));
         p.setPen(QColor(215, 225, 240));
-        p.drawText(paneX + 284, paneY + 22, QString("CHASSIS: %1  (F1-F4)").arg(m_engine.getPlayer().carModelName));
+        p.drawText(paneX + 272, paneY + 20, QString("ACTIVE SUPERCAR: %1").arg(m_engine.getPlayer().carModelName));
         p.setFont(QFont("Arial", 8, QFont::Normal));
-        p.setPen(QColor(125, 145, 175));
-        p.drawText(paneX + 284, paneY + 39, QString("CIRCUIT: %1  |  ROOM ID & PASSWORD AUTHENTICATION").arg(m_engine.getTrack().getInfo().name.toUpper()));
+        p.setPen(QColor(135, 160, 190));
+        p.drawText(paneX + 272, paneY + 37, QString("ACTIVE CIRCUIT: %1  |  ZERO-IP UDP TELEMETRY").arg(m_engine.getTrack().getInfo().name.toUpper()));
 
-        // Right Status Indicator (No IP address shown)
-        QRect statusBox(paneX + paneW - 265, paneY + 9, 250, 36);
+        // Right Status Indicator
+        QRect statusBox(paneX + paneW - 260, paneY + 7, 248, 36);
         p.setBrush(QColor(16, 23, 34));
-        p.setPen(QPen(hasPeer ? QColor(40, 230, 115, 140) : QColor(45, 62, 86), 1));
+        p.setPen(QPen(hasPeer ? QColor(40, 230, 115, 160) : QColor(45, 62, 86), 1.2));
         p.drawRoundedRect(statusBox, 4, 4);
         p.setFont(QFont("Arial", 8, QFont::Bold));
         p.setPen(hasPeer ? QColor(40, 230, 115) : QColor(0, 220, 255));
         p.drawText(statusBox.adjusted(10, 4, -10, -16), Qt::AlignRight,
                    hasPeer ? QString("ROOM ACTIVE: %1").arg(net.getRoomId()) : "ROOM DISCOVERY: AUTOMATIC");
         p.setFont(QFont("Arial", 7, QFont::Normal));
-        p.setPen(QColor(140, 160, 185));
+        p.setPen(QColor(145, 165, 190));
         int discCount = net.getDiscoveredHosts().size();
         p.drawText(statusBox.adjusted(10, 20, -10, -2), Qt::AlignRight,
                    hasPeer ? QString("CONNECTED DRIVERS: %1 / 8").arg(net.getConnectedPlayerCount())
-                           : (discCount > 0 ? QString("%1 ROOM(S) DETECTED NEARBY").arg(discCount) : "ZERO-IP ROOM ID PROTOCOL"));
+                           : (discCount > 0 ? QString("%1 ROOM(S) DETECTED NEARBY").arg(discCount) : "LOCALHOST + LAN AUTO-SYNC"));
 
-        int currentY = paneY + 62;
+        int currentY = paneY + 56;
+
+        // 1b. Interactive Multiplayer Loadout Selector (4 Supercars + 4 Circuits right inside Multiplayer Tab!)
+        QRect loadoutBar(paneX, currentY, paneW, 42);
+        p.setBrush(QColor(11, 16, 25, 235));
+        p.setPen(QPen(QColor(36, 50, 72), 1));
+        p.drawRoundedRect(loadoutBar, 5, 5);
+
+        struct MpCarOpt { QString name; QColor col; VehicleType vType; } mpCars[4] = {
+            { "APEX GT-R", QColor(0, 215, 255), VEHICLE_COMPACT_BLUE },
+            { "VORTEX V12", QColor(255, 65, 80), VEHICLE_SPORTS_RED },
+            { "DRIFT SPEC-R", QColor(255, 190, 40), VEHICLE_SEDAN_SILVER },
+            { "TITAN GT", QColor(45, 230, 135), VEHICLE_SUV_BLACK }
+        };
+        int curCar = m_engine.getPlayer().selectedCar;
+        int halfW = (paneW - 28) / 2;
+        int mpCarBtnW = (halfW - 3 * 6) / 4;
+        for (int c = 0; c < 4; ++c) {
+            m_mpCarButtons[c] = QRect(paneX + 8 + c * (mpCarBtnW + 6), currentY + 6, mpCarBtnW, 30);
+            bool isSel = (curCar == c);
+            bool isHov = m_mpCarButtons[c].contains(m_mousePos);
+            p.setBrush(isSel ? QColor(20, 30, 46) : (isHov ? QColor(22, 30, 44) : QColor(15, 21, 32)));
+            p.setPen(QPen(isSel ? mpCars[c].col : (isHov ? mpCars[c].col.darker(120) : QColor(42, 54, 72)), isSel ? 1.6 : 1.0));
+            p.drawRoundedRect(m_mpCarButtons[c], 4, 4);
+
+            const QImage& vImg = RasterAssets::instance().getVehicle(mpCars[c].vType, true, false, false, false);
+            QRect iconR(m_mpCarButtons[c].x() + 4, m_mpCarButtons[c].y() + 4, 26, 20);
+            p.drawImage(iconR, vImg);
+
+            p.setFont(QFont("Arial", 6, QFont::Bold));
+            p.setPen(isSel ? mpCars[c].col : Qt::white);
+            p.drawText(m_mpCarButtons[c].adjusted(32, 0, -3, 0), Qt::AlignVCenter | Qt::AlignLeft, mpCars[c].name);
+        }
+
+        const char* mpTrackNames[4] = { "PACIFIC COAST", "ALPINE SUMMIT", "NEO CITY", "RED ROCK" };
+        QColor mpTrackCols[4] = { QColor(255, 145, 45), QColor(75, 180, 255), QColor(245, 65, 165), QColor(240, 105, 55) };
+        int trackStartX = paneX + 18 + halfW;
+        int mpTrkBtnW = (halfW - 3 * 6) / 4;
+        int curTrk = static_cast<int>(m_engine.getCurrentTheme());
+        bool canPickTrack = (!net.isConnected() || net.isHost());
+        for (int t = 0; t < 4; ++t) {
+            m_mpTrackButtons[t] = QRect(trackStartX + t * (mpTrkBtnW + 6), currentY + 6, mpTrkBtnW, 30);
+            bool isSel = (curTrk == t);
+            bool isHov = canPickTrack && m_mpTrackButtons[t].contains(m_mousePos);
+            p.setBrush(isSel ? QColor(22, 32, 48) : (isHov ? QColor(22, 30, 44) : QColor(15, 21, 32)));
+            p.setPen(QPen(isSel ? mpTrackCols[t] : (isHov ? mpTrackCols[t].darker(120) : QColor(42, 54, 72)), isSel ? 1.6 : 1.0));
+            p.drawRoundedRect(m_mpTrackButtons[t], 4, 4);
+            p.setFont(QFont("Arial", 6, QFont::Bold));
+            p.setPen(isSel ? mpTrackCols[t] : (canPickTrack ? QColor(195, 210, 230) : QColor(110, 125, 145)));
+            p.drawText(m_mpTrackButtons[t], Qt::AlignCenter, mpTrackNames[t]);
+        }
+
+        currentY += 48;
 
         // 2. Authentication Error or Connecting Banner
         if (m_authErrorTimer > 0.0 && !m_lastAuthError.isEmpty()) {
-            QRect errRect(paneX, currentY, paneW, 34);
+            QRect errRect(paneX, currentY, paneW, 32);
             p.setBrush(QColor(150, 22, 32, 235));
             p.setPen(QPen(QColor(255, 80, 90), 1.5));
             p.drawRoundedRect(errRect, 5, 5);
             p.setFont(QFont("Arial", 9, QFont::Bold));
             p.setPen(Qt::white);
             p.drawText(errRect, Qt::AlignCenter, QString("AUTHENTICATION REJECTED: %1  (VERIFY ROOM ID & PASSWORD)").arg(m_lastAuthError));
-            currentY += 40;
+            currentY += 38;
         } else if (net.isSearchingRoom()) {
-            QRect searchRect(paneX, currentY, paneW, 34);
+            QRect searchRect(paneX, currentY, paneW, 32);
             p.setBrush(QColor(16, 48, 72, 235));
             p.setPen(QPen(QColor(0, 220, 255), 1.5));
             p.drawRoundedRect(searchRect, 5, 5);
             p.setFont(QFont("Arial", 9, QFont::Bold));
             p.setPen(QColor(0, 235, 255));
             p.drawText(searchRect, Qt::AlignCenter, QString("SEARCHING & AUTHENTICATING WITH ROOM [%1]...").arg(m_joinRoomId));
-            currentY += 40;
+            currentY += 38;
         }
 
         // 3. Room Creation & Join Panels (when not connected)
         if (!net.isConnected()) {
             int cardGap = 16;
             int cardW = (paneW - cardGap) / 2;
-            int cardH = 264;
+            int cardH = qMin(256, h - currentY - 82);
 
             // --- LEFT CARD: CREATE & HOST ROOM ---
             QRect hostCard(paneX, currentY, cardW, cardH);
@@ -1006,40 +1253,40 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
 
             p.setFont(QFont("Arial", 11, QFont::Bold));
             p.setPen(QColor(0, 225, 255));
-            p.drawText(hostCard.x() + 18, currentY + 26, "01  //  HOST PRIVATE ROOM");
+            p.drawText(hostCard.x() + 18, currentY + 24, "01  //  HOST PRIVATE ROOM");
             p.setFont(QFont("Arial", 8, QFont::Normal));
             p.setPen(QColor(145, 165, 190));
-            p.drawText(hostCard.x() + 18, currentY + 43, "Create a multiplayer lobby secured by Room ID and Password.");
+            p.drawText(hostCard.x() + 18, currentY + 41, "Create an 8-player multiplayer lobby secured by Room ID & Password.");
 
             // Host Room ID Field
             p.setFont(QFont("Arial", 7, QFont::Bold));
             p.setPen(QColor(175, 195, 220));
-            p.drawText(hostCard.x() + 18, currentY + 66, "ROOM ID  (CLICK TO EDIT)");
+            p.drawText(hostCard.x() + 18, currentY + 62, "ROOM ID  (CLICK TO EDIT)");
             int idBtnW = 110;
-            m_hostRoomIdBox = QRect(hostCard.x() + 18, currentY + 72, cardW - 36 - idBtnW - 8, 32);
-            p.setBrush(QColor(19, 27, 40));
-            p.setPen(QPen(QColor(0, 200, 240, 140), 1));
+            m_hostRoomIdBox = QRect(hostCard.x() + 18, currentY + 68, cardW - 36 - idBtnW - 8, 30);
+            p.setBrush(m_hostRoomIdBox.contains(m_mousePos) ? QColor(24, 34, 50) : QColor(19, 27, 40));
+            p.setPen(QPen(QColor(0, 200, 240, 160), 1));
             p.drawRoundedRect(m_hostRoomIdBox, 4, 4);
             p.setFont(QFont("Arial", 10, QFont::Bold));
             p.setPen(QColor(0, 235, 255));
             p.drawText(m_hostRoomIdBox.adjusted(12, 0, -12, 0), Qt::AlignVCenter | Qt::AlignLeft, m_hostRoomId);
 
             // Generate Random Room ID Button
-            m_hostRandomIdBtn = QRect(hostCard.x() + cardW - 18 - idBtnW, currentY + 72, idBtnW, 32);
-            p.setBrush(QColor(24, 36, 54));
-            p.setPen(QPen(QColor(55, 85, 125), 1));
+            m_hostRandomIdBtn = QRect(hostCard.x() + cardW - 18 - idBtnW, currentY + 68, idBtnW, 30);
+            p.setBrush(m_hostRandomIdBtn.contains(m_mousePos) ? QColor(32, 48, 72) : QColor(24, 36, 54));
+            p.setPen(QPen(QColor(65, 100, 145), 1));
             p.drawRoundedRect(m_hostRandomIdBtn, 4, 4);
             p.setFont(QFont("Arial", 7, QFont::Bold));
-            p.setPen(QColor(185, 215, 245));
+            p.setPen(QColor(195, 225, 255));
             p.drawText(m_hostRandomIdBtn, Qt::AlignCenter, "GENERATE ID");
 
             // Host Room Password Field
             p.setFont(QFont("Arial", 7, QFont::Bold));
             p.setPen(QColor(175, 195, 220));
-            p.drawText(hostCard.x() + 18, currentY + 122, "ROOM PASSWORD  (CLICK TO EDIT  |  BLANK = OPEN ROOM)");
-            m_hostPassBox = QRect(hostCard.x() + 18, currentY + 128, cardW - 36, 32);
-            p.setBrush(QColor(19, 27, 40));
-            p.setPen(QPen(QColor(0, 200, 240, 140), 1));
+            p.drawText(hostCard.x() + 18, currentY + 114, "ROOM PASSWORD  (CLICK TO EDIT  |  BLANK = OPEN ROOM)");
+            m_hostPassBox = QRect(hostCard.x() + 18, currentY + 120, cardW - 36, 30);
+            p.setBrush(m_hostPassBox.contains(m_mousePos) ? QColor(24, 34, 50) : QColor(19, 27, 40));
+            p.setPen(QPen(QColor(0, 200, 240, 160), 1));
             p.drawRoundedRect(m_hostPassBox, 4, 4);
             p.setFont(QFont("Arial", 9, QFont::Bold));
             p.setPen(m_hostRoomPassword.isEmpty() ? QColor(110, 135, 165) : QColor(255, 205, 55));
@@ -1047,7 +1294,7 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
                        m_hostRoomPassword.isEmpty() ? "OPEN ACCESS (NO PASSWORD)" : QString("PASSWORD: %1").arg(m_hostRoomPassword));
 
             // Protocol Info Box
-            QRect infoBox(hostCard.x() + 18, currentY + 170, cardW - 36, 34);
+            QRect infoBox(hostCard.x() + 18, currentY + 158, cardW - 36, 32);
             p.setBrush(QColor(10, 15, 24, 190));
             p.setPen(QPen(QColor(30, 42, 60), 1));
             p.drawRoundedRect(infoBox, 4, 4);
@@ -1057,12 +1304,13 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
                        QString("Share Room ID [%1] and Password with other drivers. No IP setup required.").arg(m_hostRoomId));
 
             // Create & Host Button
-            m_createRoomBtn = QRect(hostCard.x() + 18, currentY + cardH - 48, cardW - 36, 36);
+            m_createRoomBtn = QRect(hostCard.x() + 18, currentY + cardH - 44, cardW - 36, 34);
+            bool hostBtnHov = m_createRoomBtn.contains(m_mousePos);
             QLinearGradient hostGrad(m_createRoomBtn.topLeft(), m_createRoomBtn.bottomRight());
-            hostGrad.setColorAt(0.0, QColor(0, 185, 230));
-            hostGrad.setColorAt(1.0, QColor(0, 120, 185));
+            hostGrad.setColorAt(0.0, hostBtnHov ? QColor(20, 210, 255) : QColor(0, 185, 230));
+            hostGrad.setColorAt(1.0, hostBtnHov ? QColor(0, 145, 215) : QColor(0, 120, 185));
             p.setBrush(hostGrad);
-            p.setPen(QPen(QColor(80, 240, 255), 1.2));
+            p.setPen(QPen(QColor(110, 245, 255), hostBtnHov ? 1.8 : 1.2));
             p.drawRoundedRect(m_createRoomBtn, 5, 5);
             p.setFont(QFont("Arial", 9, QFont::Bold));
             p.setPen(Qt::white);
@@ -1077,18 +1325,18 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
 
             p.setFont(QFont("Arial", 11, QFont::Bold));
             p.setPen(QColor(255, 205, 55));
-            p.drawText(joinCard.x() + 18, currentY + 26, "02  //  JOIN EXISTING ROOM");
+            p.drawText(joinCard.x() + 18, currentY + 24, "02  //  JOIN EXISTING ROOM");
             p.setFont(QFont("Arial", 8, QFont::Normal));
             p.setPen(QColor(145, 165, 190));
-            p.drawText(joinCard.x() + 18, currentY + 43, "Enter the Room ID and Password to connect automatically.");
+            p.drawText(joinCard.x() + 18, currentY + 41, "Enter the Room ID and Password or click a detected room chip.");
 
             // Target Room ID Input
             p.setFont(QFont("Arial", 7, QFont::Bold));
             p.setPen(QColor(175, 195, 220));
-            p.drawText(joinCard.x() + 18, currentY + 66, "ROOM ID  (CLICK TO EDIT)");
-            m_joinRoomIdBox = QRect(joinCard.x() + 18, currentY + 72, cardW - 36, 32);
-            p.setBrush(QColor(19, 27, 40));
-            p.setPen(QPen(QColor(255, 195, 40, 150), 1));
+            p.drawText(joinCard.x() + 18, currentY + 62, "ROOM ID  (CLICK TO EDIT)");
+            m_joinRoomIdBox = QRect(joinCard.x() + 18, currentY + 68, cardW - 36, 30);
+            p.setBrush(m_joinRoomIdBox.contains(m_mousePos) ? QColor(24, 34, 50) : QColor(19, 27, 40));
+            p.setPen(QPen(QColor(255, 195, 40, 160), 1));
             p.drawRoundedRect(m_joinRoomIdBox, 4, 4);
             p.setFont(QFont("Arial", 10, QFont::Bold));
             p.setPen(QColor(255, 210, 65));
@@ -1097,18 +1345,18 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
             // Target Room Password Input
             p.setFont(QFont("Arial", 7, QFont::Bold));
             p.setPen(QColor(175, 195, 220));
-            p.drawText(joinCard.x() + 18, currentY + 122, "ROOM PASSWORD  (CLICK TO EDIT)");
-            m_joinPassBox = QRect(joinCard.x() + 18, currentY + 128, cardW - 36, 32);
-            p.setBrush(QColor(19, 27, 40));
-            p.setPen(QPen(QColor(255, 195, 40, 150), 1));
+            p.drawText(joinCard.x() + 18, currentY + 114, "ROOM PASSWORD  (CLICK TO EDIT)");
+            m_joinPassBox = QRect(joinCard.x() + 18, currentY + 120, cardW - 36, 30);
+            p.setBrush(m_joinPassBox.contains(m_mousePos) ? QColor(24, 34, 50) : QColor(19, 27, 40));
+            p.setPen(QPen(QColor(255, 195, 40, 160), 1));
             p.drawRoundedRect(m_joinPassBox, 4, 4);
             p.setFont(QFont("Arial", 9, QFont::Bold));
             p.setPen(m_joinRoomPassword.isEmpty() ? QColor(110, 135, 165) : QColor(255, 210, 65));
             p.drawText(m_joinPassBox.adjusted(12, 0, -12, 0), Qt::AlignVCenter | Qt::AlignLeft,
                        m_joinRoomPassword.isEmpty() ? "NO PASSWORD" : QString("PASSWORD: %1").arg(m_joinRoomPassword));
 
-            // Active Rooms Detected Bar (Clickable quick-select pills if any rooms are broadcasting)
-            QRect discBox(joinCard.x() + 18, currentY + 170, cardW - 36, 34);
+            // Active Rooms Detected Bar
+            QRect discBox(joinCard.x() + 18, currentY + 158, cardW - 36, 32);
             p.setBrush(QColor(10, 15, 24, 190));
             p.setPen(QPen(QColor(30, 42, 60), 1));
             p.drawRoundedRect(discBox, 4, 4);
@@ -1122,15 +1370,15 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
             } else {
                 p.setFont(QFont("Arial", 7, QFont::Bold));
                 p.setPen(QColor(40, 230, 115));
-                p.drawText(discBox.x() + 10, discBox.y() + 21, "DETECTED ROOMS:");
+                p.drawText(discBox.x() + 10, discBox.y() + 20, "DETECTED ROOMS:");
                 int chipX = discBox.x() + 108;
                 for (int hi = 0; hi < qMin(3, (int)hosts.size()); ++hi) {
                     QString rId = hosts[hi].roomId;
                     int cw = qMax(76, rId.length() * 8 + 20);
                     if (chipX + cw > discBox.right() - 6) break;
-                    QRect chipRect(chipX, discBox.y() + 5, cw, 24);
+                    QRect chipRect(chipX, discBox.y() + 4, cw, 24);
                     bool isSelectedRoom = (m_joinRoomId.compare(rId, Qt::CaseInsensitive) == 0);
-                    p.setBrush(isSelectedRoom ? QColor(40, 230, 115, 50) : QColor(24, 36, 52));
+                    p.setBrush(isSelectedRoom ? QColor(40, 230, 115, 55) : QColor(24, 36, 52));
                     p.setPen(QPen(isSelectedRoom ? QColor(40, 230, 115) : QColor(65, 95, 130), 1));
                     p.drawRoundedRect(chipRect, 3, 3);
                     p.setPen(Qt::white);
@@ -1141,33 +1389,34 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
             }
 
             // Enter & Join Button
-            m_enterRoomBtn = QRect(joinCard.x() + 18, currentY + cardH - 48, cardW - 36, 36);
+            m_enterRoomBtn = QRect(joinCard.x() + 18, currentY + cardH - 44, cardW - 36, 34);
+            bool joinBtnHov = m_enterRoomBtn.contains(m_mousePos);
             QLinearGradient joinGrad(m_enterRoomBtn.topLeft(), m_enterRoomBtn.bottomRight());
-            joinGrad.setColorAt(0.0, QColor(235, 155, 20));
-            joinGrad.setColorAt(1.0, QColor(180, 100, 10));
+            joinGrad.setColorAt(0.0, joinBtnHov ? QColor(255, 175, 35) : QColor(235, 155, 20));
+            joinGrad.setColorAt(1.0, joinBtnHov ? QColor(205, 120, 15) : QColor(180, 100, 10));
             p.setBrush(joinGrad);
-            p.setPen(QPen(QColor(255, 210, 65), 1.2));
+            p.setPen(QPen(QColor(255, 220, 85), joinBtnHov ? 1.8 : 1.2));
             p.drawRoundedRect(m_enterRoomBtn, 5, 5);
             p.setFont(QFont("Arial", 9, QFont::Bold));
             p.setPen(Qt::white);
             p.drawText(m_enterRoomBtn, Qt::AlignCenter, net.isSearchingRoom() ? "LOCATING ROOM..." : "JOIN ROOM");
 
-            currentY += cardH + 12;
+            currentY += cardH + 10;
 
             // Guide Footer Banner
-            QRect tipCard(paneX, currentY, paneW, 32);
+            QRect tipCard(paneX, currentY, paneW, 28);
             p.setBrush(QColor(12, 16, 24, 210));
             p.setPen(QPen(QColor(32, 44, 60), 1));
             p.drawRoundedRect(tipCard, 5, 5);
-            p.setFont(QFont("Arial", 8, QFont::Normal));
+            p.setFont(QFont("Arial", 7, QFont::Normal));
             p.setPen(QColor(145, 170, 195));
             p.drawText(tipCard, Qt::AlignCenter,
-                       "QUICK GUIDE: Click [CREATE & HOST ROOM] in one instance, then click [JOIN ROOM] with the same Room ID & Password in another.");
+                       "MULTIPLAYER GUIDE: Click [CREATE & HOST ROOM] in one window, then click [JOIN ROOM] with the same Room ID & Password in another.");
 
-            currentY += 42;
+            currentY += 36;
         } else {
             // 4. ACTIVE ROOM LOBBY ROSTER & CONTROLS (when connected)
-            int lobbyH = 250;
+            int lobbyH = 248;
             QRect lobbyCard(paneX, currentY, paneW, lobbyH);
             p.setBrush(QColor(12, 17, 26, 245));
             p.setPen(QPen(QColor(40, 230, 115, 170), 1.5));
@@ -1195,19 +1444,20 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
             p.drawText(QRect(paneX + paneW - 310, currentY + 16, 294, 18), Qt::AlignRight,
                 QString("LATENCY: %1 MS   |   TELEMETRY: LIVE").arg(net.getAveragePingMs()));
 
-            // 8-Player Slot Grid (2 rows x 4 columns)
+            // 8-Player Slot Grid (2 rows x 4 columns) with Supercar Thumbnails
             int slotCols = 4;
             int slotGap = 8;
             int slotW = (paneW - 32 - (slotCols - 1) * slotGap) / slotCols;
-            int slotH = 46;
+            int slotH = 54;
             const auto& peers = net.getPeers();
             const char* carNames[4] = { "APEX GT-R", "VORTEX V12", "DRIFT SPEC-R", "TITAN ENFORCER" };
+            const VehicleType carTypes[4] = { VEHICLE_COMPACT_BLUE, VEHICLE_SPORTS_RED, VEHICLE_SEDAN_SILVER, VEHICLE_SUV_BLACK };
 
             for (int slot = 0; slot < 8; ++slot) {
                 int col = slot % slotCols;
                 int row = slot / slotCols;
                 int sx = paneX + 16 + col * (slotW + slotGap);
-                int sy = currentY + 50 + row * (slotH + 8);
+                int sy = currentY + 46 + row * (slotH + 8);
                 QRect sRect(sx, sy, slotW, slotH);
 
                 if (slot == net.getMyPeerId()) {
@@ -1215,27 +1465,37 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
                     p.setPen(QPen(QColor(0, 230, 255), 1.5));
                     p.drawRoundedRect(sRect, 5, 5);
                     p.fillRect(QRect(sx, sy + 6, 3, slotH - 12), QColor(0, 230, 255));
+
+                    int myCarIdx = qBound(0, m_engine.getPlayer().selectedCar, 3);
+                    const QImage& carImg = RasterAssets::instance().getVehicle(carTypes[myCarIdx], true, false, false, false);
+                    p.drawImage(QRect(sx + 8, sy + 8, 44, 34), carImg);
+
                     p.setFont(QFont("Arial", 8, QFont::Bold));
                     p.setPen(QColor(0, 235, 255));
-                    p.drawText(sx + 10, sy + 18, QString("[P%1] %2 (YOU)").arg(slot + 1).arg(net.getLocalPlayerName()));
+                    p.drawText(sx + 58, sy + 20, QString("[P%1] %2 (YOU)").arg(slot + 1).arg(net.getLocalPlayerName()));
                     p.setFont(QFont("Arial", 7, QFont::Normal));
                     p.setPen(QColor(175, 200, 225));
                     QString readyStr = (net.isHost() || net.isLocalReady()) ? "READY" : "STANDBY";
-                    p.drawText(sx + 10, sy + 36, QString("%1  |  %2").arg(m_engine.getPlayer().carModelName).arg(readyStr));
+                    p.drawText(sx + 58, sy + 38, QString("%1  |  %2").arg(m_engine.getPlayer().carModelName).arg(readyStr));
                 } else if (peers.contains(slot)) {
                     const auto& pr = peers[slot];
                     p.setBrush(QColor(20, 28, 40));
                     p.setPen(QPen(QColor(255, 200, 50), 1.2));
                     p.drawRoundedRect(sRect, 5, 5);
                     p.fillRect(QRect(sx, sy + 6, 3, slotH - 12), QColor(255, 200, 50));
+
+                    int peerCarIdx = qBound(0, pr.carModel, 3);
+                    const QImage& carImg = RasterAssets::instance().getVehicle(carTypes[peerCarIdx], true, false, false, false);
+                    p.drawImage(QRect(sx + 8, sy + 8, 44, 34), carImg);
+
                     p.setFont(QFont("Arial", 8, QFont::Bold));
                     p.setPen(QColor(255, 210, 65));
-                    p.drawText(sx + 10, sy + 18, QString("[P%1] %2").arg(slot + 1).arg(pr.name));
+                    p.drawText(sx + 58, sy + 20, QString("[P%1] %2").arg(slot + 1).arg(pr.name));
                     p.setFont(QFont("Arial", 7, QFont::Normal));
                     p.setPen(QColor(165, 185, 210));
-                    QString cName = (pr.carModel >= 0 && pr.carModel < 4) ? carNames[pr.carModel] : "APEX GT-R";
+                    QString cName = carNames[peerCarIdx];
                     QString statusStr = (slot == 0) ? "HOST" : (pr.isReady ? "READY" : "STANDBY");
-                    p.drawText(sx + 10, sy + 36, QString("%1  |  %2 ms  |  %3").arg(cName).arg(pr.pingMs).arg(statusStr));
+                    p.drawText(sx + 58, sy + 38, QString("%1  |  %2 ms  |  %3").arg(cName).arg(pr.pingMs).arg(statusStr));
                 } else {
                     p.setBrush(QColor(14, 18, 25, 150));
                     p.setPen(QPen(QColor(34, 44, 60), 1));
@@ -1247,8 +1507,8 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
             }
 
             // Action Controls Bar
-            int actY = currentY + lobbyH - 50;
-            int actH = 36;
+            int actY = currentY + lobbyH - 46;
+            int actH = 34;
 
             // Ready toggle button on left
             m_readyBtn = QRect(paneX + 16, actY, 150, actH);
@@ -1261,27 +1521,27 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
             p.drawText(m_readyBtn, Qt::AlignCenter, locReady ? "STATUS: READY" : "SET READY");
 
             // Start Race in Center
-            int startW = 360;
+            int startW = 380;
             m_startMpBtn = QRect(paneX + (paneW - startW) / 2, actY, startW, actH);
             bool canStart = (net.isHost() && totalConnected >= 2);
             QLinearGradient sGrad(m_startMpBtn.topLeft(), m_startMpBtn.bottomRight());
             if (canStart) {
-                sGrad.setColorAt(0.0, QColor(0, 210, 115));
-                sGrad.setColorAt(1.0, QColor(0, 155, 75));
+                sGrad.setColorAt(0.0, QColor(0, 220, 120));
+                sGrad.setColorAt(1.0, QColor(0, 160, 80));
             } else if (net.isHost()) {
-                sGrad.setColorAt(0.0, QColor(0, 145, 195));
-                sGrad.setColorAt(1.0, QColor(0, 95, 145));
+                sGrad.setColorAt(0.0, QColor(0, 155, 205));
+                sGrad.setColorAt(1.0, QColor(0, 100, 155));
             } else {
                 sGrad.setColorAt(0.0, QColor(26, 38, 54));
                 sGrad.setColorAt(1.0, QColor(18, 28, 42));
             }
             p.setBrush(sGrad);
-            p.setPen(QPen(canStart ? QColor(90, 255, 170) : (net.isHost() ? QColor(0, 220, 255) : QColor(50, 70, 95)), 1.5));
+            p.setPen(QPen(canStart ? QColor(110, 255, 180) : (net.isHost() ? QColor(0, 220, 255) : QColor(50, 70, 95)), 1.5));
             p.drawRoundedRect(m_startMpBtn, 5, 5);
             p.setFont(QFont("Arial", 9, QFont::Bold));
             p.setPen(canStart ? QColor(8, 20, 12) : Qt::white);
             QString startText = net.isHost()
-                ? (totalConnected >= 2 ? QString("LAUNCH MULTIPLAYER RACE  (%1 DRIVERS)").arg(totalConnected) : "WAITING FOR DRIVERS  (CLICK TO LAUNCH)")
+                ? (totalConnected >= 2 ? QString("LAUNCH MULTIPLAYER RACE  (%1 DRIVERS)").arg(totalConnected) : "LAUNCH PRACTICE OR WAIT FOR DRIVERS")
                 : "WAITING FOR HOST TO LAUNCH RACE";
             p.drawText(m_startMpBtn, Qt::AlignCenter, startText);
 
@@ -1295,17 +1555,18 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
             p.setPen(QColor(255, 185, 185));
             p.drawText(m_disconnectBtn, Qt::AlignCenter, net.isHost() ? "CLOSE ROOM" : "LEAVE ROOM");
 
-            currentY += lobbyH + 14;
+            currentY += lobbyH + 12;
         }
 
         // Return button at bottom of multiplayer tab
-        m_resumeBtn = QRect(paneX + paneW / 2 - 130, currentY, 260, 34);
-        p.setBrush(QColor(22, 32, 46));
-        p.setPen(QPen(QColor(60, 85, 115), 1.2));
+        m_resumeBtn = QRect(paneX + paneW / 2 - 140, currentY, 280, 34);
+        bool retHov = m_resumeBtn.contains(m_mousePos);
+        p.setBrush(retHov ? QColor(30, 44, 64) : QColor(22, 32, 46));
+        p.setPen(QPen(retHov ? QColor(0, 220, 255) : QColor(60, 85, 115), 1.2));
         p.drawRoundedRect(m_resumeBtn, 5, 5);
         p.setFont(QFont("Arial", 9, QFont::Bold));
         p.setPen(Qt::white);
-        p.drawText(m_resumeBtn, Qt::AlignCenter, "RETURN TO COCKPIT  [ESC / M]");
+        p.drawText(m_resumeBtn, Qt::AlignCenter, "ENTER COCKPIT VIEW  [ESC / M]");
 
         p.restore();
         return;
@@ -1314,12 +1575,10 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
     // -------------------------------------------------------------
     // 1. AI GRID DIFFICULTY SELECTION ROW (EASY, NORMAL, PRO)
     // -------------------------------------------------------------
-    int contentW = qMin(1108, w - 72);
-    int contentX = (w - contentW) / 2;
     int diffGap = 14;
     int diffW = (contentW - 2 * diffGap) / 3;
-    int diffH = 46;
-    int diffY = 88;
+    int diffH = 44;
+    int diffY = 86;
 
     struct DiffData {
         GameDifficulty diff;
@@ -1327,9 +1586,9 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         QString desc;
         QColor accent;
     } diffs[] = {
-        { DIFFICULTY_EASY, "TIER 1  //  ROOKIE GRID", "6-Car Grid  |  Sprint Distance  |  1.0x Score", QColor(40, 220, 100) },
-        { DIFFICULTY_NORMAL, "TIER 2  //  PRO CIRCUIT", "10-Car Grid  |  Standard Distance  |  1.5x Score", QColor(255, 190, 35) },
-        { DIFFICULTY_PRO, "TIER 3  //  CHAMPIONSHIP", "16-Car Grid  |  Endurance Distance  |  2.5x Score", QColor(255, 55, 75) }
+        { DIFFICULTY_EASY, "TIER 1  //  ROOKIE GRID", "6-Car Grid  |  Sprint Distance  |  1.0x Score", QColor(40, 225, 110) },
+        { DIFFICULTY_NORMAL, "TIER 2  //  PRO CIRCUIT", "10-Car Grid  |  Standard Distance  |  1.5x Score", QColor(255, 195, 40) },
+        { DIFFICULTY_PRO, "TIER 3  //  CHAMPIONSHIP", "16-Car Grid  |  Endurance Distance  |  2.5x Score", QColor(255, 60, 80) }
     };
 
     GameDifficulty curDiff = m_engine.getDifficulty();
@@ -1337,20 +1596,21 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
     for (int i = 0; i < 3; ++i) {
         m_diffButtons[i] = QRect(contentX + i * (diffW + diffGap), diffY, diffW, diffH);
         bool isCur = (curDiff == diffs[i].diff);
+        bool isHov = m_diffButtons[i].contains(m_mousePos);
 
-        p.setBrush(isCur ? QColor(18, 26, 40) : QColor(12, 16, 24));
-        p.setPen(QPen(isCur ? diffs[i].accent : QColor(36, 46, 62), isCur ? 1.8 : 1.0));
+        p.setBrush(isCur ? QColor(18, 27, 42, 240) : (isHov ? QColor(18, 25, 38, 230) : QColor(12, 17, 26, 225)));
+        p.setPen(QPen(isCur ? diffs[i].accent : (isHov ? diffs[i].accent.darker(125) : QColor(38, 50, 68)), isCur ? 1.8 : 1.1));
         p.drawRoundedRect(m_diffButtons[i], 5, 5);
         p.fillRect(QRect(m_diffButtons[i].x(), m_diffButtons[i].y() + 6, 3, diffH - 12),
                    isCur ? diffs[i].accent : QColor(50, 62, 80));
 
         p.setFont(QFont("Arial", 9, QFont::Bold));
         p.setPen(isCur ? diffs[i].accent : Qt::white);
-        p.drawText(QRect(m_diffButtons[i].x() + 12, m_diffButtons[i].y() + 6, m_diffButtons[i].width() - 24, 16), Qt::AlignLeft, diffs[i].title);
+        p.drawText(QRect(m_diffButtons[i].x() + 12, m_diffButtons[i].y() + 5, m_diffButtons[i].width() - 24, 16), Qt::AlignLeft, diffs[i].title);
 
         if (isCur) {
             QRect activeBadge(m_diffButtons[i].right() - 68, m_diffButtons[i].y() + 6, 58, 15);
-            p.setBrush(QColor(diffs[i].accent.red(), diffs[i].accent.green(), diffs[i].accent.blue(), 35));
+            p.setBrush(QColor(diffs[i].accent.red(), diffs[i].accent.green(), diffs[i].accent.blue(), 40));
             p.setPen(QPen(diffs[i].accent, 1));
             p.drawRoundedRect(activeBadge, 3, 3);
             p.setFont(QFont("Arial", 6, QFont::Bold));
@@ -1359,16 +1619,16 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         }
 
         p.setFont(QFont("Arial", 7, QFont::Normal));
-        p.setPen(QColor(145, 165, 188));
-        p.drawText(QRect(m_diffButtons[i].x() + 12, m_diffButtons[i].y() + 24, m_diffButtons[i].width() - 24, 16), Qt::AlignLeft, diffs[i].desc);
+        p.setPen(QColor(150, 170, 195));
+        p.drawText(QRect(m_diffButtons[i].x() + 12, m_diffButtons[i].y() + 23, m_diffButtons[i].width() - 24, 16), Qt::AlignLeft, diffs[i].desc);
     }
 
     // -------------------------------------------------------------
-    // 2. ENVIRONMENT LIGHTING & SUPERCAR SPECIFICATION ROW
+    // 2. ENVIRONMENT LIGHTING & SUPERCAR SHOWROOM SELECTOR ROW
     // -------------------------------------------------------------
-    int todY = 142;
-    int todH = 30;
-    int todW = (contentW / 3 - 16) / 3;
+    int todY = 136;
+    int todH = 38;
+    int todW = (contentW / 3 - 18) / 3;
     TimeOfDay currentTod = m_engine.getTimeOfDay();
 
     struct TodData {
@@ -1376,29 +1636,35 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         QString label;
         QColor activeCol;
     } tods[] = {
-        { TIME_DAY, "DAYLIGHT", QColor(30, 145, 240) },
-        { TIME_SUNSET, "SUNSET", QColor(235, 115, 35) },
-        { TIME_NIGHT, "MIDNIGHT", QColor(135, 55, 235) }
+        { TIME_DAY, "DAYLIGHT", QColor(30, 150, 245) },
+        { TIME_SUNSET, "SUNSET", QColor(240, 120, 35) },
+        { TIME_NIGHT, "MIDNIGHT", QColor(140, 60, 240) }
     };
 
     for (int i = 0; i < 3; ++i) {
         m_todButtons[i] = QRect(contentX + i * (todW + 8), todY, todW, todH);
         bool isCur = (currentTod == tods[i].tod);
+        bool isHov = m_todButtons[i].contains(m_mousePos);
 
-        p.setBrush(isCur ? tods[i].activeCol : QColor(14, 19, 28));
-        p.setPen(QPen(isCur ? Qt::white : QColor(38, 48, 64), isCur ? 1.5 : 1.0));
-        p.drawRoundedRect(m_todButtons[i], 4, 4);
+        p.setBrush(isCur ? tods[i].activeCol : (isHov ? QColor(22, 30, 44) : QColor(14, 19, 28, 225)));
+        p.setPen(QPen(isCur ? Qt::white : (isHov ? tods[i].activeCol : QColor(40, 52, 70)), isCur ? 1.5 : 1.0));
+        p.drawRoundedRect(m_todButtons[i], 5, 5);
 
         p.setFont(QFont("Arial", 7, QFont::Bold));
-        p.setPen(isCur ? Qt::white : QColor(165, 185, 205));
+        p.setPen(isCur ? Qt::white : QColor(175, 195, 215));
         p.drawText(m_todButtons[i], Qt::AlignCenter, tods[i].label);
     }
 
-    struct CarOption { QString label; QColor col; } carOpts[4] = {
-        { "APEX GT-R  [BALANCED]", QColor(0, 215, 255) },
-        { "VORTEX V12  [SPEED]", QColor(255, 60, 75) },
-        { "DRIFT SPEC-R  [GRIP]", QColor(255, 185, 35) },
-        { "TITAN GT  [ARMOR]", QColor(45, 225, 130) }
+    struct CarOption {
+        QString name;
+        QString spec;
+        QColor col;
+        VehicleType vType;
+    } carOpts[4] = {
+        { "APEX GT-R", "320 KM/H // BALANCED", QColor(0, 220, 255), VEHICLE_COMPACT_BLUE },
+        { "VORTEX V12", "355 KM/H // TOP SPEED", QColor(255, 65, 80), VEHICLE_SPORTS_RED },
+        { "DRIFT SPEC-R", "310 KM/H // APEX GRIP", QColor(255, 190, 40), VEHICLE_SEDAN_SILVER },
+        { "TITAN GT", "305 KM/H // HEAVY ARMOR", QColor(45, 230, 135), VEHICLE_SUV_BLACK }
     };
     int carStartX = m_todButtons[2].right() + 16;
     int remW = contentX + contentW - carStartX;
@@ -1407,24 +1673,35 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
     for (int c = 0; c < 4; ++c) {
         m_carButtons[c] = QRect(carStartX + c * (carBtnW + 8), todY, carBtnW, todH);
         bool isSel = (curCar == c);
-        p.setBrush(isSel ? QColor(20, 28, 42) : QColor(14, 19, 28));
-        p.setPen(QPen(isSel ? carOpts[c].col : QColor(38, 48, 64), isSel ? 1.6 : 1.0));
-        p.drawRoundedRect(m_carButtons[c], 4, 4);
+        bool isHov = m_carButtons[c].contains(m_mousePos);
+        p.setBrush(isSel ? QColor(20, 30, 46, 245) : (isHov ? QColor(20, 28, 42, 235) : QColor(13, 18, 28, 225)));
+        p.setPen(QPen(isSel ? carOpts[c].col : (isHov ? carOpts[c].col.darker(120) : QColor(40, 52, 70)), isSel ? 1.8 : 1.0));
+        p.drawRoundedRect(m_carButtons[c], 5, 5);
         if (isSel) {
             p.fillRect(QRect(m_carButtons[c].x() + 8, m_carButtons[c].bottom() - 3, carBtnW - 16, 2), carOpts[c].col);
         }
+
+        // Render miniature Phong-shaded vehicle sprite inside selector card
+        const QImage& carSprite = RasterAssets::instance().getVehicle(carOpts[c].vType, true, false, false, false);
+        QRect spriteRect(m_carButtons[c].x() + 6, m_carButtons[c].y() + 4, 38, 28);
+        p.drawImage(spriteRect, carSprite);
+
         p.setFont(QFont("Arial", 7, QFont::Bold));
-        p.setPen(isSel ? carOpts[c].col : QColor(185, 200, 220));
-        p.drawText(m_carButtons[c], Qt::AlignCenter, carOpts[c].label);
+        p.setPen(isSel ? carOpts[c].col : Qt::white);
+        p.drawText(m_carButtons[c].adjusted(48, 4, -6, -18), Qt::AlignLeft | Qt::AlignVCenter, carOpts[c].name);
+
+        p.setFont(QFont("Arial", 6, QFont::Bold));
+        p.setPen(QColor(145, 165, 190));
+        p.drawText(m_carButtons[c].adjusted(48, 19, -6, -3), Qt::AlignLeft | Qt::AlignVCenter, carOpts[c].spec);
     }
 
     // -------------------------------------------------------------
-    // 3. 4 CIRCUIT SELECTION CARDS
+    // 3. 4 GRAND PRIX CIRCUIT SELECTION CARDS
     // -------------------------------------------------------------
     int cardGap = 14;
     int cardW = (contentW - 3 * cardGap) / 4;
-    int cardH = qMin(315, h - 255);
-    int cardY = 180;
+    int cardH = qMin(312, h - 256);
+    int cardY = 182;
 
     struct CardData {
         TrackTheme theme;
@@ -1436,10 +1713,10 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         int difficulty;
         QColor accent;
     } cards[] = {
-        { THEME_SUNSET_COAST, "Pacific Coast", "Coastal Highway  |  Rolling Sweeps", "COASTAL", 2, 3, 2, QColor(255, 140, 40) },
-        { THEME_ALPINE_CLIMB, "Alpine Summit", "Mountain Pass  |  Steep Elevation", "ALPINE", 5, 2, 5, QColor(75, 175, 255) },
-        { THEME_NEON_METROPOLIS, "Neo City", "Urban Expressway  |  High Speed", "METROPOLIS", 1, 5, 4, QColor(245, 55, 160) },
-        { THEME_RED_ROCK, "Red Rock Canyon", "Desert Speedway  |  Canyon Crests", "CANYON", 3, 3, 3, QColor(240, 100, 50) }
+        { THEME_SUNSET_COAST, "Pacific Coast", "Coastal Highway  |  Rolling Sweeps", "COASTAL GP", 2, 3, 2, QColor(255, 145, 45) },
+        { THEME_ALPINE_CLIMB, "Alpine Summit", "Mountain Pass  |  Steep Elevation", "ALPINE PASS", 5, 2, 5, QColor(75, 180, 255) },
+        { THEME_NEON_METROPOLIS, "Neo City", "Urban Expressway  |  High Speed", "CYBER CIRCUIT", 1, 5, 4, QColor(245, 65, 165) },
+        { THEME_RED_ROCK, "Red Rock Canyon", "Desert Speedway  |  Canyon Crests", "CANYON RUN", 3, 3, 3, QColor(240, 105, 55) }
     };
 
     TrackTheme currentTheme = m_engine.getCurrentTheme();
@@ -1449,23 +1726,32 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         m_trackCards[i] = QRect(cx, cardY, cardW, cardH);
 
         bool isSelected = (cards[i].theme == currentTheme);
+        bool isHovered = m_trackCards[i].contains(m_mousePos);
 
-        p.setBrush(isSelected ? QColor(20, 28, 42) : QColor(13, 18, 26));
-        p.setPen(QPen(isSelected ? cards[i].accent : QColor(36, 46, 62), isSelected ? 2.0 : 1.0));
+        p.setBrush(isSelected ? QColor(20, 29, 44, 245) : (isHovered ? QColor(18, 25, 38, 238) : QColor(12, 17, 26, 230)));
+        p.setPen(QPen(isSelected ? cards[i].accent : (isHovered ? cards[i].accent.lighter(115) : QColor(38, 50, 68)),
+                      isSelected ? 2.2 : (isHovered ? 1.6 : 1.0)));
         p.drawRoundedRect(m_trackCards[i], 6, 6);
 
-        // Preview thumbnail
+        // Preview thumbnail with bottom gradient vignette
         const QImage& bgImg = RasterAssets::instance().getBackdrop(cards[i].theme, currentTod);
         QRect thumbRect(cx + 6, cardY + 6, cardW - 12, qMin(104, cardH / 3));
         p.drawImage(thumbRect, bgImg);
+
+        QLinearGradient thumbVig(0, thumbRect.top(), 0, thumbRect.bottom());
+        thumbVig.setColorAt(0.0, QColor(0, 0, 0, 35));
+        thumbVig.setColorAt(0.65, QColor(0, 0, 0, 0));
+        thumbVig.setColorAt(1.0, QColor(8, 12, 20, 185));
+        p.fillRect(thumbRect, thumbVig);
+
         p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(QColor(0, 0, 0, 120), 1));
+        p.setPen(QPen(isSelected ? cards[i].accent : QColor(0, 0, 0, 140), 1));
         p.drawRect(thumbRect);
 
         // Category Tag Badge
-        p.setBrush(QColor(10, 14, 22, 220));
+        p.setBrush(QColor(8, 12, 20, 225));
         p.setPen(QPen(cards[i].accent, 1));
-        QRect tagRect(cx + 12, cardY + 12, 86, 18);
+        QRect tagRect(cx + 12, cardY + 12, 92, 18);
         p.drawRoundedRect(tagRect, 3, 3);
         p.setFont(QFont("Arial", 6, QFont::Bold));
         p.setPen(cards[i].accent);
@@ -1478,84 +1764,90 @@ void GameWindow::renderMainMenuOverlay(QPainter& p) {
         p.drawText(QRect(cx + 12, textStartY, cardW - 24, 20), Qt::AlignLeft, cards[i].title);
 
         p.setFont(QFont("Arial", 7, QFont::Normal));
-        p.setPen(QColor(145, 165, 188));
-        p.drawText(QRect(cx + 12, textStartY + 20, cardW - 24, 20), Qt::AlignLeft, cards[i].subtitle);
+        p.setPen(QColor(150, 170, 195));
+        p.drawText(QRect(cx + 12, textStartY + 19, cardW - 24, 18), Qt::AlignLeft, cards[i].subtitle);
 
         // Telemetry Spec Bars (Elevation, Density, Technicality)
         auto drawRating = [&](int ry, const QString& label, int rating, const QColor& col) {
             p.setFont(QFont("Arial", 7, QFont::Bold));
-            p.setPen(QColor(130, 150, 175));
+            p.setPen(QColor(135, 155, 180));
             p.drawText(cx + 12, ry + 9, label);
             int barStartX = cx + cardW - 82;
             for (int seg = 0; seg < 5; ++seg) {
-                p.setBrush((seg < rating) ? col : QColor(28, 36, 48));
+                p.setBrush((seg < rating) ? col : QColor(26, 34, 46));
                 p.setPen(Qt::NoPen);
                 p.drawRoundedRect(barStartX + seg * 14, ry + 2, 11, 6, 1, 1);
             }
         };
 
-        int ratingBaseY = textStartY + 46;
+        int ratingBaseY = textStartY + 43;
         drawRating(ratingBaseY, "ELEVATION", cards[i].hills, QColor(0, 215, 255));
-        drawRating(ratingBaseY + 18, "DENSITY", cards[i].traffic, QColor(255, 185, 40));
+        drawRating(ratingBaseY + 18, "TRAFFIC", cards[i].traffic, QColor(255, 185, 40));
         drawRating(ratingBaseY + 36, "TECHNICALITY", cards[i].difficulty, cards[i].accent);
 
-        // Select Circuit Button
+        // Launch / Active Circuit Button inside card
         int btnH = 30;
         QRect btnRect(cx + 12, cardY + cardH - btnH - 10, cardW - 24, btnH);
-        p.setBrush(isSelected ? cards[i].accent : QColor(24, 32, 46));
-        p.setPen(QPen(isSelected ? cards[i].accent : QColor(48, 62, 82), 1));
+        p.setBrush(isSelected ? cards[i].accent : (isHovered ? QColor(34, 46, 66) : QColor(22, 30, 44)));
+        p.setPen(QPen(isSelected ? cards[i].accent.lighter(125) : (isHovered ? cards[i].accent : QColor(48, 62, 82)), 1.2));
         p.drawRoundedRect(btnRect, 4, 4);
         p.setFont(QFont("Arial", 8, QFont::Bold));
-        p.setPen(isSelected ? QColor(8, 12, 18) : QColor(210, 225, 240));
-        p.drawText(btnRect, Qt::AlignCenter, isSelected ? "ACTIVE CIRCUIT" : "SELECT CIRCUIT");
+        p.setPen(isSelected ? QColor(8, 12, 18) : Qt::white);
+        p.drawText(btnRect, Qt::AlignCenter, isSelected ? "ACTIVE CIRCUIT  //  RACE ▶" : (isHovered ? "LAUNCH CIRCUIT ▶" : "SELECT CIRCUIT"));
     }
 
     // -------------------------------------------------------------
-    // 4. COMMAND BAR (Start/Resume, Repair, Cycle Lighting)
+    // 4. COMMAND DOCK (Prominent Start Race CTA, Repair, Cycle Lighting)
     // -------------------------------------------------------------
-    int actW = 230;
-    int actH = 36;
+    int primaryW = 310;
+    int secondaryW = 215;
+    int actH = 40;
     int actGap = 14;
-    int actTotalW = 3 * actW + 2 * actGap;
+    int actTotalW = primaryW + 2 * secondaryW + 2 * actGap;
     int actStartX = (w - actTotalW) / 2;
     int actY = cardY + cardH + 12;
 
-    // Start / Resume Button
-    m_resumeBtn = QRect(actStartX, actY, actW, actH);
-    QLinearGradient resumeGrad(actStartX, actY, actStartX + actW, actY + actH);
-    resumeGrad.setColorAt(0.0, QColor(0, 210, 115));
-    resumeGrad.setColorAt(1.0, QColor(0, 160, 80));
+    // Primary Start / Resume Race CTA Button with animated glow
+    m_resumeBtn = QRect(actStartX, actY, primaryW, actH);
+    bool startHov = m_resumeBtn.contains(m_mousePos);
+    QLinearGradient resumeGrad(m_resumeBtn.topLeft(), m_resumeBtn.bottomRight());
+    resumeGrad.setColorAt(0.0, startHov ? QColor(20, 240, 140) : QColor(0, 215, 120));
+    resumeGrad.setColorAt(1.0, startHov ? QColor(0, 185, 95) : QColor(0, 160, 80));
     p.setBrush(resumeGrad);
-    p.setPen(QPen(QColor(90, 255, 175), 1.5));
-    p.drawRoundedRect(m_resumeBtn, 5, 5);
-    p.setFont(QFont("Arial", 9, QFont::Bold));
-    p.setPen(QColor(8, 20, 12));
-    p.drawText(m_resumeBtn, Qt::AlignCenter, (m_engine.getPlayer().speed > 0) ? "RESUME RACE  [ESC / M]" : "START RACE  [ESC / M]");
+    p.setPen(QPen(QColor(130, 255, 195), startHov ? 2.2 : 1.6));
+    p.drawRoundedRect(m_resumeBtn, 6, 6);
+    p.setFont(QFont("Arial", 10, QFont::Black));
+    p.setPen(QColor(6, 18, 10));
+    p.drawText(m_resumeBtn, Qt::AlignCenter,
+               (m_engine.getPlayer().speed > 1.0) ? "▶  RESUME RACE  [ESC]" : "▶  START RACE  [ENTER / CLICK]");
 
-    // Repair Vehicle Button
-    m_repairBtn = QRect(actStartX + actW + actGap, actY, actW, actH);
-    p.setBrush(QColor(32, 44, 62));
-    p.setPen(QPen(QColor(255, 155, 45), 1.2));
-    p.drawRoundedRect(m_repairBtn, 5, 5);
-    p.setPen(QColor(255, 190, 95));
+    // Repair & Reset Grid Button
+    m_repairBtn = QRect(actStartX + primaryW + actGap, actY, secondaryW, actH);
+    bool repHov = m_repairBtn.contains(m_mousePos);
+    p.setBrush(repHov ? QColor(42, 54, 74) : QColor(26, 36, 52));
+    p.setPen(QPen(QColor(255, 165, 50), repHov ? 1.8 : 1.2));
+    p.drawRoundedRect(m_repairBtn, 6, 6);
+    p.setFont(QFont("Arial", 8, QFont::Bold));
+    p.setPen(QColor(255, 200, 105));
     p.drawText(m_repairBtn, Qt::AlignCenter, "RESET & REPAIR  [KEY R]");
 
     // Cycle Lighting Button
-    m_lightsBtn = QRect(actStartX + 2 * (actW + actGap), actY, actW, actH);
-    p.setBrush(QColor(24, 38, 58));
-    p.setPen(QPen(QColor(0, 200, 245), 1.2));
-    p.drawRoundedRect(m_lightsBtn, 5, 5);
-    p.setPen(QColor(160, 225, 255));
+    m_lightsBtn = QRect(actStartX + primaryW + secondaryW + 2 * actGap, actY, secondaryW, actH);
+    bool lgtHov = m_lightsBtn.contains(m_mousePos);
+    p.setBrush(lgtHov ? QColor(32, 48, 72) : QColor(22, 34, 52));
+    p.setPen(QPen(QColor(0, 210, 255), lgtHov ? 1.8 : 1.2));
+    p.drawRoundedRect(m_lightsBtn, 6, 6);
+    p.setPen(QColor(165, 230, 255));
     p.drawText(m_lightsBtn, Qt::AlignCenter, "CYCLE LIGHTING  [KEY N]");
 
     // -------------------------------------------------------------
     // 5. BOTTOM CONTROLS TELEMETRY FOOTER
     // -------------------------------------------------------------
-    int bottomY = h - 28;
-    p.setPen(QColor(125, 145, 170));
+    int bottomY = h - 24;
+    p.setPen(QColor(135, 155, 182));
     p.setFont(QFont("Arial", 7, QFont::Bold));
-    p.drawText(QRect(0, bottomY, w, 20), Qt::AlignCenter,
-               "CONTROLS:  [W/S] THROTTLE & BRAKE   |   [A/D] STEER   |   [C] CAMERA   |   [F1-F4] VEHICLE   |   [O] MULTIPLAYER   |   [M] MENU   |   [R] RESET");
+    p.drawText(QRect(0, bottomY, w, 18), Qt::AlignCenter,
+               "CONTROLS:  [W/S] THROTTLE & BRAKE   |   [A/D] STEER   |   [C] CAMERA   |   [F1-F4] SUPERCAR   |   [O] MULTIPLAYER   |   [M/ESC] MENU   |   [R] RESET");
 
     p.restore();
 }

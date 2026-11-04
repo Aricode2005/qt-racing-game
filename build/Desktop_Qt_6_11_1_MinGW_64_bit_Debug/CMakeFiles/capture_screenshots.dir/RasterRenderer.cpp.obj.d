@@ -369,6 +369,63 @@ CMakeFiles/capture_screenshots.dir/RasterRenderer.cpp.obj: \
  C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/chrono.h \
  C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/ratio \
  C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/ctime \
+ C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\NetworkManager.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpServer \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpserver.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkglobal.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetwork-config.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkexports.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qabstractsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qiodevice.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qhostaddress.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpSocket \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qvariant.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qdebug.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qtextstream.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcontiguouscache.h \
+ C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/climits \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qsharedpointer.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qsharedpointer_impl.h \
+ C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/set \
+ C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/stl_set.h \
+ C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/stl_multiset.h \
+ C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/unordered_set \
+ C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/unordered_set.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qset.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qhash.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qvarlengtharray.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qalloc.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QUdpSocket \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qudpsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QTimer \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qtimer.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qbasictimer.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qabstracteventdispatcher.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qeventloop.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qdeadlinetimer.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QHostAddress \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QNetworkInterface \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qnetworkinterface.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonObject \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonobject.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonvalue.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcborvalue.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcborcommon.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qregularexpression.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qurl.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/quuid.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsondocument.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonparseerror.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonArray \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonarray.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonDocument \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QSet \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QElapsedTimer \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qelapsedtimer.h \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QtMath \
  C:/Qt/6.11.1/mingw_64/include/QtGui/QPainterPath \
  C:/Qt/6.11.1/mingw_64/include/QtGui/qpainterpath.h \

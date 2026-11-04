@@ -3,10 +3,15 @@ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_M
   C:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QElapsedTimer \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QIODevice \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonArray \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonDocument \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonObject \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QList \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QMap \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QObject \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/QPoint \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QRect \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/QSet \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QSize \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QSizeF \
   C:/Qt/6.11.1/mingw_64/include/QtCore/QString \
@@ -38,6 +43,9 @@ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_M
   C:/Qt/6.11.1/mingw_64/include/QtCore/qbytearrayalgorithms.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qbytearraylist.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qbytearrayview.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qcborcommon.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qcborvalue.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qchar.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qcheckedint_impl.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qcompare.h \
@@ -55,6 +63,7 @@ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_M
   C:/Qt/6.11.1/mingw_64/include/QtCore/qcoreevent.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qdarwinhelpers.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qdatastream.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qdeadlinetimer.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qdebug.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qelapsedtimer.h \
@@ -75,6 +84,11 @@ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_M
   C:/Qt/6.11.1/mingw_64/include/QtCore/qiodevicebase.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qiterable.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qiterator.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonarray.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qjsondocument.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonobject.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonparseerror.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonvalue.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qlatin1stringview.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qline.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qlist.h \
@@ -100,6 +114,7 @@ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_M
   C:/Qt/6.11.1/mingw_64/include/QtCore/qprocessordetection.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qrect.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qrefcount.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/qregularexpression.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qscopedpointer.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qscopeguard.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qset.h \
@@ -148,6 +163,7 @@ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_M
   C:/Qt/6.11.1/mingw_64/include/QtCore/qtypes.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qurl.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qutf8stringview.h \
+  C:/Qt/6.11.1/mingw_64/include/QtCore/quuid.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qvariant.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qvarlengtharray.h \
   C:/Qt/6.11.1/mingw_64/include/QtCore/qvector.h \
@@ -208,6 +224,20 @@ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_M
   C:/Qt/6.11.1/mingw_64/include/QtMultimedia/qtmultimedia-config.h \
   C:/Qt/6.11.1/mingw_64/include/QtMultimedia/qtmultimediaexports.h \
   C:/Qt/6.11.1/mingw_64/include/QtMultimedia/qtmultimediaglobal.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/QHostAddress \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/QNetworkInterface \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpServer \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpSocket \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/QUdpSocket \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qabstractsocket.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qhostaddress.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qnetworkinterface.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpserver.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpsocket.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetwork-config.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkexports.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkglobal.h \
+  C:/Qt/6.11.1/mingw_64/include/QtNetwork/qudpsocket.h \
   C:/Qt/6.11.1/mingw_64/include/QtWidgets/QWidget \
   C:/Qt/6.11.1/mingw_64/include/QtWidgets/qsizepolicy.h \
   C:/Qt/6.11.1/mingw_64/include/QtWidgets/qtwidgets-config.h \
@@ -429,6 +459,7 @@ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/build/Desktop_Qt_6_11_1_M
   C:/Qt/Tools/mingw1310_64/x86_64-w64-mingw32/include/wchar.h \
   C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/AudioSynthesizer.h \
   C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/GameEngine.h \
+  C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/NetworkManager.h \
   C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/RasterAssets.h \
   C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/RasterRenderer.h \
   C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/Track.h

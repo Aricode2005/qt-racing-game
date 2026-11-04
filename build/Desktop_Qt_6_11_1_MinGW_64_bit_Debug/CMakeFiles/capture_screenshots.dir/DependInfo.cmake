@@ -12,6 +12,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/AudioSynthesizer.cpp" "CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.obj" "gcc" "CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/GameEngine.cpp" "CMakeFiles/capture_screenshots.dir/GameEngine.cpp.obj" "gcc" "CMakeFiles/capture_screenshots.dir/GameEngine.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/GameWindow.cpp" "CMakeFiles/capture_screenshots.dir/GameWindow.cpp.obj" "gcc" "CMakeFiles/capture_screenshots.dir/GameWindow.cpp.obj.d"
+  "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/NetworkManager.cpp" "CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj" "gcc" "CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/RasterAssets.cpp" "CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.obj" "gcc" "CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/RasterRenderer.cpp" "CMakeFiles/capture_screenshots.dir/RasterRenderer.cpp.obj" "gcc" "CMakeFiles/capture_screenshots.dir/RasterRenderer.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/Track.cpp" "CMakeFiles/capture_screenshots.dir/Track.cpp.obj" "gcc" "CMakeFiles/capture_screenshots.dir/Track.cpp.obj.d"

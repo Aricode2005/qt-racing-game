@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QVector>
+#include <QPoint>
 #include "GameEngine.h"
 #include "RasterRenderer.h"
 #include "AudioSynthesizer.h"
@@ -17,7 +18,12 @@ public:
     explicit GameWindow(QWidget *parent = nullptr);
     ~GameWindow() = default;
 
-    void setShowMainMenu(bool show) { m_showMainMenu = show; }
+    void setShowMainMenu(bool show) {
+        m_showMainMenu = show;
+        m_isTransitioningToRace = false;
+        m_menuOpacity = show ? 1.0 : 0.0;
+        m_raceTransitionFlash = 0.0;
+    }
     bool isMainMenuShown() const { return m_showMainMenu; }
     GameEngine& getEngine() { return m_engine; }
 
@@ -35,6 +41,8 @@ private slots:
 
 private:
     void renderMainMenuOverlay(QPainter& p);
+    void renderRaceTransitionOverlay(QPainter& p);
+    void startTransitionToRace(bool resetPlayerFirst = false);
     void selectTrack(TrackTheme theme);
 
     GameEngine m_engine;
@@ -45,15 +53,21 @@ private:
     QElapsedTimer m_frameTimer;
     qreal m_lastDt = 0.016;
     qreal m_smoothDt = 0.016;
+    qreal m_menuAnimTime = 0.0;
 
     bool m_keyGas = false;
     bool m_keyBrake = false;
     bool m_mouseGas = false;
     bool m_mouseBrake = false;
+    QPoint m_mousePos = QPoint(-1, -1);
     QRect m_brakePedalRect;
     QRect m_gasPedalRect;
 
     bool m_showMainMenu = true;
+    bool m_isTransitioningToRace = false;
+    qreal m_menuOpacity = 1.0;
+    qreal m_raceTransitionFlash = 0.0;
+
     QRect m_diffButtons[3];
     QRect m_todButtons[3];
     QRect m_carButtons[4];
@@ -65,6 +79,8 @@ private:
     bool m_showMultiplayerTab = false;
     QRect m_soloTabBtn;
     QRect m_mpTabBtn;
+    QRect m_mpCarButtons[4];
+    QRect m_mpTrackButtons[4];
     QRect m_readyBtn;
     QRect m_startMpBtn;
     QRect m_disconnectBtn;

@@ -13,6 +13,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/AudioSynthesizer.cpp" "CMakeFiles/ApexVelocity.dir/AudioSynthesizer.cpp.obj" "gcc" "CMakeFiles/ApexVelocity.dir/AudioSynthesizer.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/GameEngine.cpp" "CMakeFiles/ApexVelocity.dir/GameEngine.cpp.obj" "gcc" "CMakeFiles/ApexVelocity.dir/GameEngine.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/GameWindow.cpp" "CMakeFiles/ApexVelocity.dir/GameWindow.cpp.obj" "gcc" "CMakeFiles/ApexVelocity.dir/GameWindow.cpp.obj.d"
+  "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/NetworkManager.cpp" "CMakeFiles/ApexVelocity.dir/NetworkManager.cpp.obj" "gcc" "CMakeFiles/ApexVelocity.dir/NetworkManager.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/RasterAssets.cpp" "CMakeFiles/ApexVelocity.dir/RasterAssets.cpp.obj" "gcc" "CMakeFiles/ApexVelocity.dir/RasterAssets.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/RasterRenderer.cpp" "CMakeFiles/ApexVelocity.dir/RasterRenderer.cpp.obj" "gcc" "CMakeFiles/ApexVelocity.dir/RasterRenderer.cpp.obj.d"
   "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/Track.cpp" "CMakeFiles/ApexVelocity.dir/Track.cpp.obj" "gcc" "CMakeFiles/ApexVelocity.dir/Track.cpp.obj.d"
