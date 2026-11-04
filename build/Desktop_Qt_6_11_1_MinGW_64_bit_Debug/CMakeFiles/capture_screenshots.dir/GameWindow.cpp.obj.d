@@ -417,6 +417,9 @@ CMakeFiles/capture_screenshots.dir/GameWindow.cpp.obj: \
  C:/Qt/6.11.1/mingw_64/include/QtGui/qinputmethod.h \
  C:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
  C:/Qt/6.11.1/mingw_64/include/QtGui/qguiapplication_platform.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QVector \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qvector.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QPoint \
  C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\GameEngine.h \
  C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\Track.h \
  C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\RasterAssets.h \
@@ -425,8 +428,6 @@ CMakeFiles/capture_screenshots.dir/GameWindow.cpp.obj: \
  C:/Qt/6.11.1/mingw_64/include/QtGui/qpainter.h \
  C:/Qt/6.11.1/mingw_64/include/QtGui/qtextoption.h \
  C:/Qt/6.11.1/mingw_64/include/QtGui/qpen.h \
- C:/Qt/6.11.1/mingw_64/include/QtCore/QVector \
- C:/Qt/6.11.1/mingw_64/include/QtCore/qvector.h \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QMap \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QString \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QObject \
@@ -444,6 +445,38 @@ CMakeFiles/capture_screenshots.dir/GameWindow.cpp.obj: \
  C:/Qt/6.11.1/mingw_64/include/QtMultimedia/qtaudio.h \
  C:/Qt/6.11.1/mingw_64/include/QtMultimedia/qaudio.h \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+ C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\NetworkManager.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpServer \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpserver.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkglobal.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetwork-config.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkexports.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qabstractsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qhostaddress.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpSocket \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QUdpSocket \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qudpsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QHostAddress \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QNetworkInterface \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qnetworkinterface.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonObject \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonobject.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonvalue.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcborvalue.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcborcommon.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qregularexpression.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/quuid.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsondocument.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonparseerror.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonArray \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonarray.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonDocument \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QSet \
+ C:/Qt/6.11.1/mingw_64/include/QtGui/QPainterPath \
+ C:/Qt/6.11.1/mingw_64/include/QtGui/qpainterpath.h \
  C:/Qt/6.11.1/mingw_64/include/QtGui/QMouseEvent \
  C:/Qt/6.11.1/mingw_64/include/QtGui/QFont \
  C:/Qt/6.11.1/mingw_64/include/QtCore/QRandomGenerator \
@@ -456,4 +489,13 @@ CMakeFiles/capture_screenshots.dir/GameWindow.cpp.obj: \
  C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/xmmintrin.h \
  C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/mmintrin.h \
  C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/mwaitintrin.h \
- C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/random.tcc
+ C:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/random.tcc \
+ C:/Qt/6.11.1/mingw_64/include/QtWidgets/QInputDialog \
+ C:/Qt/6.11.1/mingw_64/include/QtWidgets/qinputdialog.h \
+ C:/Qt/6.11.1/mingw_64/include/QtWidgets/qlineedit.h \
+ C:/Qt/6.11.1/mingw_64/include/QtWidgets/qframe.h \
+ C:/Qt/6.11.1/mingw_64/include/QtGui/qtextcursor.h \
+ C:/Qt/6.11.1/mingw_64/include/QtGui/qtextdocument.h \
+ C:/Qt/6.11.1/mingw_64/include/QtGui/qtextformat.h \
+ C:/Qt/6.11.1/mingw_64/include/QtWidgets/qdialog.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QtMath

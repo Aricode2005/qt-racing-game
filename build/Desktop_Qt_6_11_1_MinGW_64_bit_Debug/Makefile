@@ -142,6 +142,19 @@ capture_screenshots/fast:
 .PHONY : capture_screenshots/fast
 
 #=============================================================================
+# Target rules for targets named network_auth_test
+
+# Build rule for target.
+network_auth_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Makefile2 network_auth_test
+.PHONY : network_auth_test
+
+# fast build rule for target.
+network_auth_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/build
+.PHONY : network_auth_test/fast
+
+#=============================================================================
 # Target rules for targets named ApexVelocity_autogen_timestamp_deps
 
 # Build rule for target.
@@ -193,6 +206,32 @@ capture_screenshots_autogen/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots_autogen.dir\build.make CMakeFiles/capture_screenshots_autogen.dir/build
 .PHONY : capture_screenshots_autogen/fast
 
+#=============================================================================
+# Target rules for targets named network_auth_test_autogen_timestamp_deps
+
+# Build rule for target.
+network_auth_test_autogen_timestamp_deps: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Makefile2 network_auth_test_autogen_timestamp_deps
+.PHONY : network_auth_test_autogen_timestamp_deps
+
+# fast build rule for target.
+network_auth_test_autogen_timestamp_deps/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test_autogen_timestamp_deps.dir\build.make CMakeFiles/network_auth_test_autogen_timestamp_deps.dir/build
+.PHONY : network_auth_test_autogen_timestamp_deps/fast
+
+#=============================================================================
+# Target rules for targets named network_auth_test_autogen
+
+# Build rule for target.
+network_auth_test_autogen: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Makefile2 network_auth_test_autogen
+.PHONY : network_auth_test_autogen
+
+# fast build rule for target.
+network_auth_test_autogen/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test_autogen.dir\build.make CMakeFiles/network_auth_test_autogen.dir/build
+.PHONY : network_auth_test_autogen/fast
+
 ApexVelocity_autogen/mocs_compilation.obj: ApexVelocity_autogen/mocs_compilation.cpp.obj
 .PHONY : ApexVelocity_autogen/mocs_compilation.obj
 
@@ -224,6 +263,7 @@ AudioSynthesizer.obj: AudioSynthesizer.cpp.obj
 AudioSynthesizer.cpp.obj:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/AudioSynthesizer.cpp.obj
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.obj
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/AudioSynthesizer.cpp.obj
 .PHONY : AudioSynthesizer.cpp.obj
 
 AudioSynthesizer.i: AudioSynthesizer.cpp.i
@@ -233,6 +273,7 @@ AudioSynthesizer.i: AudioSynthesizer.cpp.i
 AudioSynthesizer.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/AudioSynthesizer.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/AudioSynthesizer.cpp.i
 .PHONY : AudioSynthesizer.cpp.i
 
 AudioSynthesizer.s: AudioSynthesizer.cpp.s
@@ -242,6 +283,7 @@ AudioSynthesizer.s: AudioSynthesizer.cpp.s
 AudioSynthesizer.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/AudioSynthesizer.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/AudioSynthesizer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/AudioSynthesizer.cpp.s
 .PHONY : AudioSynthesizer.cpp.s
 
 GameEngine.obj: GameEngine.cpp.obj
@@ -251,6 +293,7 @@ GameEngine.obj: GameEngine.cpp.obj
 GameEngine.cpp.obj:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/GameEngine.cpp.obj
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/GameEngine.cpp.obj
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/GameEngine.cpp.obj
 .PHONY : GameEngine.cpp.obj
 
 GameEngine.i: GameEngine.cpp.i
@@ -260,6 +303,7 @@ GameEngine.i: GameEngine.cpp.i
 GameEngine.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/GameEngine.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/GameEngine.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/GameEngine.cpp.i
 .PHONY : GameEngine.cpp.i
 
 GameEngine.s: GameEngine.cpp.s
@@ -269,6 +313,7 @@ GameEngine.s: GameEngine.cpp.s
 GameEngine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/GameEngine.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/GameEngine.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/GameEngine.cpp.s
 .PHONY : GameEngine.cpp.s
 
 GameWindow.obj: GameWindow.cpp.obj
@@ -298,6 +343,36 @@ GameWindow.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/GameWindow.cpp.s
 .PHONY : GameWindow.cpp.s
 
+NetworkManager.obj: NetworkManager.cpp.obj
+.PHONY : NetworkManager.obj
+
+# target to build an object file
+NetworkManager.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/NetworkManager.cpp.obj
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/NetworkManager.cpp.obj
+.PHONY : NetworkManager.cpp.obj
+
+NetworkManager.i: NetworkManager.cpp.i
+.PHONY : NetworkManager.i
+
+# target to preprocess a source file
+NetworkManager.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/NetworkManager.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/NetworkManager.cpp.i
+.PHONY : NetworkManager.cpp.i
+
+NetworkManager.s: NetworkManager.cpp.s
+.PHONY : NetworkManager.s
+
+# target to generate assembly for a file
+NetworkManager.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/NetworkManager.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/NetworkManager.cpp.s
+.PHONY : NetworkManager.cpp.s
+
 RasterAssets.obj: RasterAssets.cpp.obj
 .PHONY : RasterAssets.obj
 
@@ -305,6 +380,7 @@ RasterAssets.obj: RasterAssets.cpp.obj
 RasterAssets.cpp.obj:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/RasterAssets.cpp.obj
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.obj
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/RasterAssets.cpp.obj
 .PHONY : RasterAssets.cpp.obj
 
 RasterAssets.i: RasterAssets.cpp.i
@@ -314,6 +390,7 @@ RasterAssets.i: RasterAssets.cpp.i
 RasterAssets.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/RasterAssets.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/RasterAssets.cpp.i
 .PHONY : RasterAssets.cpp.i
 
 RasterAssets.s: RasterAssets.cpp.s
@@ -323,6 +400,7 @@ RasterAssets.s: RasterAssets.cpp.s
 RasterAssets.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/RasterAssets.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/RasterAssets.cpp.s
 .PHONY : RasterAssets.cpp.s
 
 RasterRenderer.obj: RasterRenderer.cpp.obj
@@ -359,6 +437,7 @@ Track.obj: Track.cpp.obj
 Track.cpp.obj:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/Track.cpp.obj
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/Track.cpp.obj
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/Track.cpp.obj
 .PHONY : Track.cpp.obj
 
 Track.i: Track.cpp.i
@@ -368,6 +447,7 @@ Track.i: Track.cpp.i
 Track.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/Track.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/Track.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/Track.cpp.i
 .PHONY : Track.cpp.i
 
 Track.s: Track.cpp.s
@@ -377,6 +457,7 @@ Track.s: Track.cpp.s
 Track.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/Track.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\capture_screenshots.dir\build.make CMakeFiles/capture_screenshots.dir/Track.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/Track.cpp.s
 .PHONY : Track.cpp.s
 
 capture_screenshots.obj: capture_screenshots.cpp.obj
@@ -451,6 +532,54 @@ main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ApexVelocity.dir\build.make CMakeFiles/ApexVelocity.dir/main.cpp.s
 .PHONY : main.cpp.s
 
+network_auth_test.obj: network_auth_test.cpp.obj
+.PHONY : network_auth_test.obj
+
+# target to build an object file
+network_auth_test.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/network_auth_test.cpp.obj
+.PHONY : network_auth_test.cpp.obj
+
+network_auth_test.i: network_auth_test.cpp.i
+.PHONY : network_auth_test.i
+
+# target to preprocess a source file
+network_auth_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/network_auth_test.cpp.i
+.PHONY : network_auth_test.cpp.i
+
+network_auth_test.s: network_auth_test.cpp.s
+.PHONY : network_auth_test.s
+
+# target to generate assembly for a file
+network_auth_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/network_auth_test.cpp.s
+.PHONY : network_auth_test.cpp.s
+
+network_auth_test_autogen/mocs_compilation.obj: network_auth_test_autogen/mocs_compilation.cpp.obj
+.PHONY : network_auth_test_autogen/mocs_compilation.obj
+
+# target to build an object file
+network_auth_test_autogen/mocs_compilation.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/network_auth_test_autogen/mocs_compilation.cpp.obj
+.PHONY : network_auth_test_autogen/mocs_compilation.cpp.obj
+
+network_auth_test_autogen/mocs_compilation.i: network_auth_test_autogen/mocs_compilation.cpp.i
+.PHONY : network_auth_test_autogen/mocs_compilation.i
+
+# target to preprocess a source file
+network_auth_test_autogen/mocs_compilation.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/network_auth_test_autogen/mocs_compilation.cpp.i
+.PHONY : network_auth_test_autogen/mocs_compilation.cpp.i
+
+network_auth_test_autogen/mocs_compilation.s: network_auth_test_autogen/mocs_compilation.cpp.s
+.PHONY : network_auth_test_autogen/mocs_compilation.s
+
+# target to generate assembly for a file
+network_auth_test_autogen/mocs_compilation.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\network_auth_test.dir\build.make CMakeFiles/network_auth_test.dir/network_auth_test_autogen/mocs_compilation.cpp.s
+.PHONY : network_auth_test_autogen/mocs_compilation.cpp.s
+
 # Help Target
 help:
 	@echo The following are some of the valid targets for this Makefile:
@@ -463,8 +592,11 @@ help:
 	@echo ... ApexVelocity_autogen_timestamp_deps
 	@echo ... capture_screenshots_autogen
 	@echo ... capture_screenshots_autogen_timestamp_deps
+	@echo ... network_auth_test_autogen
+	@echo ... network_auth_test_autogen_timestamp_deps
 	@echo ... ApexVelocity
 	@echo ... capture_screenshots
+	@echo ... network_auth_test
 	@echo ... ApexVelocity_autogen/mocs_compilation.obj
 	@echo ... ApexVelocity_autogen/mocs_compilation.i
 	@echo ... ApexVelocity_autogen/mocs_compilation.s
@@ -477,6 +609,9 @@ help:
 	@echo ... GameWindow.obj
 	@echo ... GameWindow.i
 	@echo ... GameWindow.s
+	@echo ... NetworkManager.obj
+	@echo ... NetworkManager.i
+	@echo ... NetworkManager.s
 	@echo ... RasterAssets.obj
 	@echo ... RasterAssets.i
 	@echo ... RasterAssets.s
@@ -495,6 +630,12 @@ help:
 	@echo ... main.obj
 	@echo ... main.i
 	@echo ... main.s
+	@echo ... network_auth_test.obj
+	@echo ... network_auth_test.i
+	@echo ... network_auth_test.s
+	@echo ... network_auth_test_autogen/mocs_compilation.obj
+	@echo ... network_auth_test_autogen/mocs_compilation.i
+	@echo ... network_auth_test_autogen/mocs_compilation.s
 .PHONY : help
 
 

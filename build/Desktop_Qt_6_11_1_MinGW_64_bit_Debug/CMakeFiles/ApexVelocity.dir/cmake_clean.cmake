@@ -15,6 +15,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/ApexVelocity.dir/GameEngine.cpp.obj.d"
   "CMakeFiles/ApexVelocity.dir/GameWindow.cpp.obj"
   "CMakeFiles/ApexVelocity.dir/GameWindow.cpp.obj.d"
+  "CMakeFiles/ApexVelocity.dir/NetworkManager.cpp.obj"
+  "CMakeFiles/ApexVelocity.dir/NetworkManager.cpp.obj.d"
   "CMakeFiles/ApexVelocity.dir/RasterAssets.cpp.obj"
   "CMakeFiles/ApexVelocity.dir/RasterAssets.cpp.obj.d"
   "CMakeFiles/ApexVelocity.dir/RasterRenderer.cpp.obj"

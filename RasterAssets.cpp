@@ -1151,12 +1151,28 @@ QImage RasterAssets::createBackdropSunset() {
     p.drawEllipse(QPointF(W * 0.45, H * 0.78), 160, 160);
 
     p.fillRect(0, H * 0.82, W, H * 0.18, QColor(40, 45, 75));
-    QLinearGradient waterReflect(W * 0.45 - 150, 0, W * 0.45 + 150, 0);
+    // Phong Specular Ocean Glint Column (Multi-lobe Blinn-Phong water reflection)
+    QLinearGradient waterReflect(W * 0.45 - 220, 0, W * 0.45 + 220, 0);
     waterReflect.setColorAt(0.0, QColor(245, 120, 50, 0));
-    waterReflect.setColorAt(0.5, QColor(255, 200, 100, 180));
+    waterReflect.setColorAt(0.32, QColor(255, 165, 75, 140));
+    waterReflect.setColorAt(0.50, QColor(255, 248, 200, 235));
+    waterReflect.setColorAt(0.68, QColor(255, 165, 75, 140));
     waterReflect.setColorAt(1.0, QColor(245, 120, 50, 0));
-    p.fillRect(W * 0.45 - 150, H * 0.82, 300, H * 0.18, waterReflect);
+    p.fillRect(W * 0.45 - 220, H * 0.82, 440, H * 0.18, waterReflect);
 
+    // Individual Phong specular wave crests on the ocean surface
+    p.setPen(Qt::NoPen);
+    for (int wy = (int)(H * 0.83); wy < H - 4; wy += 6) {
+        qreal t = (wy - H * 0.82) / (H * 0.18);
+        qreal span = 45.0 + t * 140.0 + 18.0 * qSin(wy * 0.7);
+        QLinearGradient waveSpec(W * 0.45 - span, wy, W * 0.45 + span, wy);
+        waveSpec.setColorAt(0.0, QColor(255, 200, 110, 0));
+        waveSpec.setColorAt(0.5, QColor(255, 255, 235, 210));
+        waveSpec.setColorAt(1.0, QColor(255, 200, 110, 0));
+        p.fillRect(QRectF(W * 0.45 - span, wy, span * 2.0, 2.5), waveSpec);
+    }
+
+    // Gouraud-Shaded Coastal Headland Ridge with Sunset Rim Specular
     QPainterPath ridge;
     ridge.moveTo(0, H * 0.84);
     for (int x = 0; x <= W; x += 80) {
@@ -1166,7 +1182,11 @@ QImage RasterAssets::createBackdropSunset() {
     ridge.lineTo(W, H);
     ridge.lineTo(0, H);
     ridge.closeSubpath();
-    p.fillPath(ridge, QColor(32, 22, 45));
+    QLinearGradient ridgeGouraud(0, H * 0.68, 0, H);
+    ridgeGouraud.setColorAt(0.0, QColor(115, 58, 72));
+    ridgeGouraud.setColorAt(0.35, QColor(58, 32, 62));
+    ridgeGouraud.setColorAt(1.0, QColor(22, 14, 34));
+    p.fillPath(ridge, ridgeGouraud);
 
     p.end();
     return img;
@@ -1196,7 +1216,12 @@ QImage RasterAssets::createBackdropDay() {
     p.drawEllipse(QPointF(W * 0.7, H * 0.25), 130, 130);
 
     auto drawCloud = [&](int cx, int cy, int cw) {
-        p.setBrush(QColor(255, 255, 255, 210));
+        // Volumetric Gouraud-shaded cumulus clouds (sunlit top crown, shadowed base)
+        QLinearGradient cGrad(cx, cy - 22, cx, cy + 40);
+        cGrad.setColorAt(0.0, QColor(255, 255, 255, 240));
+        cGrad.setColorAt(0.65, QColor(235, 242, 252, 215));
+        cGrad.setColorAt(1.0, QColor(185, 202, 225, 185));
+        p.setBrush(cGrad);
         p.drawEllipse(cx, cy, cw, 40);
         p.drawEllipse(cx + 25, cy - 18, cw - 30, 48);
         p.drawEllipse(cx + 55, cy - 8, cw - 40, 42);
@@ -1206,6 +1231,7 @@ QImage RasterAssets::createBackdropDay() {
     drawCloud(1050, 80, 160);
     drawCloud(1520, 120, 150);
 
+    // Gouraud-interpolated rolling hills with directional sun slope shading
     QPainterPath hills;
     hills.moveTo(0, H * 0.85);
     for (int x = 0; x <= W; x += 100) {
@@ -1215,7 +1241,11 @@ QImage RasterAssets::createBackdropDay() {
     hills.lineTo(W, H);
     hills.lineTo(0, H);
     hills.closeSubpath();
-    p.fillPath(hills, QColor(70, 135, 80));
+    QLinearGradient hillGouraud(W * 0.7, H * 0.68, W * 0.3, H);
+    hillGouraud.setColorAt(0.0, QColor(118, 185, 96));
+    hillGouraud.setColorAt(0.45, QColor(74, 142, 78));
+    hillGouraud.setColorAt(1.0, QColor(42, 92, 54));
+    p.fillPath(hills, hillGouraud);
 
     p.end();
     return img;
@@ -1243,10 +1273,18 @@ QImage RasterAssets::createBackdropNight() {
         p.drawPoint(sx, sy);
     }
 
-    p.setBrush(QColor(245, 245, 230));
+    // Phong Lunar Halo & Crescent Moon
+    QRadialGradient moonGlow(W * 0.35 + 25, H * 0.22 + 25, 95);
+    moonGlow.setColorAt(0.0, QColor(220, 235, 255, 95));
+    moonGlow.setColorAt(0.5, QColor(140, 175, 230, 35));
+    moonGlow.setColorAt(1.0, QColor(20, 35, 70, 0));
+    p.setBrush(moonGlow);
     p.setPen(Qt::NoPen);
+    p.drawEllipse(QPointF(W * 0.35 + 25, H * 0.22 + 25), 95, 95);
+
+    p.setBrush(QColor(245, 245, 230));
     p.drawEllipse(W * 0.35, H * 0.22, 50, 50);
-    p.setBrush(QColor(5, 8, 18));
+    p.setBrush(QColor(7, 11, 21));
     p.drawEllipse(W * 0.35 + 14, H * 0.22 - 4, 46, 46);
 
     QPainterPath ridge;
@@ -1258,7 +1296,11 @@ QImage RasterAssets::createBackdropNight() {
     ridge.lineTo(W, H);
     ridge.lineTo(0, H);
     ridge.closeSubpath();
-    p.fillPath(ridge, QColor(8, 12, 18));
+    QLinearGradient nightRidgeGrad(0, H * 0.72, 0, H);
+    nightRidgeGrad.setColorAt(0.0, QColor(26, 38, 62));
+    nightRidgeGrad.setColorAt(0.4, QColor(14, 20, 34));
+    nightRidgeGrad.setColorAt(1.0, QColor(6, 9, 16));
+    p.fillPath(ridge, nightRidgeGrad);
 
     p.end();
     return img;
@@ -1276,20 +1318,20 @@ QImage RasterAssets::createBackdropAlpine(TimeOfDay tod) {
         skyTop = QColor(6, 10, 22);
         skyMid = QColor(14, 22, 38);
         skyBot = QColor(25, 36, 56);
-        peakCol = QColor(22, 30, 44);
-        snowCol = QColor(120, 140, 165);
+        peakCol = QColor(28, 38, 56);
+        snowCol = QColor(135, 160, 195);
     } else if (tod == TIME_SUNSET) {
         skyTop = QColor(45, 35, 75);
         skyMid = QColor(160, 65, 80);
         skyBot = QColor(235, 140, 85);
-        peakCol = QColor(80, 45, 60);
-        snowCol = QColor(255, 180, 170);
+        peakCol = QColor(115, 58, 76);
+        snowCol = QColor(255, 195, 175);
     } else {
         skyTop = QColor(35, 75, 130);
         skyMid = QColor(95, 150, 205);
         skyBot = QColor(185, 215, 235);
-        peakCol = QColor(70, 95, 120);
-        snowCol = QColor(245, 250, 255);
+        peakCol = QColor(85, 115, 148);
+        snowCol = QColor(248, 252, 255);
     }
 
     QLinearGradient sky(0, 0, 0, H);
@@ -1305,21 +1347,41 @@ QImage RasterAssets::createBackdropAlpine(TimeOfDay tod) {
         }
     }
 
+    // Gouraud-Shaded Multi-Facet Alpine Massif
     QPolygonF snowPeaks;
     snowPeaks << QPointF(0, H * 0.75);
     snowPeaks << QPointF(180, H * 0.42) << QPointF(400, H * 0.7)
               << QPointF(750, H * 0.38) << QPointF(1100, H * 0.72)
               << QPointF(1450, H * 0.40) << QPointF(1800, H * 0.68)
               << QPointF(W, H * 0.72) << QPointF(W, H) << QPointF(0, H);
-    p.setBrush(peakCol);
+    QLinearGradient peakGouraud(0, H * 0.38, 0, H);
+    peakGouraud.setColorAt(0.0, peakCol.lighter(135));
+    peakGouraud.setColorAt(0.45, peakCol);
+    peakGouraud.setColorAt(1.0, peakCol.darker(155));
+    p.setBrush(peakGouraud);
     p.setPen(Qt::NoPen);
     p.drawPolygon(snowPeaks);
 
-    p.setBrush(snowCol);
+    // Dual-Facet Gouraud + Phong Specular Glacier Snow Caps
     auto drawSnowCap = [&](qreal px, qreal py) {
-        QPolygonF cap;
-        cap << QPointF(px, py) << QPointF(px + 45, py + 55) << QPointF(px - 45, py + 55);
-        p.drawPolygon(cap);
+        // Sunlit left facet (Gouraud + Phong ice glint)
+        QPolygonF capLit;
+        capLit << QPointF(px, py) << QPointF(px + 6, py + 62) << QPointF(px - 52, py + 58);
+        QLinearGradient litG(px - 25, py, px, py + 62);
+        litG.setColorAt(0.0, QColor(255, 255, 255));
+        litG.setColorAt(0.5, snowCol.lighter(115));
+        litG.setColorAt(1.0, snowCol);
+        p.setBrush(litG);
+        p.drawPolygon(capLit);
+
+        // Shadowed right facet (Gouraud ambient-diffuse transition)
+        QPolygonF capShad;
+        capShad << QPointF(px, py) << QPointF(px + 54, py + 58) << QPointF(px + 6, py + 62);
+        QLinearGradient shadG(px, py, px + 50, py + 60);
+        shadG.setColorAt(0.0, snowCol);
+        shadG.setColorAt(1.0, snowCol.darker(145));
+        p.setBrush(shadG);
+        p.drawPolygon(capShad);
     };
     drawSnowCap(180, H * 0.42);
     drawSnowCap(750, H * 0.38);
@@ -1348,7 +1410,19 @@ QImage RasterAssets::createBackdropNeon() {
         int bHeight = 120 + (x * 37) % 220;
         int by = H - bHeight - 40;
 
-        p.fillRect(x, by, bWidth, bHeight + 40, QColor(12, 14, 22));
+        // 3D Beveled Skyscraper Facade with Gouraud Vertical Illumination & Phong Glass Specular Sheen
+        QLinearGradient bldgGouraud(x, by, x + bWidth, by + bHeight);
+        bldgGouraud.setColorAt(0.0, QColor(28, 34, 54));
+        bldgGouraud.setColorAt(0.35, QColor(18, 22, 36));
+        bldgGouraud.setColorAt(1.0, QColor(8, 10, 18));
+        p.fillRect(x, by, bWidth, bHeight + 40, bldgGouraud);
+
+        // Phong specular glass curtain-wall reflection strip on left bevel
+        QLinearGradient specGlass(x, by, x, by + bHeight);
+        specGlass.setColorAt(0.0, QColor(0, 230, 255, 95));
+        specGlass.setColorAt(0.5, QColor(255, 60, 180, 45));
+        specGlass.setColorAt(1.0, QColor(0, 0, 0, 0));
+        p.fillRect(x + 2, by + 2, 4, bHeight, specGlass);
 
         if ((x / 45) % 3 == 0) {
             p.setPen(QColor(0, 220, 255, 180));
@@ -1529,7 +1603,7 @@ void RasterAssets::generateWiperAndGlare() {
 }
 
 void RasterAssets::generateSceneryAssets() {
-    // Palm Tree
+    // Palm Tree (3D Cylindrical Gouraud Trunk + Phong Waxy Specular Fronds)
     {
         const int W = 160;
         const int H = 280;
@@ -1539,14 +1613,20 @@ void RasterAssets::generateSceneryAssets() {
         p.setRenderHint(QPainter::Antialiasing, true);
 
         QPainterPath trunk;
-        trunk.moveTo(W / 2 - 8, H);
+        trunk.moveTo(W / 2 - 9, H);
         trunk.cubicTo(W / 2 + 15, H * 0.6, W / 2 - 20, H * 0.3, W / 2 - 10, H * 0.2);
         trunk.lineTo(W / 2 + 6, H * 0.2);
         trunk.cubicTo(W / 2 - 4, H * 0.3, W / 2 + 27, H * 0.6, W / 2 + 12, H);
         trunk.closeSubpath();
-        p.fillPath(trunk, QColor(95, 65, 45));
 
-        p.setBrush(QColor(35, 110, 45));
+        // Cylindrical Gouraud bark illumination + Phong rim highlight
+        QLinearGradient trunkGrad(W / 2 - 18, 0, W / 2 + 20, 0);
+        trunkGrad.setColorAt(0.0, QColor(145, 102, 68));
+        trunkGrad.setColorAt(0.32, QColor(118, 80, 54));
+        trunkGrad.setColorAt(0.70, QColor(78, 52, 34));
+        trunkGrad.setColorAt(1.0, QColor(46, 30, 20));
+        p.fillPath(trunk, trunkGrad);
+
         p.setPen(Qt::NoPen);
         auto drawFrond = [&](qreal angleDeg, qreal len) {
             p.save();
@@ -1554,9 +1634,22 @@ void RasterAssets::generateSceneryAssets() {
             p.rotate(angleDeg);
             QPainterPath f;
             f.moveTo(0, 0);
-            f.cubicTo(len * 0.4, -18, len * 0.7, -12, len, 8);
-            f.cubicTo(len * 0.7, 10, len * 0.4, 6, 0, 0);
+            f.cubicTo(len * 0.4, -20, len * 0.7, -14, len, 8);
+            f.cubicTo(len * 0.7, 12, len * 0.4, 7, 0, 0);
+
+            // Gouraud leaf gradient + Phong waxy cuticle specular sheen
+            QLinearGradient frondGrad(0, -18, len, 12);
+            frondGrad.setColorAt(0.0, QColor(115, 205, 85));
+            frondGrad.setColorAt(0.28, QColor(62, 152, 60));
+            frondGrad.setColorAt(0.70, QColor(32, 102, 42));
+            frondGrad.setColorAt(1.0, QColor(18, 64, 26));
+            p.setBrush(frondGrad);
             p.drawPath(f);
+
+            // Phong specular midrib highlight along frond spine
+            p.setPen(QPen(QColor(195, 245, 155, 165), 1.4));
+            p.drawLine(QPointF(4, -2), QPointF(len * 0.72, -6));
+            p.setPen(Qt::NoPen);
             p.restore();
         };
         drawFrond(-130, 95);
@@ -1571,7 +1664,7 @@ void RasterAssets::generateSceneryAssets() {
         m_scenery[SCENERY_PALM_TREE] = palm;
     }
 
-    // Pine Tree
+    // Pine Tree (3D Conical Gouraud-Shaded Tiers + Phong Needle Specular Rim)
     {
         const int W = 160;
         const int H = 280;
@@ -1580,25 +1673,49 @@ void RasterAssets::generateSceneryAssets() {
         QPainter p(&pine);
         p.setRenderHint(QPainter::Antialiasing, true);
 
-        p.fillRect(W / 2 - 8, H * 0.75, 16, H * 0.25, QColor(70, 48, 32));
+        // Cylindrical Gouraud-shaded timber trunk
+        QLinearGradient trkGrad(W / 2 - 9, 0, W / 2 + 9, 0);
+        trkGrad.setColorAt(0.0, QColor(108, 74, 48));
+        trkGrad.setColorAt(0.45, QColor(76, 52, 34));
+        trkGrad.setColorAt(1.0, QColor(38, 25, 16));
+        p.fillRect(W / 2 - 9, H * 0.74, 18, H * 0.26, trkGrad);
 
         auto drawTier = [&](int y, int tw, int th, const QColor& col) {
-            QPolygon tier;
-            tier << QPoint(W / 2, y) << QPoint(W / 2 + tw / 2, y + th) << QPoint(W / 2 - tw / 2, y + th);
-            p.setBrush(col);
+            // Left sunlit conical facet (Gouraud + Phong specular needle sheen)
+            QPolygon leftFacet;
+            leftFacet << QPoint(W / 2, y) << QPoint(W / 2 + 4, y + th) << QPoint(W / 2 - tw / 2, y + th);
+            QLinearGradient lg(W / 2 - tw / 2, y + th * 0.3, W / 2 + 4, y + th);
+            lg.setColorAt(0.0, col.lighter(165));
+            lg.setColorAt(0.45, col.lighter(125));
+            lg.setColorAt(1.0, col);
+            p.setBrush(lg);
             p.setPen(Qt::NoPen);
-            p.drawPolygon(tier);
+            p.drawPolygon(leftFacet);
+
+            // Right shadowed conical facet (Gouraud diffuse-to-ambient interpolation)
+            QPolygon rightFacet;
+            rightFacet << QPoint(W / 2, y) << QPoint(W / 2 + tw / 2, y + th) << QPoint(W / 2 + 4, y + th);
+            QLinearGradient rg(W / 2, y, W / 2 + tw / 2, y + th);
+            rg.setColorAt(0.0, col);
+            rg.setColorAt(1.0, col.darker(165));
+            p.setBrush(rg);
+            p.drawPolygon(rightFacet);
+
+            // Phong specular sun-edge highlight on left conical slope
+            p.setPen(QPen(col.lighter(210), 1.4));
+            p.drawLine(W / 2, y, W / 2 - tw / 2, y + th);
+            p.setPen(Qt::NoPen);
         };
-        drawTier(H * 0.05, 55, 65, QColor(32, 75, 45));
-        drawTier(H * 0.22, 85, 75, QColor(26, 68, 38));
-        drawTier(H * 0.42, 115, 85, QColor(22, 60, 32));
-        drawTier(H * 0.62, 140, 95, QColor(18, 52, 28));
+        drawTier(H * 0.60, 144, 96, QColor(24, 68, 36));
+        drawTier(H * 0.40, 118, 86, QColor(30, 80, 44));
+        drawTier(H * 0.21, 88, 76, QColor(36, 92, 50));
+        drawTier(H * 0.04, 58, 66, QColor(44, 106, 58));
 
         p.end();
         m_scenery[SCENERY_PINE_TREE] = pine;
     }
 
-    // Streetlight
+    // Streetlight (Phong Metallic Cylindrical Pole + Volumetric Luminaire Bloom)
     {
         const int W = 120;
         const int H = 280;
@@ -1607,24 +1724,40 @@ void RasterAssets::generateSceneryAssets() {
         QPainter p(&light);
         p.setRenderHint(QPainter::Antialiasing, true);
 
-        p.setPen(QPen(QColor(130, 140, 155), 5));
+        // Cylindrical Phong-shaded galvanized steel pole (ambient + diffuse + cos^32 specular core)
+        QLinearGradient polePhong(W * 0.2 - 4, 0, W * 0.2 + 4, 0);
+        polePhong.setColorAt(0.0, QColor(75, 82, 95));
+        polePhong.setColorAt(0.35, QColor(225, 235, 248)); // Sharp Phong specular ridge
+        polePhong.setColorAt(0.65, QColor(130, 140, 155));
+        polePhong.setColorAt(1.0, QColor(52, 58, 68));
+        p.setPen(QPen(QBrush(polePhong), 6, Qt::SolidLine, Qt::RoundCap));
         p.drawLine(W * 0.2, H, W * 0.2, H * 0.15);
+
         QPainterPath arm;
         arm.moveTo(W * 0.2, H * 0.15);
         arm.cubicTo(W * 0.2, H * 0.05, W * 0.6, H * 0.05, W * 0.8, H * 0.12);
+        p.setBrush(Qt::NoBrush);
         p.drawPath(arm);
 
-        p.setBrush(QColor(40, 45, 55));
+        // Phong radial luminaire bloom
+        QRadialGradient lampBloom(W * 0.83, H * 0.16, 32);
+        lampBloom.setColorAt(0.0, QColor(255, 250, 210, 200));
+        lampBloom.setColorAt(0.45, QColor(255, 220, 120, 95));
+        lampBloom.setColorAt(1.0, QColor(255, 190, 80, 0));
+        p.setBrush(lampBloom);
         p.setPen(Qt::NoPen);
+        p.drawEllipse(QPointF(W * 0.83, H * 0.16), 32, 24);
+
+        p.setBrush(QColor(40, 45, 55));
         p.drawRoundedRect(W * 0.7, H * 0.11, 30, 10, 3, 3);
-        p.setBrush(QColor(255, 240, 170));
+        p.setBrush(QColor(255, 250, 215));
         p.drawEllipse(W * 0.75, H * 0.14, 16, 8);
 
         p.end();
         m_scenery[SCENERY_STREETLIGHT] = light;
     }
 
-    // Cactus
+    // Cactus (3D Cylindrical Gouraud + Phong Ribbed Desert Saguaro)
     {
         const int W = 140;
         const int H = 240;
@@ -1633,19 +1766,27 @@ void RasterAssets::generateSceneryAssets() {
         QPainter p(&cactus);
         p.setRenderHint(QPainter::Antialiasing, true);
 
-        p.setBrush(QColor(45, 105, 55));
-        p.setPen(QPen(QColor(25, 75, 35), 2));
-        p.drawRoundedRect(W / 2 - 14, 20, 28, H - 20, 12, 12);
-        p.drawRoundedRect(20, 60, 22, 60, 10, 10);
-        p.drawRoundedRect(20, 100, W / 2 - 20, 22, 8, 8);
-        p.drawRoundedRect(W - 42, 40, 22, 70, 10, 10);
-        p.drawRoundedRect(W / 2, 90, W / 2 - 20, 22, 8, 8);
+        auto drawCactusCyl = [&](int x, int y, int w, int h, int rad) {
+            QLinearGradient cg(x, y, x + w, y);
+            cg.setColorAt(0.0, QColor(98, 175, 82));   // Sunlit rim
+            cg.setColorAt(0.28, QColor(135, 210, 105)); // Phong waxy specular ridge
+            cg.setColorAt(0.55, QColor(52, 122, 58));   // Gouraud diffuse core
+            cg.setColorAt(1.0, QColor(22, 64, 28));     // Shadowed side
+            p.setBrush(cg);
+            p.setPen(QPen(QColor(20, 58, 25), 1.5));
+            p.drawRoundedRect(x, y, w, h, rad, rad);
+        };
+        drawCactusCyl(20, 100, W / 2 - 20, 22, 8);
+        drawCactusCyl(20, 60, 22, 60, 10);
+        drawCactusCyl(W / 2, 90, W / 2 - 20, 22, 8);
+        drawCactusCyl(W - 42, 40, 22, 70, 10);
+        drawCactusCyl(W / 2 - 14, 20, 28, H - 20, 12);
 
         p.end();
         m_scenery[SCENERY_CACTUS] = cactus;
     }
 
-    // Canyon Boulder
+    // Canyon Boulder (Multi-Facet 3D Gouraud Rock Mesh + Phong Mineral Specular Glints)
     {
         const int W = 180;
         const int H = 140;
@@ -1654,17 +1795,41 @@ void RasterAssets::generateSceneryAssets() {
         QPainter p(&rock);
         p.setRenderHint(QPainter::Antialiasing, true);
 
-        QPolygon b;
-        b << QPoint(20, H) << QPoint(10, H - 40) << QPoint(45, 25)
-          << QPoint(110, 15) << QPoint(165, 45) << QPoint(175, H - 20)
-          << QPoint(160, H);
-        QLinearGradient rGrad(30, 20, 150, H);
-        rGrad.setColorAt(0.0, QColor(165, 75, 50));
-        rGrad.setColorAt(0.5, QColor(120, 50, 32));
-        rGrad.setColorAt(1.0, QColor(70, 28, 18));
-        p.setBrush(rGrad);
-        p.setPen(QPen(QColor(40, 15, 10), 2));
-        p.drawPolygon(b);
+        // Top-Left Sunlit Facet (High N.L + Phong Specular Glint)
+        QPolygon topLit;
+        topLit << QPoint(10, H - 40) << QPoint(45, 25) << QPoint(110, 15) << QPoint(92, 68);
+        QLinearGradient gTop(35, 18, 95, 70);
+        gTop.setColorAt(0.0, QColor(238, 142, 92)); // Phong specular mineral glint
+        gTop.setColorAt(0.45, QColor(195, 96, 62));
+        gTop.setColorAt(1.0, QColor(148, 64, 40));
+        p.setBrush(gTop);
+        p.setPen(Qt::NoPen);
+        p.drawPolygon(topLit);
+
+        // Lower-Left Mid-Tone Facet (Gouraud Diffuse Interpolation)
+        QPolygon leftMid;
+        leftMid << QPoint(20, H) << QPoint(10, H - 40) << QPoint(92, 68) << QPoint(98, H);
+        QLinearGradient gLeft(15, 70, 95, H);
+        gLeft.setColorAt(0.0, QColor(162, 74, 48));
+        gLeft.setColorAt(1.0, QColor(96, 38, 24));
+        p.setBrush(gLeft);
+        p.drawPolygon(leftMid);
+
+        // Right Shadowed Facet (Gouraud Ambient + Indirect Desert Bounce)
+        QPolygon rightShad;
+        rightShad << QPoint(110, 15) << QPoint(165, 45) << QPoint(175, H - 20)
+                  << QPoint(160, H) << QPoint(98, H) << QPoint(92, 68);
+        QLinearGradient gRight(95, 30, 170, H);
+        gRight.setColorAt(0.0, QColor(125, 52, 34));
+        gRight.setColorAt(0.65, QColor(78, 30, 20));
+        gRight.setColorAt(1.0, QColor(48, 18, 12));
+        p.setBrush(gRight);
+        p.drawPolygon(rightShad);
+
+        // Sharp Phong Specular Ridge Crease along facet intersections
+        p.setPen(QPen(QColor(255, 185, 130, 165), 2.0));
+        p.drawLine(45, 25, 92, 68);
+        p.drawLine(110, 15, 92, 68);
 
         p.end();
         m_scenery[SCENERY_BOULDER] = rock;
@@ -2334,7 +2499,7 @@ void RasterAssets::generateSceneryAssets() {
         m_scenery[SCENERY_WIND_TURBINE] = turbine;
     }
 
-    // Canyon Rock Arch (Majestic Sandstone Archway)
+    // Canyon Rock Arch (3D Multi-Faceted Gouraud Sandstone Archway + Phong Mineral Specular Ridge)
     {
         const int W = 320;
         const int H = 240;
@@ -2355,23 +2520,48 @@ void RasterAssets::generateSceneryAssets() {
         rockBody.cubicTo(110, H * 0.38, 85, H * 0.65, 75, H);
         rockBody.closeSubpath();
 
-        QLinearGradient rGrad(50, 10, 260, H);
-        rGrad.setColorAt(0.0, QColor(210, 115, 65));
-        rGrad.setColorAt(0.35, QColor(180, 85, 45));
-        rGrad.setColorAt(0.7, QColor(145, 58, 30));
-        rGrad.setColorAt(1.0, QColor(90, 32, 16));
+        // 3D Gouraud diffuse gradient across sandstone arch volume
+        QLinearGradient rGrad(35, 8, 275, H);
+        rGrad.setColorAt(0.0, QColor(242, 148, 92));
+        rGrad.setColorAt(0.28, QColor(202, 102, 56));
+        rGrad.setColorAt(0.62, QColor(142, 56, 30));
+        rGrad.setColorAt(1.0, QColor(68, 22, 12));
         p.setBrush(rGrad);
-        p.setPen(QPen(QColor(65, 22, 12), 2));
+        p.setPen(QPen(QColor(52, 16, 10), 2));
         p.drawPath(rockBody);
 
-        // Sedimentary Rock Striations & Crags
-        p.setPen(QPen(QColor(235, 145, 85, 140), 3));
-        p.drawLine(40, H * 0.32, W - 40, H * 0.34);
-        p.setPen(QPen(QColor(115, 40, 20, 180), 3));
-        p.drawLine(30, H * 0.48, 85, H * 0.52);
-        p.drawLine(W - 85, H * 0.52, W - 25, H * 0.49);
-        p.setPen(QPen(QColor(245, 165, 105, 120), 2));
-        p.drawLine(70, H * 0.22, W - 70, H * 0.24);
+        // 3D Recessed Underside Vault Shadow (Ambient Occlusion inside the arch soffit)
+        p.save();
+        p.setClipPath(rockBody);
+        QPainterPath innerVault;
+        innerVault.moveTo(64, H);
+        innerVault.cubicTo(76, H * 0.58, 104, H * 0.32, W * 0.5, H * 0.30);
+        innerVault.cubicTo(W - 104, H * 0.32, W - 76, H * 0.58, W - 64, H);
+        innerVault.lineTo(W - 75, H);
+        innerVault.cubicTo(W - 85, H * 0.65, W - 110, H * 0.38, W * 0.5, H * 0.36);
+        innerVault.cubicTo(110, H * 0.38, 85, H * 0.65, 75, H);
+        innerVault.closeSubpath();
+        p.setBrush(QColor(34, 10, 6, 200));
+        p.setPen(Qt::NoPen);
+        p.drawPath(innerVault);
+
+        // 3D Phong Specular Mineral Hotspot on Upper Sunlit Arch Crown
+        QRadialGradient archPhong(W * 0.36, 26, 95);
+        archPhong.setColorAt(0.0, QColor(255, 220, 170, 165));
+        archPhong.setColorAt(0.45, QColor(255, 175, 110, 75));
+        archPhong.setColorAt(1.0, QColor(255, 150, 90, 0));
+        p.setBrush(archPhong);
+        p.drawEllipse(QPointF(W * 0.36, 26), 95, 32);
+        p.restore();
+
+        // Sedimentary 3D Rock Facet Striations & Phong Ridge Creases
+        p.setPen(QPen(QColor(255, 185, 125, 175), 2.5));
+        p.drawLine(40, H * 0.32, W - 55, H * 0.34);
+        p.setPen(QPen(QColor(95, 32, 16, 195), 3));
+        p.drawLine(26, H * 0.48, 85, H * 0.52);
+        p.drawLine(W - 85, H * 0.52, W - 22, H * 0.49);
+        p.setPen(QPen(QColor(255, 205, 145, 155), 2.2));
+        p.drawLine(68, H * 0.20, W - 78, H * 0.22);
 
         p.end();
         m_scenery[SCENERY_ROCK_ARCH] = arch;
@@ -2512,16 +2702,102 @@ QImage RasterAssets::createVehicleSprite(VehicleType type, bool rearView, bool b
         body.closeSubpath();
     }
 
-    // Metallic Multi-Stop Shading
-    QLinearGradient bGrad(cx - carWidth / 2, carY, cx + carWidth / 2, carY + carHeight);
-    bGrad.setColorAt(0.0, bodyColor.lighter(138));
-    bGrad.setColorAt(0.2, bodyColor.lighter(115));
-    bGrad.setColorAt(0.55, bodyColor);
-    bGrad.setColorAt(0.85, bodyColor.darker(130));
-    bGrad.setColorAt(1.0, bodyColor.darker(165));
-    p.setBrush(bGrad);
-    p.setPen(QPen(bodyColor.darker(190), 2));
-    p.drawPath(body);
+    // 3D Gouraud Vertex Base + True Per-Pixel Blinn-Phong Surface Normal Shader on Car Bodywork
+    {
+        QImage bodyLayer(W, H, QImage::Format_ARGB32_Premultiplied);
+        bodyLayer.fill(Qt::transparent);
+        {
+            QPainter bp(&bodyLayer);
+            bp.setRenderHint(QPainter::Antialiasing, true);
+            QLinearGradient bGrad(cx - carWidth / 2, carY, cx + carWidth / 2, carY + carHeight);
+            bGrad.setColorAt(0.0, bodyColor.lighter(138));
+            bGrad.setColorAt(0.25, bodyColor.lighter(115));
+            bGrad.setColorAt(0.55, bodyColor);
+            bGrad.setColorAt(0.85, bodyColor.darker(128));
+            bGrad.setColorAt(1.0, bodyColor.darker(160));
+            bp.setBrush(bGrad);
+            bp.setPen(Qt::NoPen);
+            bp.drawPath(body);
+        }
+
+        // Per-Pixel 3D Phong + Gouraud Illumination Pass across Curved Automotive Bodywork
+        // Evaluates N(x,y), L, V, H = normalize(L + V), Diffuse (N.L), Specular (N.H)^48, and Fresnel Rim
+        const qreal lx = -0.32, ly = -0.74, lz = 0.59; // Directional Sun/Sky Light Vector L
+        const qreal hx1 = -0.18, hy1 = -0.48, hz1 = 0.86; // Primary Blinn-Phong Halfway Vector H1
+        const qreal hx2 =  0.22, hy2 = -0.62, hz2 = 0.75; // Secondary Sky-Fill Halfway Vector H2
+        const int yMin = qMax(0, carY);
+        const int yMax = qMin(H - 1, carY + carHeight);
+        const int xMin = qMax(0, left - 12);
+        const int xMax = qMin(W - 1, right + 12);
+
+        for (int py = yMin; py <= yMax; ++py) {
+            QRgb* scan = reinterpret_cast<QRgb*>(bodyLayer.scanLine(py));
+            qreal v = (py - carY) / (qreal)qMax(1, carHeight); // [0..1] top to bottom
+            for (int px = xMin; px <= xMax; ++px) {
+                int alpha = qAlpha(scan[px]);
+                if (alpha < 8) continue;
+
+                qreal u = (px - cx) / (qreal)qMax(1.0, carWidth * 0.5); // [-1..1] left to right
+                // Reconstruct 3D multi-volume automotive surface normal N = (nx, ny, nz)
+                qreal nx = u * 0.78;
+                // Widebody 3D fender flare, C-pillar buttress & wheel-arch bulge normal perturbation
+                qreal fenderWave = (v > 0.34 && v < 0.78) ? qSin((v - 0.34) * 3.14159 / 0.44) : 0.0;
+                if (qAbs(u) > 0.40) {
+                    nx += (u > 0 ? 1.0 : -1.0) * (qAbs(u) - 0.40) * 1.05 * fenderWave;
+                }
+                // Sharp 3D beltline horizon-reflection crease at v = 0.44 and rear bumper bevel at v = 0.66
+                qreal creasePerturb = -0.32 * qExp(-qPow((v - 0.44) / 0.045, 2.0))
+                                    +  0.24 * qExp(-qPow((v - 0.64) / 0.055, 2.0));
+                qreal ny = (v < 0.42)
+                    ? ((v - 0.30) * 1.58 - 0.56) // 3D Fastback roof dome & C-pillar slope
+                    : ((v - 0.56) * 1.68 - 0.44 * fenderWave + creasePerturb); // 3D haunches & bumper
+                nx = qBound(-0.94, nx, 0.94);
+                ny = qBound(-0.94, ny, 0.94);
+                qreal nz = qSqrt(qMax(0.05, 1.0 - nx * nx - ny * ny));
+
+                // 1. Gouraud / Lambertian Diffuse term: max(0, N . L) + automotive horizon reflection contrast
+                qreal nDotL = qMax(0.0, nx * lx + ny * ly + nz * lz);
+                qreal horizonBand = 1.0 - 0.28 * qExp(-qPow((v - 0.56) / 0.05, 2.0));
+                qreal gouraudDiffuse = (0.42 + 0.78 * nDotL) * horizonBand;
+
+                // 2. Primary Blinn-Phong Clear-Coat Specular lobe: (N . H1)^48
+                qreal nDotH1 = qMax(0.0, nx * hx1 + ny * hy1 + nz * hz1);
+                qreal p2 = nDotH1 * nDotH1;
+                qreal p4 = p2 * p2;
+                qreal p16 = p4 * p4;
+                qreal phongSpec1 = p16 * p16 * p16; // nDotH1^48
+
+                // 3. Secondary Anisotropic Metallic Flake Sheen: (N . H2)^16
+                qreal nDotH2 = qMax(0.0, nx * hx2 + ny * hy2 + nz * hz2);
+                qreal s2 = nDotH2 * nDotH2;
+                qreal s4 = s2 * s2;
+                qreal phongSpec2 = s4 * s4; // nDotH2^16
+
+                // 4. Schlick Fresnel Clear-Coat Environment Rim: (1 - N . V)^3
+                qreal oneMinusNdotV = qBound(0.0, 1.0 - nz, 1.0);
+                qreal fresnelRim = oneMinusNdotV * oneMinusNdotV * oneMinusNdotV;
+
+                int r0 = qRed(scan[px]);
+                int g0 = qGreen(scan[px]);
+                int b0 = qBlue(scan[px]);
+
+                int specBoost = qRound(phongSpec1 * 235.0 + phongSpec2 * 72.0 + fresnelRim * 58.0);
+                int r = qBound(0, qRound(r0 * gouraudDiffuse) + specBoost, 255);
+                int g = qBound(0, qRound(g0 * gouraudDiffuse) + specBoost + qRound(fresnelRim * 8.0), 255);
+                int b = qBound(0, qRound(b0 * gouraudDiffuse) + specBoost + qRound(fresnelRim * 18.0), 255);
+
+                // Premultiply by alpha
+                r = (r * alpha) / 255;
+                g = (g * alpha) / 255;
+                b = (b * alpha) / 255;
+                scan[px] = qRgba(r, g, b, alpha);
+            }
+        }
+        p.drawImage(0, 0, bodyLayer);
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(bodyColor.darker(190), 2));
+        p.drawPath(body);
+    }
 
     // Twin Gold Racing Stripes on APEX GT-R
     if (type == VEHICLE_SEDAN_SILVER) {
@@ -3048,17 +3324,64 @@ QImage RasterAssets::createSideVehicleSprite(VehicleType type, bool facingLeft) 
         body.lineTo(tailX, H - 42);
         body.closeSubpath();
 
-        // Shading with sharp metallic horizon reflection crease
-        QLinearGradient bGrad(0, roofY, 0, H);
-        bGrad.setColorAt(0.0, bodyColor.lighter(135));
-        bGrad.setColorAt(0.35, bodyColor.lighter(110));
-        bGrad.setColorAt(0.48, bodyColor.lighter(140)); // Sharp horizon glare streak
-        bGrad.setColorAt(0.52, bodyColor);
-        bGrad.setColorAt(0.85, bodyColor.darker(135));
-        bGrad.setColorAt(1.0, bodyColor.darker(170));
-        p.setBrush(bGrad);
-        p.setPen(QPen(bodyColor.darker(190), 2));
-        p.drawPath(body);
+        // 3D Gouraud + Per-Pixel Phong Clear-Coat Shading on Side Profile Bodywork
+        {
+            QImage sideLayer(W, H, QImage::Format_ARGB32_Premultiplied);
+            sideLayer.fill(Qt::transparent);
+            {
+                QPainter sp(&sideLayer);
+                sp.setRenderHint(QPainter::Antialiasing, true);
+                QLinearGradient bGrad(0, roofY, 0, H);
+                bGrad.setColorAt(0.0, bodyColor.lighter(135));
+                bGrad.setColorAt(0.35, bodyColor.lighter(110));
+                bGrad.setColorAt(0.48, bodyColor.lighter(142));
+                bGrad.setColorAt(0.52, bodyColor);
+                bGrad.setColorAt(0.85, bodyColor.darker(132));
+                bGrad.setColorAt(1.0, bodyColor.darker(165));
+                sp.setBrush(bGrad);
+                sp.setPen(Qt::NoPen);
+                sp.drawPath(body);
+            }
+
+            // Per-Pixel Phong Specular + Gouraud Normal Evaluation across Side Doors & Fender Arches
+            const qreal lx = facingLeft ? -0.28 : 0.28, ly = -0.75, lz = 0.60;
+            const qreal hx = facingLeft ? -0.15 : 0.15, hy = -0.46, hz = 0.87;
+            for (int py = qMax(0, roofY); py < H - 36; ++py) {
+                QRgb* scan = reinterpret_cast<QRgb*>(sideLayer.scanLine(py));
+                qreal v = (py - roofY) / (qreal)qMax(1, (H - 42) - roofY);
+                for (int px = 16; px < W - 16; ++px) {
+                    int alpha = qAlpha(scan[px]);
+                    if (alpha < 8) continue;
+                    qreal u = (px - W * 0.5) / (W * 0.45);
+                    // Include 3D wheel-arch flare curvature at front & rear axles (u ~ +/- 0.55)
+                    qreal archFlare = 0.32 * (qExp(-qPow((u + 0.52) / 0.18, 2.0)) - qExp(-qPow((u - 0.52) / 0.18, 2.0)));
+                    qreal nx = u * 0.48 + archFlare;
+                    qreal ny = (v - 0.44) * 1.58 - 0.34 * qSin(v * 6.28318);
+                    nx = qBound(-0.92, nx, 0.92);
+                    ny = qBound(-0.92, ny, 0.92);
+                    qreal nz = qSqrt(qMax(0.06, 1.0 - nx * nx - ny * ny));
+
+                    qreal nDotL = qMax(0.0, nx * lx + ny * ly + nz * lz);
+                    qreal gouraud = 0.46 + 0.74 * nDotL;
+                    qreal nDotH = qMax(0.0, nx * hx + ny * hy + nz * hz);
+                    qreal s2 = nDotH * nDotH;
+                    qreal s4 = s2 * s2;
+                    qreal s16 = s4 * s4;
+                    qreal phongSpec = s16 * s16; // (N.H)^32
+                    qreal fresnel = qPow(qBound(0.0, 1.0 - nz, 1.0), 3.0);
+
+                    int spec = qRound(phongSpec * 215.0 + s4 * 48.0 + fresnel * 42.0);
+                    int r = qBound(0, qRound(qRed(scan[px]) * gouraud) + spec, 255);
+                    int g = qBound(0, qRound(qGreen(scan[px]) * gouraud) + spec, 255);
+                    int b = qBound(0, qRound(qBlue(scan[px]) * gouraud) + spec + 6, 255);
+                    scan[px] = qRgba((r * alpha) / 255, (g * alpha) / 255, (b * alpha) / 255, alpha);
+                }
+            }
+            p.drawImage(0, 0, sideLayer);
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(bodyColor.darker(190), 2));
+            p.drawPath(body);
+        }
 
         // Sports Car Rear Wing in profile
         if (type == VEHICLE_SPORTS_RED) {

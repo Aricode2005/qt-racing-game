@@ -449,6 +449,38 @@ CMakeFiles/capture_screenshots.dir/capture_screenshots_autogen/mocs_compilation.
  C:/Qt/6.11.1/mingw_64/include/QtGui/qinputmethod.h \
  C:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
  C:/Qt/6.11.1/mingw_64/include/QtGui/qguiapplication_platform.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QPoint \
  C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/GameEngine.h \
  C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/RasterRenderer.h \
- C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/AudioSynthesizer.h
+ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/AudioSynthesizer.h \
+ C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/NetworkManager.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpServer \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpserver.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkglobal.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetwork-config.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtnetworkexports.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qabstractsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qhostaddress.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QTcpSocket \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qtcpsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QUdpSocket \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qudpsocket.h \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QHostAddress \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/QNetworkInterface \
+ C:/Qt/6.11.1/mingw_64/include/QtNetwork/qnetworkinterface.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonObject \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonobject.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonvalue.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcborvalue.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcborcommon.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qregularexpression.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/quuid.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsondocument.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonparseerror.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonArray \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/qjsonarray.h \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QJsonDocument \
+ C:/Qt/6.11.1/mingw_64/include/QtCore/QSet \
+ C:\Users\aritr\Downloads\ApexRacingGame\qt-racing-game\build\Desktop_Qt_6_11_1_MinGW_64_bit_Debug\capture_screenshots_autogen\EWIEGA46WW/moc_NetworkManager.cpp

@@ -8,6 +8,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/capture_screenshots.dir/GameEngine.cpp.obj.d"
   "CMakeFiles/capture_screenshots.dir/GameWindow.cpp.obj"
   "CMakeFiles/capture_screenshots.dir/GameWindow.cpp.obj.d"
+  "CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj"
+  "CMakeFiles/capture_screenshots.dir/NetworkManager.cpp.obj.d"
   "CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.obj"
   "CMakeFiles/capture_screenshots.dir/RasterAssets.cpp.obj.d"
   "CMakeFiles/capture_screenshots.dir/RasterRenderer.cpp.obj"
