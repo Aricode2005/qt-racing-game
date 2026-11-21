@@ -65,6 +65,7 @@ struct DiscoveredHost {
     QString roomId;
     QString hostName;
     QHostAddress address;
+    QString endpointHost; // IP or DNS hostname (for WAN / Cloud Relay rooms)
     quint16 port = 7777;
     quint16 udpPort = 7778;
     int playerCount = 1;
@@ -73,6 +74,7 @@ struct DiscoveredHost {
     int timeOfDay = 0;
     int carModel = 0;
     bool passwordProtected = false;
+    bool isWanRelay = false;
     qint64 lastSeenMs = 0;
 };
 
@@ -136,6 +138,14 @@ public:
     void setRoomPassword(const QString& pwd) { m_roomPassword = pwd; }
     bool isPasswordProtected() const { return !m_roomPassword.isEmpty(); }
 
+    // Cross-LAN / Internet (WAN) Cloud Relay & Direct Remote Host Endpoint Support
+    void setRelayServerEndpoint(const QString& hostPort);
+    const QString& getRelayServerEndpoint() const { return m_relayServerEndpoint; }
+    bool isRelayConnected() const;
+    void setRemoteHostEndpoint(const QString& hostPort) { m_remoteHostEndpoint = hostPort.trimmed(); }
+    const QString& getRemoteHostEndpoint() const { return m_remoteHostEndpoint; }
+    static bool parseHostPort(const QString& input, QString& outHost, quint16& outPort, quint16 defaultPort = 7777);
+
     // Grid & Lobby synchronization helpers
     static void getGridSlotPosition(int peerId, qreal& outX, qreal& outZ);
     void resetPeersToStartingGrid(GameEngine& engine);
@@ -185,9 +195,12 @@ private:
     void processTcpMessage(const QJsonObject& json, QTcpSocket* senderSocket);
     void sendBeaconBroadcast(const QHostAddress& directTarget = QHostAddress(), quint16 directPort = 0);
     void sendRoomQueryBroadcast();
-    void handleBeaconJson(const QJsonObject& obj, const QHostAddress& senderAddr);
+    void handleBeaconJson(const QJsonObject& obj, const QHostAddress& senderAddr, bool fromWanRelay = false, const QString& relayHost = QString(), quint16 relayPort = 0);
     void probeCandidateEndpoint(const QHostAddress& address, quint16 port);
+    void probeCandidateHostString(const QString& hostOrIp, quint16 port);
     void cleanupProbeSockets(QTcpSocket* keepSocket = nullptr);
+    void connectRelayControlSocket();
+    void ensureRelayLobbySubscription();
     void initPeerTargetOnGrid(int peerId, int carModel);
 
     quint64 m_instanceId = 0;
@@ -210,9 +223,14 @@ private:
 
     QTcpServer* m_tcpServer = nullptr;
     QTcpSocket* m_clientTcpSocket = nullptr; // For client connecting to host
+    QTcpSocket* m_relayControlSocket = nullptr; // Host control link to Cloud/WAN Relay Server
+    QTcpSocket* m_relayLobbySocket = nullptr;   // Global room browser link to Cloud/WAN Relay Server
     QList<QTcpSocket*> m_pendingClients;     // Unauthenticated sockets awaiting AUTH
     QUdpSocket* m_udpSocket = nullptr;
     QUdpSocket* m_beaconSocket = nullptr;
+
+    QString m_relayServerEndpoint;           // e.g. "relay.example.com:7779" or "127.0.0.1:7779"
+    QString m_remoteHostEndpoint = "AUTO";   // "AUTO" or "ip:port" / "domain:port" for direct cross-LAN join
 
     quint16 m_localTcpPort = 7777;
     quint16 m_localUdpPort = 7778;

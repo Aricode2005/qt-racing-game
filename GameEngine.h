@@ -2,6 +2,8 @@
 #define GAMEENGINE_H
 
 #include "Track.h"
+#include "GameData.h"
+#include "PlayerProfile.h"
 #include <QObject>
 #include <QVector>
 #include <QString>
@@ -101,6 +103,9 @@ struct PlayerCar {
     qreal roadBanking = 0;     // Dynamic track banking on curves
     qreal vibration = 0;       // Road and engine vibration
     qreal suspensionRebound = 0;
+    qreal verticalOffset = 0;   // Subtle upward/downward car body & suspension bump motion (px)
+    qreal verticalVelocity = 0; // Vertical spring-damper velocity
+    qreal prevRoadSlope = 0;    // Previous segment slope for hill-crest impulse detection
 
     // Sideways POV glance
     bool lookingLeft = false;
@@ -148,11 +153,23 @@ struct PlayerCar {
     int totalRacers = 8;
     qreal finishLineZ = 48000.0;
 
-    // Merged Contributor Features: 4 Selectable Supercars, ADAS Assist, AR Trajectory Guides & 3D Z-Buffer Mode
+    // Merged Contributor Features: 4 Selectable Supercars, 5 Engines, Coin Economy, ADAS, AR Guides & 3D Z-Buffer Mode
     int selectedCar = 0;               // 0: APEX GT-R, 1: VORTEX V12, 2: DRIFT SPEC-R, 3: TITAN ENFORCER
+    int selectedEngine = 0;            // 0: STREET I4, 1: TWIN-TURBO V6, 2: SUPERCHARGED V8, 3: HYBRID V10, 4: QUAD-TURBO W16
     QString carModelName = "APEX GT-R";
-    qreal armorMultiplier = 1.0;       // Damage resistance scaling per car model
-    qreal gripMultiplier = 1.0;        // Cornering & steering response scaling per car model
+    QString engineModelName = "STREET I4 TURBO";
+    int horsepower = 280;
+    qreal lowSpeedTorqueBonus = 0.0;
+    qreal highSpeedBoostBonus = 0.0;
+    qreal armorMultiplier = 1.0;       // Damage resistance scaling per car + engine
+    qreal gripMultiplier = 1.0;        // Cornering & steering response scaling per car + engine
+
+    // Race Coin Reward Telemetry (populated at Finish Line)
+    int lastRaceCoinsEarned = 0;
+    int lastRaceBaseCoins = 0;
+    int lastRaceCleanBonus = 0;
+    qreal lastRaceCoinMult = 1.0;
+    bool raceRewardClaimed = false;
     bool adasEnabled = false;          // OFF by default so car drives straight unless ADAS ([2]/[G]) is enabled
     bool arGuidesEnabled = true;       // Toggleable 3D AR Bumper Trajectory Rails & Passing Brackets ([F])
     bool zBuffer3DMode = true;         // Toggleable Full-Depth 3D Z-Buffer & Polygon Shading Pipeline ([Z]/[L])
@@ -215,9 +232,14 @@ public:
     void setThirdPersonView(bool active) { m_player.thirdPersonView = active; }
     bool isThirdPersonView() const { return m_player.thirdPersonView; }
 
-    // Contributor Features: Car Selection, ADAS, AR Trajectory Guides, 3D Z-Buffer Mode, Pixelation & Field Repair
+    // Contributor Features: Car & Engine Selection, Coin Economy, ADAS, AR Trajectory Guides, 3D Z-Buffer Mode
     void setSelectedCar(int carIdx);
+    void setSelectedEngine(int engineIdx);
+    void applyCarAndEngineSpecs();
     void cycleSelectedCar() { setSelectedCar((m_player.selectedCar + 1) % 4); }
+    void cycleSelectedEngine() { setSelectedEngine((m_player.selectedEngine + 1) % kEngineCount); }
+    const PlayerProfile& getProfile() const { return m_profile; }
+    PlayerProfile& getProfileMutable() { return m_profile; }
     void toggleAdas();
     void toggleArGuides();
     void toggleZBuffer3DMode();
@@ -285,6 +307,7 @@ signals:
     void collisionOccurred();
     void nearMissOccurred(int points, int combo);
     void gearChanged(int newGear);
+    void raceFinishedWithReward(int position, int coinsEarned);
 
 private:
     void updatePlayerPhysics(qreal dt);
@@ -314,6 +337,7 @@ private:
     bool m_paused = false;
     int m_nextNpcId = 1;
     GameDifficulty m_difficulty = DIFFICULTY_NORMAL;
+    PlayerProfile m_profile;
 
     QMap<int, NPCCar> m_remoteCars;
 };

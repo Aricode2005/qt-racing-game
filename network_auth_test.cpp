@@ -6,10 +6,56 @@
 #include <QDebug>
 #include <cassert>
 #include "NetworkManager.h"
+#include "PlayerProfile.h"
+#include "GameData.h"
 
 int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
-    qDebug() << "=== Starting Custom Room Authentication Verification Test ===";
+    qDebug() << "=== [PART 1] Verifying SQLite User Account & Coin Database (apex_accounts.db) ===";
+    qDebug() << "[DB] SQLite database file path:" << PlayerProfile::databaseFilePath();
+
+    {
+        PlayerProfile profile;
+        profile.load();
+
+        QString testUser = QString("TestRacer_%1").arg(QDateTime::currentMSecsSinceEpoch() % 100000);
+        QString err;
+
+        // 1. Register new account
+        bool regOk = profile.registerAccount(testUser, "TurboPass99", err);
+        if (!regOk) {
+            qCritical() << "[DB TEST FAILED] registerAccount failed:" << err;
+            return 1;
+        }
+        assert(profile.isLoggedIn);
+        assert(profile.coins == 500);
+        qDebug() << "[DB TEST 1 PASSED] Registered user" << testUser << "with starting coins:" << profile.coins;
+
+        // 2. Award race coins & unlock Twin-Turbo V6 engine (800 coins)
+        profile.recordRace(1, 750); // P1 win (+750 coins -> 1250 total)
+        assert(profile.coins == 1250);
+        assert(profile.wins == 1);
+        bool boughtEng = profile.buyEngine(1); // TWIN-TURBO V6 costs 800 coins
+        assert(boughtEng);
+        assert(profile.ownsEngine(1));
+        assert(profile.coins == 450);
+        profile.logout();
+
+        // 3. Verify wrong password rejection
+        bool badLogin = profile.loginAccount(testUser, "WrongPassword!", err);
+        assert(!badLogin);
+        qDebug() << "[DB TEST 2 PASSED] Rejected invalid password:" << err;
+
+        // 4. Verify valid login restores exact coins, wins, and unlocked engine from SQLite DB
+        bool goodLogin = profile.loginAccount(testUser, "TurboPass99", err);
+        assert(goodLogin);
+        assert(profile.coins == 450);
+        assert(profile.wins == 1);
+        assert(profile.ownsEngine(1));
+        qDebug() << "[DB TEST 3 PASSED] Logged back in from SQLite DB! Coins:" << profile.coins << "Wins:" << profile.wins;
+    }
+
+    qDebug() << "=== [PART 2] Starting Custom Room Authentication Verification Test ===";
 
     NetworkManager& hostNet = NetworkManager::instance();
     const QString TEST_ROOM = "APEX-TEST-ROOM";
@@ -84,7 +130,7 @@ int main(int argc, char* argv[]) {
                              << "roomId=" << obj["roomId"].toString();
                     assert(obj["roomId"].toString().toUpper() == TEST_ROOM);
                     assert(hostNet.getConnectedPlayerCount() == 2);
-                    qDebug() << "=== ALL CUSTOM ROOM MULTIPLAYER TESTS PASSED SUCCESSFULLY! ===";
+                    qDebug() << "=== ALL SQLITE DB & MULTIPLAYER TESTS PASSED SUCCESSFULLY! ===";
                     exit(0);
                 } else {
                     qCritical() << "[TEST 3 FAILED] Expected WELCOME, received:" << type;

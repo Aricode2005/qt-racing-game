@@ -6,6 +6,9 @@
 GameEngine::GameEngine(QObject *parent)
     : QObject(parent)
 {
+    m_profile.load();
+    m_player.selectedCar = m_profile.selectedCar;
+    m_player.selectedEngine = m_profile.selectedEngine;
     setTrackTheme(THEME_SUNSET_COAST);
     resetPlayer();
 }
@@ -45,6 +48,9 @@ void GameEngine::resetPlayer() {
     m_player.roadBanking = 0;
     m_player.vibration = 0;
     m_player.suspensionRebound = 0;
+    m_player.verticalOffset = 0;
+    m_player.verticalVelocity = 0;
+    m_player.prevRoadSlope = 0;
     m_player.lookingLeft = false;
     m_player.lookingRight = false;
     m_player.povPan = 0;
@@ -84,6 +90,8 @@ void GameEngine::resetPlayer() {
     m_player.raceTime = 0.0;
     m_player.finishTime = 0.0;
     m_player.raceFinished = false;
+    m_player.raceRewardClaimed = false;
+    m_player.lastRaceCoinsEarned = 0;
     qreal fullTrackZ = qMax(240000.0, (qreal)m_track.trackLength() - 16000.0);
     qreal lenScale = (m_difficulty == DIFFICULTY_EASY) ? 0.65 : ((m_difficulty == DIFFICULTY_PRO) ? 1.0 : 0.82);
     m_player.finishLineZ = fullTrackZ * lenScale;
@@ -116,42 +124,50 @@ void GameEngine::resetPlayer() {
     m_player.crashTimer = 0;
 }
 
+void GameEngine::applyCarAndEngineSpecs() {
+    int cIdx = qBound(0, m_player.selectedCar, kCarCount - 1);
+    int eIdx = qBound(0, m_player.selectedEngine, kEngineCount - 1);
+    const CarSpec& car = kCars[cIdx];
+    const EngineSpec& eng = kEngines[eIdx];
+
+    m_player.carModelName = QString::fromLatin1(car.name);
+    m_player.engineModelName = QString::fromLatin1(eng.name);
+    m_player.horsepower = eng.horsepower;
+    m_player.maxSpeed = car.maxSpeed + eng.topSpeedBonus;
+    m_player.accelRate = car.accel + eng.accelBonus;
+    m_player.gripMultiplier = car.grip * eng.gripMod;
+    m_player.armorMultiplier = car.armor * eng.armorMod;
+    m_player.lowSpeedTorqueBonus = eng.lowSpeedTorque;
+    m_player.highSpeedBoostBonus = eng.highSpeedBoost;
+}
+
 void GameEngine::setSelectedCar(int carIdx) {
-    m_player.selectedCar = qBound(0, carIdx, 3);
-    switch (m_player.selectedCar) {
-        case 0: // APEX GT-R (Balanced Twin-Turbo Coupe)
-            m_player.carModelName = "APEX GT-R";
-            m_player.maxSpeed = 200.0;
-            m_player.accelRate = 96.0;
-            m_player.armorMultiplier = 1.00;
-            m_player.gripMultiplier = 1.00;
-            break;
-        case 1: // VORTEX V12 (Hypercar Interceptor)
-            m_player.carModelName = "VORTEX V12";
-            m_player.maxSpeed = 200.0;
-            m_player.accelRate = 104.0;
-            m_player.armorMultiplier = 0.85;
-            m_player.gripMultiplier = 0.96;
-            break;
-        case 2: // DRIFT SPEC-R (Touge Track Special)
-            m_player.carModelName = "DRIFT SPEC-R";
-            m_player.maxSpeed = 196.0;
-            m_player.accelRate = 94.0;
-            m_player.armorMultiplier = 0.95;
-            m_player.gripMultiplier = 1.28;
-            break;
-        case 3: // TITAN ENFORCER (Armored Endurance GT)
-            m_player.carModelName = "TITAN ENFORCER";
-            m_player.maxSpeed = 198.0;
-            m_player.accelRate = 92.0;
-            m_player.armorMultiplier = 1.55;
-            m_player.gripMultiplier = 1.04;
-            break;
+    m_player.selectedCar = qBound(0, carIdx, kCarCount - 1);
+    if (m_profile.ownsCar(m_player.selectedCar)) {
+        m_profile.selectedCar = m_player.selectedCar;
+        m_profile.save();
     }
-    m_player.lastAnnouncement = QString("SUPERCAR SELECTED: %1 (MAX %2 KM/H • %3% ARMOR)")
+    applyCarAndEngineSpecs();
+    m_player.lastAnnouncement = QString("CHASSIS: %1 + %2 (%3 HP • MAX %4 KM/H • %5% ARMOR)")
         .arg(m_player.carModelName)
+        .arg(m_player.engineModelName)
+        .arg(m_player.horsepower)
         .arg((int)m_player.maxSpeed)
         .arg(qRound(m_player.armorMultiplier * 100));
+    m_player.announcementTimer = 2.4;
+}
+
+void GameEngine::setSelectedEngine(int engineIdx) {
+    m_player.selectedEngine = qBound(0, engineIdx, kEngineCount - 1);
+    if (m_profile.ownsEngine(m_player.selectedEngine)) {
+        m_profile.selectedEngine = m_player.selectedEngine;
+        m_profile.save();
+    }
+    applyCarAndEngineSpecs();
+    m_player.lastAnnouncement = QString("ENGINE INSTALLED: %1 (%2 HP • MAX %3 KM/H)")
+        .arg(m_player.engineModelName)
+        .arg(m_player.horsepower)
+        .arg((int)m_player.maxSpeed);
     m_player.announcementTimer = 2.4;
 }
 
@@ -441,7 +457,8 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
         accel = -120.0; // Rapid braking when wrecked
         m_player.boostBar = 0.0;
     } else if (m_player.isAccelerating) {
-        qreal powerFactor = qBound(0.35, 1.0 - (m_player.speed / 215.0), 1.0);
+        qreal topRef = qMax(215.0, m_player.maxSpeed + 18.0);
+        qreal powerFactor = qBound(0.38, 1.0 - (m_player.speed / topRef), 1.0);
         m_player.slipstreamActive = false;
         for (const NPCCar& npc : m_traffic) {
             qreal dz = npc.worldZ - m_player.worldZ;
@@ -450,7 +467,10 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
                 break;
             }
         }
-        accel = m_player.accelRate * powerFactor + (m_player.slipstreamActive ? 22.0 : 0.0);
+        qreal engineBandBonus = (m_player.speed < 95.0)
+            ? m_player.lowSpeedTorqueBonus
+            : ((m_player.speed > 130.0) ? m_player.highSpeedBoostBonus : (m_player.lowSpeedTorqueBonus * 0.35));
+        accel = (m_player.accelRate + engineBandBonus) * powerFactor + (m_player.slipstreamActive ? 22.0 : 0.0);
         m_player.boostBar = qMin(1.0, m_player.boostBar + 1.2 * dt);
     } else {
         m_player.boostBar = qMax(0.0, m_player.boostBar - 2.5 * dt);
@@ -510,7 +530,7 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
     if (m_player.isBraking && m_player.speed < 0) {
         m_player.speed = qMax(-45.0, m_player.speed);
     } else {
-        m_player.speed = qBound(0.0, m_player.speed, qMin(200.0, m_player.maxSpeed));
+        m_player.speed = qBound(0.0, m_player.speed, qBound(180.0, m_player.maxSpeed, 250.0));
     }
 
     qreal speedBoost = 1.0 + qBound(0.0, (m_player.speed - 60.0) / 200.0, 0.25);
@@ -551,14 +571,64 @@ void GameEngine::updatePlayerPhysics(qreal dt) {
         m_player.worldZ += totalTrackLength;
     }
 
-    // 3. Dynamic Suspension, G-Forces & Track Momentum
+    // 3. Dynamic Vertical Bump / Hill-Crest Hop & Coilover Suspension Physics
+    {
+        qreal speedNorm = qBound(0.0, qAbs(m_player.speed) / 185.0, 1.25);
+
+        // A. Detect hill crest / valley dip transition from road slope change
+        qreal slopeDelta = (m_player.prevRoadSlope - slope);
+        m_player.prevRoadSlope = slope;
+        // Positive slopeDelta means cresting a hill (uphill -> flat/downhill): subtle upward lift impulse
+        qreal crestImpulse = qBound(-32.0, slopeDelta * speedNorm * 420.0, 46.0);
+        if (qAbs(crestImpulse) > 1.2 && speedNorm > 0.15) {
+            m_player.verticalVelocity += crestImpulse;
+        }
+
+        // B. Continuous uneven road surface micro-bumps, camber ripples & rumble-strip vibration
+        qreal unevenness = 1.0 + qAbs(slope) * 8.5 + qAbs(currentSeg.roadBank) * 4.0;
+        bool onKerb = (qAbs(m_player.x) > 0.88 && qAbs(m_player.x) <= 1.04);
+        if (onKerb) unevenness += 2.2;
+        if (m_player.isOffroad) unevenness += 3.2;
+
+        // Multi-frequency road wave excitation (triggers subtle upward & downward suspension motion)
+        qreal roadWave = qSin(m_player.worldZ * 0.011) * 0.55
+                       + qSin(m_player.worldZ * 0.029) * 0.35
+                       + (onKerb ? qSin(m_player.worldZ * 0.14) * 0.65 : 0.0);
+        // Bias slightly upward on sharp bumps so the car visibly hops up a few pixels over uneven crests
+        qreal bumpExcitation = (roadWave + 0.22 * qMax(0.0, roadWave)) * unevenness * speedNorm * 58.0;
+
+        // C. Spring-Mass-Damper Vertical Solver (subtle range: -4.5px squat to +14.0px upward bump/hop)
+        qreal prevOffset = m_player.verticalOffset;
+        const qreal kSpring = 150.0;
+        const qreal cDamper = 17.5;
+        qreal verticalAccel = 0.0;
+        if (m_player.verticalOffset > 4.0) {
+            // Brief crest hop: gravity + light suspension preload pulls car back to asphalt
+            verticalAccel = -125.0 - (m_player.verticalOffset - 4.0) * 45.0 - cDamper * 0.45 * m_player.verticalVelocity;
+        } else {
+            verticalAccel = -kSpring * m_player.verticalOffset - cDamper * m_player.verticalVelocity + bumpExcitation;
+        }
+
+        m_player.verticalVelocity += verticalAccel * dt;
+        m_player.verticalVelocity = qBound(-65.0, m_player.verticalVelocity, 65.0);
+        m_player.verticalOffset += m_player.verticalVelocity * dt;
+        m_player.verticalOffset = qBound(-4.5, m_player.verticalOffset, 14.0);
+        m_player.suspensionRebound = m_player.verticalOffset / 14.0;
+
+        // Subtle landing compression nod when tires touch back down after a crest hop
+        if (prevOffset > 2.5 && m_player.verticalOffset <= 2.5 && m_player.verticalVelocity < -12.0) {
+            m_player.pitchG -= 0.016;
+        }
+    }
+
+    // 3b. Dynamic Pitch, Roll & Track Momentum
     qreal targetPitch = 0;
     if (m_player.isBraking) {
         targetPitch = -0.06;
     } else if (m_player.isAccelerating) {
         targetPitch = 0.035;
     }
-    targetPitch += (slope * 0.08);
+    targetPitch += (slope * 0.08) + (m_player.verticalOffset * 0.0022);
     m_player.pitchG += (targetPitch - m_player.pitchG) * 6.0 * dt;
 
     qreal targetRoll = -m_player.steerAngle * (m_player.speed / 200.0) * 0.05;
@@ -1072,9 +1142,11 @@ void GameEngine::updateTraffic(qreal dt) {
     }
 
     // Check if the Player crossed the Finish Line!
+    bool justFinishedNow = false;
     if (!m_player.raceFinished && m_player.worldZ >= m_player.finishLineZ) {
         m_player.raceFinished = true;
         m_player.finishTime = qMax(0.1, m_player.raceTime);
+        justFinishedNow = true;
 
         // Compute projected finish times for any AI racers still behind the finish line
         for (int i = 0; i < m_traffic.size(); ++i) {
@@ -1102,6 +1174,28 @@ void GameEngine::updateTraffic(qreal dt) {
                 }
             }
         }
+    }
+
+    // Award Career Coins based on final finishing position & difficulty multiplier
+    if (justFinishedNow && !m_player.raceRewardClaimed) {
+        m_player.raceRewardClaimed = true;
+        CoinReward reward = computeCoinReward(
+            m_player.currentPosition,
+            static_cast<int>(m_difficulty),
+            !m_remoteCars.isEmpty(),
+            m_player.crashCount);
+        m_player.lastRaceCoinsEarned = reward.total;
+        m_player.lastRaceBaseCoins = reward.base;
+        m_player.lastRaceCleanBonus = reward.cleanBonus;
+        m_player.lastRaceCoinMult = reward.difficultyMult * reward.multiplayerMult;
+        m_profile.recordRace(m_player.currentPosition, reward.total);
+        m_player.lastAnnouncement = QString("CHECKERED FLAG P%1/%2!  +%3 COINS EARNED (WALLET: %4 COINS)")
+            .arg(m_player.currentPosition)
+            .arg(m_player.totalRacers)
+            .arg(reward.total)
+            .arg(m_profile.coins);
+        m_player.announcementTimer = 4.5;
+        emit raceFinishedWithReward(m_player.currentPosition, reward.total);
     }
     if (!m_player.raceFinished && m_player.raceTime > 0.3 && m_player.currentPosition < prevPlayerPos) {
         int gained = prevPlayerPos - m_player.currentPosition;

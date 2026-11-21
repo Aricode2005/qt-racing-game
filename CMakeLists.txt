@@ -8,12 +8,13 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# set(CMAKE_PREFIX_PATH "/Users/mukutchatterjee/Qt/6.11.1/macos")
-
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Network Sql)
 
 set(PROJECT_SOURCES
     main.cpp
+    GameData.h
+    PlayerProfile.h
+    PlayerProfile.cpp
     GameWindow.h
     GameWindow.cpp
     GameEngine.h
@@ -38,6 +39,7 @@ target_link_libraries(ApexVelocity PRIVATE
     Qt6::Widgets
     Qt6::Multimedia
     Qt6::Network
+    Qt6::Sql
 )
 
 if(MSVC)
@@ -48,6 +50,9 @@ endif()
 
 add_executable(capture_screenshots
     capture_screenshots.cpp
+    GameData.h
+    PlayerProfile.h
+    PlayerProfile.cpp
     GameWindow.h
     GameWindow.cpp
     GameEngine.h
@@ -70,10 +75,14 @@ target_link_libraries(capture_screenshots PRIVATE
     Qt6::Widgets
     Qt6::Multimedia
     Qt6::Network
+    Qt6::Sql
 )
 
 add_executable(network_auth_test
     network_auth_test.cpp
+    GameData.h
+    PlayerProfile.h
+    PlayerProfile.cpp
     NetworkManager.h
     NetworkManager.cpp
     GameEngine.h
@@ -91,5 +100,15 @@ target_link_libraries(network_auth_test PRIVATE
     Qt6::Gui
     Qt6::Network
     Qt6::Multimedia
+    Qt6::Sql
 )
 
+add_executable(apex_relay_server
+    apex_relay_server.cpp
+)
+
+target_link_libraries(apex_relay_server PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Sql
+)
