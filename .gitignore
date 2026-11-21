@@ -11,3 +11,6 @@ build/
 
 # macOS system files
 .DS_Store
+
+# Local User Account SQLite Database
+apex_accounts.db

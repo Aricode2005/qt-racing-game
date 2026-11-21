@@ -7,6 +7,7 @@
 #include <QKeyEvent>
 #include <QVector>
 #include <QPoint>
+#include <QPair>
 #include "GameEngine.h"
 #include "RasterRenderer.h"
 #include "AudioSynthesizer.h"
@@ -41,9 +42,14 @@ private slots:
 
 private:
     void renderMainMenuOverlay(QPainter& p);
+    void renderAccountLoginOverlay(QPainter& p, int w, int h);
+    void renderGarageTab(QPainter& p, int contentX, int contentW, int topY, int h);
     void renderRaceTransitionOverlay(QPainter& p);
     void startTransitionToRace(bool resetPlayerFirst = false);
     void selectTrack(TrackTheme theme);
+    void handleCarSelectionOrPurchase(int carIdx);
+    void handleEngineSelectionOrPurchase(int engineIdx);
+    void submitAccountLoginOrRegister();
 
     GameEngine m_engine;
     RasterRenderer m_renderer;
@@ -68,24 +74,38 @@ private:
     qreal m_menuOpacity = 1.0;
     qreal m_raceTransitionFlash = 0.0;
 
+    // Menu Tabs: 0 = Race & Circuits, 1 = Garage (Cars & Engines), 2 = Multiplayer Lobby
+    int m_menuTab = 0;
+    bool m_showMultiplayerTab = false;
+    QRect m_soloTabBtn;
+    QRect m_garageTabBtn;
+    QRect m_mpTabBtn;
+    QRect m_openGarageQuickBtn;
+
+    // Garage Preview & Shop Status Banner
+    int m_previewCarIdx = 0;
+    int m_previewEngineIdx = 0;
+    QString m_garageBannerText;
+    bool m_garageBannerIsError = false;
+    qreal m_garageBannerTimer = 0.0;
+
     QRect m_diffButtons[3];
     QRect m_todButtons[3];
     QRect m_carButtons[4];
+    QRect m_garageCarCards[4];
+    QRect m_garageEngineCards[5];
     QRect m_trackCards[4];
     QRect m_resumeBtn;
     QRect m_repairBtn;
     QRect m_lightsBtn;
 
-    bool m_showMultiplayerTab = false;
-    QRect m_soloTabBtn;
-    QRect m_mpTabBtn;
     QRect m_mpCarButtons[4];
     QRect m_mpTrackButtons[4];
     QRect m_readyBtn;
     QRect m_startMpBtn;
     QRect m_disconnectBtn;
 
-    // Room ID & Password variables (Zero IP required)
+    // Room ID, Password & Cross-LAN / WAN Relay variables
     QString m_hostRoomId = "APEX-101";
     QString m_hostRoomPassword = "1234";
     QString m_joinRoomId = "APEX-101";
@@ -93,8 +113,10 @@ private:
     QString m_lastAuthError;
     qreal m_authErrorTimer = 0.0;
 
-    // Room UI Rectangles
+    // Room & WAN UI Rectangles
     QRect m_editNameBtn;
+    QRect m_relayServerBtn;
+    QRect m_remoteHostBtn;
     QRect m_hostRoomIdBox;
     QRect m_hostRandomIdBtn;
     QRect m_hostPassBox;
@@ -104,6 +126,27 @@ private:
     QRect m_joinPassBox;
     QRect m_enterRoomBtn;
     QVector<QPair<QRect, QString>> m_discoveredRoomChips;
+
+    // User Account Login & Registration Portal (SQLite Database backed)
+    bool m_showAccountModal = true;
+    bool m_loginRegisterMode = false; // false = Sign In, true = Create New Account
+    int m_loginFocusField = 0;        // 0 = Username, 1 = Password
+    bool m_showPasswordPlain = false;
+    QString m_loginUsername;
+    QString m_loginPassword;
+    QString m_loginStatusMsg;
+    bool m_loginStatusIsError = false;
+
+    QRect m_accountBadgeRect;
+    QRect m_loginSignInTabRect;
+    QRect m_loginRegisterTabRect;
+    QRect m_loginUserBoxRect;
+    QRect m_loginPassBoxRect;
+    QRect m_loginShowPassRect;
+    QRect m_loginSubmitBtnRect;
+    QRect m_registerDirectBtnRect;
+    QRect m_loginCloseBtnRect;
+    QVector<QPair<QRect, QString>> m_savedUserChips;
 };
 
 #endif // GAMEWINDOW_H

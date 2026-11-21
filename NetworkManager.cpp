@@ -1,6 +1,49 @@
 #include "NetworkManager.h"
 #include <QNetworkDatagram>
 #include <QRandomGenerator>
+#include <QSslSocket>
+#include <functional>
+
+static QTcpSocket* connectSmartTcpOrRenderSocket(QObject* parent, const QString& host, quint16 port, std::function<void(QTcpSocket*)> onReady) {
+    bool useTls = (port == 443);
+    bool sendWsUpgrade = useTls || (port == 80) || host.endsWith(".onrender.com", Qt::CaseInsensitive) || host.endsWith(".railway.app", Qt::CaseInsensitive);
+
+    QTcpSocket* sock = nullptr;
+    if (useTls) {
+        QSslSocket* ssl = new QSslSocket(parent);
+        ssl->setPeerVerifyMode(QSslSocket::QueryPeer);
+        sock = ssl;
+    } else {
+        sock = new QTcpSocket(parent);
+    }
+    sock->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+
+    auto triggerReady = [sock, host, sendWsUpgrade, onReady]() {
+        if (sendWsUpgrade) {
+            QByteArray upgradeReq = QStringLiteral(
+                "GET /relay HTTP/1.1\r\n"
+                "Host: %1\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                "\r\n").arg(host).toUtf8();
+            sock->write(upgradeReq);
+            sock->flush();
+        }
+        onReady(sock);
+    };
+
+    if (useTls) {
+        QSslSocket* ssl = static_cast<QSslSocket*>(sock);
+        QObject::connect(ssl, &QSslSocket::encrypted, parent, triggerReady);
+        ssl->connectToHostEncrypted(host, port);
+    } else {
+        QObject::connect(sock, &QTcpSocket::connected, parent, triggerReady);
+        sock->connectToHost(host, port);
+    }
+    return sock;
+}
 
 static const uint32_t APEX_MAGIC = 0x41504558; // "APEX"
 static const quint16 BEACON_PORT = 7779;
@@ -211,12 +254,157 @@ bool NetworkManager::startHostRoom(const QString& roomId, const QString& passwor
     m_peerTargets.clear();
     m_pendingClients.clear();
 
+    connectRelayControlSocket();
     sendBeaconBroadcast();
 
     QString passInfo = m_roomPassword.isEmpty() ? "Open Access" : "Password Protected";
     emit statusMessage(QString("HOSTED ROOM [%1] - %2").arg(m_roomId).arg(passInfo));
     return true;
 }
+bool NetworkManager::parseHostPort(const QString& input, QString& outHost, quint16& outPort, quint16 defaultPort) {
+    QString s = input.trimmed();
+    if (s.isEmpty() || s.compare("AUTO", Qt::CaseInsensitive) == 0 || s.compare("LAN", Qt::CaseInsensitive) == 0) {
+        return false;
+    }
+    bool forceTls = false;
+    bool forceHttp = false;
+    if (s.startsWith("tcp://", Qt::CaseInsensitive)) s = s.mid(6);
+    else if (s.startsWith("ws://", Qt::CaseInsensitive)) { s = s.mid(5); forceHttp = true; }
+    else if (s.startsWith("http://", Qt::CaseInsensitive)) { s = s.mid(7); forceHttp = true; }
+    else if (s.startsWith("wss://", Qt::CaseInsensitive)) { s = s.mid(6); forceTls = true; }
+    else if (s.startsWith("https://", Qt::CaseInsensitive)) { s = s.mid(8); forceTls = true; }
+
+    int slashIdx = s.indexOf('/');
+    if (slashIdx >= 0) s = s.left(slashIdx);
+
+    int colonIdx = s.lastIndexOf(':');
+    if (colonIdx > 0) {
+        outHost = s.left(colonIdx).trimmed();
+        bool ok = false;
+        quint16 p = s.mid(colonIdx + 1).trimmed().toUShort(&ok);
+        outPort = (ok && p > 0) ? p : defaultPort;
+    } else {
+        outHost = s;
+        if (forceTls || outHost.endsWith(".onrender.com", Qt::CaseInsensitive)) {
+            outPort = 443;
+        } else if (forceHttp) {
+            outPort = 80;
+        } else {
+            outPort = defaultPort;
+        }
+    }
+    return !outHost.isEmpty();
+}
+
+void NetworkManager::setRelayServerEndpoint(const QString& hostPort) {
+    QString cleaned = hostPort.trimmed();
+    if (cleaned.compare("OFF", Qt::CaseInsensitive) == 0 || cleaned.compare("NONE", Qt::CaseInsensitive) == 0) {
+        cleaned.clear();
+    }
+    if (m_relayServerEndpoint == cleaned) return;
+    m_relayServerEndpoint = cleaned;
+
+    if (m_relayLobbySocket) {
+        m_relayLobbySocket->disconnect(this);
+        m_relayLobbySocket->abort();
+        m_relayLobbySocket->deleteLater();
+        m_relayLobbySocket = nullptr;
+    }
+    ensureRelayLobbySubscription();
+    if (m_role == NET_ROLE_HOST && m_state != MP_STATE_DISCONNECTED) {
+        connectRelayControlSocket();
+    }
+}
+
+bool NetworkManager::isRelayConnected() const {
+    return (m_relayControlSocket && m_relayControlSocket->state() == QAbstractSocket::ConnectedState) ||
+           (m_relayLobbySocket && m_relayLobbySocket->state() == QAbstractSocket::ConnectedState);
+}
+
+void NetworkManager::ensureRelayLobbySubscription() {
+    QString rHost;
+    quint16 rPort = 7779;
+    if (!parseHostPort(m_relayServerEndpoint, rHost, rPort, 7779)) return;
+    if (m_relayLobbySocket && (m_relayLobbySocket->state() == QAbstractSocket::ConnectedState ||
+                               m_relayLobbySocket->state() == QAbstractSocket::ConnectingState)) {
+        return;
+    }
+    if (m_relayLobbySocket) {
+        m_relayLobbySocket->disconnect(this);
+        m_relayLobbySocket->deleteLater();
+    }
+    m_relayLobbySocket = connectSmartTcpOrRenderSocket(this, rHost, rPort, [this](QTcpSocket* s) {
+        QJsonObject sub;
+        sub["type"] = "RELAY_SUBSCRIBE_LOBBY";
+        sendTcpJson(sub, s);
+    });
+    connect(m_relayLobbySocket, &QTcpSocket::readyRead, this, [this, rHost, rPort]() {
+        while (m_relayLobbySocket && m_relayLobbySocket->canReadLine()) {
+            QByteArray line = m_relayLobbySocket->readLine().trimmed();
+            if (line.isEmpty()) continue;
+            QJsonDocument doc = QJsonDocument::fromJson(line);
+            if (!doc.isObject()) continue;
+            QJsonObject obj = doc.object();
+            if (obj["type"].toString() == "APEX_BEACON") {
+                handleBeaconJson(obj, QHostAddress::LocalHost, true, rHost, rPort);
+            }
+        }
+    });
+}
+
+void NetworkManager::connectRelayControlSocket() {
+    if (m_relayControlSocket) {
+        m_relayControlSocket->disconnect(this);
+        m_relayControlSocket->abort();
+        m_relayControlSocket->deleteLater();
+        m_relayControlSocket = nullptr;
+    }
+    QString rHost;
+    quint16 rPort = 7779;
+    if (!parseHostPort(m_relayServerEndpoint, rHost, rPort, 7779)) return;
+    if (m_role != NET_ROLE_HOST || m_state == MP_STATE_DISCONNECTED) return;
+
+    m_relayControlSocket = connectSmartTcpOrRenderSocket(this, rHost, rPort, [this, rHost, rPort](QTcpSocket* s) {
+        QJsonObject reg;
+        reg["type"] = "RELAY_REGISTER_HOST";
+        reg["instanceId"] = QString::number(m_instanceId);
+        reg["roomId"] = m_roomId;
+        reg["name"] = m_localName;
+        reg["players"] = getConnectedPlayerCount();
+        reg["max"] = 8;
+        reg["track"] = m_hostTrackTheme;
+        reg["tod"] = m_hostTimeOfDay;
+        reg["car"] = m_localCarModel;
+        reg["protected"] = isPasswordProtected();
+        sendTcpJson(reg, s);
+        emit statusMessage(QString("ONLINE SERVER ACTIVE [%1:%2] - ROOM [%3] LIVE").arg(rHost).arg(rPort).arg(m_roomId));
+    });
+    connect(m_relayControlSocket, &QTcpSocket::readyRead, this, [this, rHost, rPort]() {
+        while (m_relayControlSocket && m_relayControlSocket->canReadLine()) {
+            QByteArray line = m_relayControlSocket->readLine().trimmed();
+            if (line.isEmpty()) continue;
+            QJsonDocument doc = QJsonDocument::fromJson(line);
+            if (!doc.isObject()) continue;
+            QJsonObject obj = doc.object();
+            QString type = obj["type"].toString();
+            if (type == "RELAY_NEW_CLIENT" && m_role == NET_ROLE_HOST) {
+                QString tunnelId = obj["tunnelId"].toString();
+                if (tunnelId.isEmpty()) continue;
+                QTcpSocket* tunnelSock = connectSmartTcpOrRenderSocket(this, rHost, rPort, [this, tunnelId](QTcpSocket* ts) {
+                    QJsonObject bindObj;
+                    bindObj["type"] = "RELAY_BIND_HOST";
+                    bindObj["roomId"] = m_roomId;
+                    bindObj["tunnelId"] = tunnelId;
+                    sendTcpJson(bindObj, ts);
+                });
+                m_pendingClients.append(tunnelSock);
+                connect(tunnelSock, &QTcpSocket::readyRead, this, &NetworkManager::onTcpReadyRead);
+                connect(tunnelSock, &QTcpSocket::disconnected, this, &NetworkManager::onTcpDisconnected);
+            }
+        }
+    });
+}
+
 
 bool NetworkManager::startHost(quint16 tcpPort, quint16 udpPort) {
     return startHostRoom(m_roomId.isEmpty() ? "APEX-101" : m_roomId, m_roomPassword, tcpPort, udpPort);
@@ -253,33 +441,56 @@ bool NetworkManager::joinCustomRoom(const QString& hostAddress, const QString& r
     // 1. Broadcast ROOM_QUERY over UDP to local loopback & LAN so hosts respond immediately
     sendRoomQueryBroadcast();
 
-    // 2. If a matching Room ID is already in discovered hosts, probe it immediately
+    // 2. If a Cloud/WAN Relay Server is configured, probe it immediately for cross-LAN rooms
+    {
+        QString rHost;
+        quint16 rPort = 7779;
+        if (parseHostPort(m_relayServerEndpoint, rHost, rPort, 7779)) {
+            probeCandidateHostString(rHost, rPort);
+        }
+    }
+
+    // 3. If a Direct Remote Host IP/Domain endpoint is set in the UI or passed in, probe it directly
+    {
+        QString dHost;
+        quint16 dPort = tcpPort;
+        if (parseHostPort(hostAddress, dHost, dPort, tcpPort)) {
+            probeCandidateHostString(dHost, dPort);
+        }
+        if (parseHostPort(m_remoteHostEndpoint, dHost, dPort, tcpPort)) {
+            probeCandidateHostString(dHost, dPort);
+        }
+    }
+
+    // 4. If a matching Room ID is already in discovered hosts (LAN or WAN Relay), probe it immediately
     for (const DiscoveredHost& h : m_discoveredHosts) {
         if (h.roomId.compare(m_roomId, Qt::CaseInsensitive) == 0) {
-            probeCandidateEndpoint(h.address, h.port);
+            if (!h.endpointHost.isEmpty()) {
+                probeCandidateHostString(h.endpointHost, h.port);
+            } else {
+                probeCandidateEndpoint(h.address, h.port);
+            }
             if (QNetworkInterface::allAddresses().contains(h.address)) {
                 probeCandidateEndpoint(QHostAddress::LocalHost, h.port);
             }
         }
     }
 
-    // 3. If an explicit hostAddress was provided, probe it directly
-    QString trimmedHost = hostAddress.trimmed();
-    if (!trimmedHost.isEmpty() && trimmedHost.compare("AUTO", Qt::CaseInsensitive) != 0) {
-        probeCandidateEndpoint(QHostAddress(trimmedHost), tcpPort);
-    }
-
-    // 4. Always probe local machine ports 7777..7782 for zero-config single-PC & local rooms
+    // 5. Always probe local machine ports 7777..7782 for zero-config single-PC & local rooms
     for (quint16 p = 7777; p <= 7782; ++p) {
         probeCandidateEndpoint(QHostAddress::LocalHost, p);
     }
 
-    // 5. Also probe any other discovered LAN hosts
+    // 6. Also probe any other discovered LAN/WAN hosts
     for (const DiscoveredHost& h : m_discoveredHosts) {
-        probeCandidateEndpoint(h.address, h.port);
+        if (!h.endpointHost.isEmpty()) {
+            probeCandidateHostString(h.endpointHost, h.port);
+        } else {
+            probeCandidateEndpoint(h.address, h.port);
+        }
     }
 
-    m_searchTimer->start(2500);
+    m_searchTimer->start(3500);
     return true;
 }
 
@@ -288,18 +499,21 @@ bool NetworkManager::connectToHost(const QString& hostAddress, quint16 tcpPort, 
 }
 
 void NetworkManager::probeCandidateEndpoint(const QHostAddress& address, quint16 port) {
-    if (!m_isSearchingRoom || isConnected()) return;
     QHostAddress ipv4 = normalizeIPv4(address);
     if (ipv4.isNull() || port == 0) return;
+    probeCandidateHostString(ipv4.toString(), port);
+}
 
-    QString key = QString("%1:%2").arg(ipv4.toString()).arg(port);
+void NetworkManager::probeCandidateHostString(const QString& hostOrIp, quint16 port) {
+    if (!m_isSearchingRoom || isConnected()) return;
+    QString cleanHost = hostOrIp.trimmed();
+    if (cleanHost.isEmpty() || port == 0) return;
+
+    QString key = QString("%1:%2").arg(cleanHost.toLower()).arg(port);
     if (m_probedEndpoints.contains(key)) return;
     m_probedEndpoints.insert(key);
 
-    QTcpSocket* sock = new QTcpSocket(this);
-    m_probeSockets.append(sock);
-
-    connect(sock, &QTcpSocket::connected, this, [this, sock]() {
+    QTcpSocket* sock = connectSmartTcpOrRenderSocket(this, cleanHost, port, [this](QTcpSocket* s) {
         if (!m_isSearchingRoom || isConnected()) return;
 
         QJsonObject auth;
@@ -309,8 +523,9 @@ void NetworkManager::probeCandidateEndpoint(const QHostAddress& address, quint16
         auth["name"] = m_localName;
         auth["carModel"] = m_localCarModel;
         auth["udpPort"] = m_localUdpPort;
-        sendTcpJson(auth, sock);
+        sendTcpJson(auth, s);
     });
+    m_probeSockets.append(sock);
 
     connect(sock, &QTcpSocket::readyRead, this, &NetworkManager::onTcpReadyRead);
     connect(sock, &QTcpSocket::disconnected, this, &NetworkManager::onTcpDisconnected);
@@ -326,8 +541,6 @@ void NetworkManager::probeCandidateEndpoint(const QHostAddress& address, quint16
             sock->deleteLater();
         }
     });
-
-    sock->connectToHost(ipv4, port);
 }
 
 void NetworkManager::cleanupProbeSockets(QTcpSocket* keepSocket) {
@@ -371,6 +584,12 @@ void NetworkManager::disconnectSession() {
     }
     m_pendingClients.clear();
 
+    if (m_relayControlSocket) {
+        m_relayControlSocket->disconnect(this);
+        m_relayControlSocket->disconnectFromHost();
+        m_relayControlSocket->deleteLater();
+        m_relayControlSocket = nullptr;
+    }
     if (m_clientTcpSocket) {
         m_clientTcpSocket->disconnect(this);
         m_clientTcpSocket->disconnectFromHost();
@@ -837,7 +1056,7 @@ void NetworkManager::onPingTimer() {
     }
 }
 
-void NetworkManager::handleBeaconJson(const QJsonObject& obj, const QHostAddress& senderAddr) {
+void NetworkManager::handleBeaconJson(const QJsonObject& obj, const QHostAddress& senderAddr, bool fromWanRelay, const QString& relayHost, quint16 relayPort) {
     quint64 senderInstance = obj["instanceId"].toString().toULongLong();
     if (senderInstance != 0 && senderInstance == m_instanceId) {
         return; // Ignore our own process instance
@@ -848,16 +1067,18 @@ void NetworkManager::handleBeaconJson(const QJsonObject& obj, const QHostAddress
 
     QString roomId = obj["roomId"].toString("APEX-101").trimmed().toUpper();
     QString hostName = obj["name"].toString("Host Driver");
-    quint16 port = (quint16)obj["port"].toInt(7777);
+    quint16 port = fromWanRelay ? relayPort : (quint16)obj["port"].toInt(7777);
     quint16 udpPort = (quint16)obj["udpPort"].toInt(7778);
     QHostAddress normAddr = normalizeIPv4(senderAddr);
 
     bool found = false;
     qint64 now = m_uptime.elapsed();
     for (DiscoveredHost& h : m_discoveredHosts) {
-        if (h.roomId.compare(roomId, Qt::CaseInsensitive) == 0 && h.port == port) {
+        if (h.roomId.compare(roomId, Qt::CaseInsensitive) == 0 && h.isWanRelay == fromWanRelay) {
             h.hostName = hostName;
             h.address = normAddr;
+            h.endpointHost = fromWanRelay ? relayHost : QString();
+            h.port = port;
             h.udpPort = udpPort;
             h.playerCount = obj["players"].toInt(1);
             h.maxPlayers = obj["max"].toInt(8);
@@ -865,6 +1086,7 @@ void NetworkManager::handleBeaconJson(const QJsonObject& obj, const QHostAddress
             h.timeOfDay = obj["tod"].toInt(1);
             h.carModel = obj["car"].toInt(0);
             h.passwordProtected = obj["protected"].toBool(false);
+            h.isWanRelay = fromWanRelay;
             h.lastSeenMs = now;
             found = true;
             break;
@@ -876,6 +1098,7 @@ void NetworkManager::handleBeaconJson(const QJsonObject& obj, const QHostAddress
         newHost.roomId = roomId;
         newHost.hostName = hostName;
         newHost.address = normAddr;
+        newHost.endpointHost = fromWanRelay ? relayHost : QString();
         newHost.port = port;
         newHost.udpPort = udpPort;
         newHost.playerCount = obj["players"].toInt(1);
@@ -884,6 +1107,7 @@ void NetworkManager::handleBeaconJson(const QJsonObject& obj, const QHostAddress
         newHost.timeOfDay = obj["tod"].toInt(1);
         newHost.carModel = obj["car"].toInt(0);
         newHost.passwordProtected = obj["protected"].toBool(false);
+        newHost.isWanRelay = fromWanRelay;
         newHost.lastSeenMs = now;
         m_discoveredHosts.append(newHost);
         emit hostDiscovered(newHost);
@@ -891,9 +1115,13 @@ void NetworkManager::handleBeaconJson(const QJsonObject& obj, const QHostAddress
 
     // If we are actively searching for this Room ID, connect immediately!
     if (m_isSearchingRoom && !isConnected() && roomId.compare(m_roomId, Qt::CaseInsensitive) == 0) {
-        probeCandidateEndpoint(normAddr, port);
-        if (QNetworkInterface::allAddresses().contains(normAddr)) {
-            probeCandidateEndpoint(QHostAddress::LocalHost, port);
+        if (fromWanRelay && !relayHost.isEmpty()) {
+            probeCandidateHostString(relayHost, relayPort);
+        } else {
+            probeCandidateEndpoint(normAddr, port);
+            if (QNetworkInterface::allAddresses().contains(normAddr)) {
+                probeCandidateEndpoint(QHostAddress::LocalHost, port);
+            }
         }
     }
 }
@@ -906,7 +1134,12 @@ void NetworkManager::onBeaconTimer() {
         }
     }
 
+    ensureRelayLobbySubscription();
     if (m_role == NET_ROLE_HOST && m_state != MP_STATE_DISCONNECTED) {
+        if (!m_relayServerEndpoint.isEmpty() &&
+            (!m_relayControlSocket || m_relayControlSocket->state() == QAbstractSocket::UnconnectedState)) {
+            connectRelayControlSocket();
+        }
         sendBeaconBroadcast();
     } else if (m_isSearchingRoom && !isConnected()) {
         sendRoomQueryBroadcast();
@@ -930,6 +1163,9 @@ void NetworkManager::sendBeaconBroadcast(const QHostAddress& directTarget, quint
     beacon["protected"] = isPasswordProtected();
     QByteArray data = QJsonDocument(beacon).toJson(QJsonDocument::Compact);
 
+    if (m_relayControlSocket && m_relayControlSocket->state() == QAbstractSocket::ConnectedState) {
+        sendTcpJson(beacon, m_relayControlSocket);
+    }
     QUdpSocket* senderSock = m_udpSocket ? m_udpSocket : m_beaconSocket;
 
     if (!directTarget.isNull() && directPort > 0) {
@@ -1101,9 +1337,9 @@ void NetworkManager::sendTelemetry(const PlayerCar& player) {
         }
     }
 
-    // Reliable 20Hz TCP telemetry relay so cars always sync even if UDP is filtered
+    // Reliable 33Hz low-latency TCP telemetry relay so cross-LAN / WAN Relay cars sync smoothly
     qint64 nowMs = m_uptime.elapsed();
-    if (nowMs - m_lastTcpTelemetryMs >= 45) {
+    if (nowMs - m_lastTcpTelemetryMs >= 30) {
         m_lastTcpTelemetryMs = nowMs;
         QJsonObject tObj;
         tObj["type"] = "TELEM";

@@ -540,7 +540,7 @@ void RasterRenderer::renderRoad(QPainter& p, const GameEngine& engine, int w, in
     const RoadSegment& baseSeg0 = track.getSegment(baseIndex);
     const RoadSegment& baseSeg1 = track.getSegment(baseIndex + 1);
     qreal baseElevation = baseSeg0.elevation + (baseSeg1.elevation - baseSeg0.elevation) * basePercent;
-    qreal eyeHeight = baseElevation + camHeight;
+    qreal eyeHeight = baseElevation + camHeight + (player.verticalOffset * 12.5);
     qreal camZ = player.worldZ;
 
     int drawDistance = isMirror ? 16 : 80;
@@ -2506,11 +2506,12 @@ void RasterRenderer::renderCockpit(QPainter& p, const GameEngine& engine, int w,
 
     int pitchOffset = qRound(player.pitchG * 90.0);
     int rollOffset = qRound(player.rollG * 60.0);
+    int bumpLiftY = -qRound(player.verticalOffset * 0.85);
     int vibX = (player.vibration > 0) ? (QRandomGenerator::global()->generate() % 5 - 2) : 0;
     int vibY = (player.vibration > 0) ? (QRandomGenerator::global()->generate() % 5 - 2) : 0;
 
     int dashX = rollOffset + vibX;
-    int dashY = pitchOffset + vibY;
+    int dashY = pitchOffset + bumpLiftY + vibY;
 
     const QImage& dash = RasterAssets::instance().getDashboard();
     p.drawImage(QRect(dashX, dashY, w, h), dash);
@@ -3981,8 +3982,8 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
 
     // Championship Final Race Standings Leaderboard Overlay when crossing the Finish Line!
     if (player.raceFinished) {
-        int bw = qMin(640, w - 40);
-        int bh = 360;
+        int bw = qMin(660, w - 40);
+        int bh = 408;
         int bx = (w - bw) / 2;
         int by = (h - bh) / 2 - 10;
         QRect boardRect(bx, by, bw, bh);
@@ -3995,19 +3996,44 @@ void RasterRenderer::renderHUD(QPainter& p, const GameEngine& engine, int w, int
         p.drawRoundedRect(boardRect, 12, 12);
 
         // Header Banner
-        QRect hdrRect(bx + 14, by + 12, bw - 28, 38);
+        QRect hdrRect(bx + 14, by + 12, bw - 28, 36);
         p.setBrush(QColor(245, 195, 70, 40));
         p.setPen(QPen(QColor(245, 200, 85, 180), 1));
         p.drawRoundedRect(hdrRect, 6, 6);
-        p.setFont(QFont("Arial", 12, QFont::Bold));
+        p.setFont(QFont("Arial", 11, QFont::Black));
         p.setPen(QColor(255, 220, 95));
         p.drawText(hdrRect, Qt::AlignCenter,
-                   QString("FINISH LINE — FINAL RACE STANDINGS (YOU: P%1/%2)")
+                   QString("CHECKERED FLAG — FINAL RACE STANDINGS (YOU: P%1/%2)")
                        .arg(player.currentPosition)
                        .arg(player.totalRacers));
 
+        // Career Coin Reward Banner (Position + Clean Race Bonus x Difficulty Multiplier)
+        QRect coinBanner(bx + 14, by + 53, bw - 28, 36);
+        QLinearGradient cg(coinBanner.topLeft(), coinBanner.bottomRight());
+        cg.setColorAt(0.0, QColor(58, 44, 10, 220));
+        cg.setColorAt(0.5, QColor(36, 28, 8, 220));
+        cg.setColorAt(1.0, QColor(18, 26, 38, 220));
+        p.setBrush(cg);
+        p.setPen(QPen(QColor(255, 210, 65, 210), 1.5));
+        p.drawRoundedRect(coinBanner, 6, 6);
+
+        p.setFont(QFont("Arial", 9, QFont::Black));
+        p.setPen(QColor(255, 225, 85));
+        QString breakdown = QString("RACE REWARD: +%1 COINS  (P%2 Base: %3%4  ×  %5x Difficulty)")
+            .arg(player.lastRaceCoinsEarned)
+            .arg(player.currentPosition)
+            .arg(player.lastRaceBaseCoins)
+            .arg(player.lastRaceCleanBonus > 0 ? QString(" + %1 Clean").arg(player.lastRaceCleanBonus) : QString(""))
+            .arg(QString::number(player.lastRaceCoinMult, 'f', 2));
+        p.drawText(coinBanner.adjusted(12, 0, -165, 0), Qt::AlignVCenter | Qt::AlignLeft, breakdown);
+
+        p.setFont(QFont("Arial", 9, QFont::Black));
+        p.setPen(QColor(75, 245, 150));
+        p.drawText(coinBanner.adjusted(12, 0, -12, 0), Qt::AlignVCenter | Qt::AlignRight,
+                   QString("WALLET: %1 COINS").arg(engine.getProfile().coins));
+
         // Column Headers
-        int rowStartY = by + 58;
+        int rowStartY = by + 98;
         p.setFont(QFont("Arial", 8, QFont::Bold));
         p.setPen(QColor(150, 170, 195));
         p.drawText(bx + 26,  rowStartY, "POS");
@@ -4208,34 +4234,39 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
     // Dynamic chase-camera suspension, cornering sway & body roll
     int vibX = (player.vibration > 0) ? (QRandomGenerator::global()->generate() % 3 - 1) : 0;
     int vibY = (player.vibration > 0) ? (QRandomGenerator::global()->generate() % 3 - 1) : 0;
+    qreal bumpUpwardPx = qBound(-4.5, player.verticalOffset, 14.0); // Subtle upward bump/crest hop
+    qreal groundContactY = h - 34.0 + player.pitchG * 20.0;
     qreal carCenterX = w * 0.5 + player.steerAngle * 52.0 - player.rollG * 28.0 + vibX;
-    qreal carBottomY = h - 34.0 + player.pitchG * 24.0 + vibY;
+    qreal carBottomY = groundContactY - bumpUpwardPx + vibY;
     qreal bodyRollDeg = player.steerAngle * 4.2 + player.rollG * 8.0;
     qreal yawShift = player.steerAngle * 14.0; // Subtle 3D cornering perspective shift
 
     const qreal W = 316.0;
     const qreal H = 148.0;
 
-    // 1. Asphalt Tire Skid Marks & Ground Contact Ambient Occlusion (AO) Shadow
-    if (player.isHandbraking || (player.isBraking && player.speed > 110.0) || player.crashTimer > 1.5) {
+    // 1. Asphalt Tire Skid Marks (only when tires are in firm contact with tarmac)
+    if ((player.isHandbraking || (player.isBraking && player.speed > 110.0) || player.crashTimer > 1.5) && bumpUpwardPx < 4.5) {
         p.setPen(QPen(QColor(10, 12, 16, 155), 14, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(QPointF(carCenterX - W * 0.36 - yawShift * 0.8, carBottomY - 4),
+        p.drawLine(QPointF(carCenterX - W * 0.36 - yawShift * 0.8, groundContactY - 4),
                    QPointF(carCenterX - W * 0.38 - yawShift * 2.2, h + 15));
-        p.drawLine(QPointF(carCenterX + W * 0.36 - yawShift * 0.8, carBottomY - 4),
+        p.drawLine(QPointF(carCenterX + W * 0.36 - yawShift * 0.8, groundContactY - 4),
                    QPointF(carCenterX + W * 0.38 - yawShift * 2.2, h + 15));
     }
 
     p.translate(carCenterX, carBottomY);
 
-    // Deep multi-layer ground contact AO shadow directly under the chassis & tires
+    // Deep multi-layer ground contact AO shadow stays anchored on the road surface (+bumpUpwardPx below car)
     {
-        QRadialGradient aoGrad(0, -6, W * 0.58);
-        aoGrad.setColorAt(0.0, QColor(4, 6, 10, 235));
-        aoGrad.setColorAt(0.68, QColor(6, 8, 12, 160));
+        qreal shadowDropY = qMax(0.0, bumpUpwardPx * 0.92);
+        qreal shadowScale = qBound(0.84, 1.0 - bumpUpwardPx * 0.008, 1.04);
+        int shadowAlpha = qBound(140, 235 - qRound(bumpUpwardPx * 5.0), 240);
+        QRadialGradient aoGrad(0, -6 + shadowDropY, W * 0.58 * shadowScale);
+        aoGrad.setColorAt(0.0, QColor(4, 6, 10, shadowAlpha));
+        aoGrad.setColorAt(0.68, QColor(6, 8, 12, qRound(shadowAlpha * 0.68)));
         aoGrad.setColorAt(1.0, QColor(6, 8, 12, 0));
         p.setBrush(aoGrad);
         p.setPen(Qt::NoPen);
-        p.drawEllipse(QPointF(0, -4), W * 0.56, 24);
+        p.drawEllipse(QPointF(0, -4 + shadowDropY), W * 0.56 * shadowScale, 24 * shadowScale);
 
         // Dual crimson tail-light / brake-light reflection pools on the tarmac behind the car
         QColor tailPoolCol = player.isBraking ? QColor(255, 30, 35, 165) : QColor(235, 25, 35, 95);
@@ -4297,7 +4328,8 @@ void RasterRenderer::renderThirdPersonPlayerCar(QPainter& p, const GameEngine& e
         drawRearTire(rightTireX, false);
     }
 
-    // Apply dynamic suspension roll to the sprung supercar chassis
+    // Apply dynamic suspension vertical travel & roll to the sprung supercar chassis over bumps
+    p.translate(0.0, -bumpUpwardPx * 0.28);
     p.rotate(bodyRollDeg);
 
     int carModel = player.selectedCar;

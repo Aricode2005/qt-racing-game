@@ -1,0 +1,2574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APEX VELOCITY — Grand Prix Edition</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #04070e; font-family: 'Segoe UI', Arial, sans-serif; color: #fff; }
+  #gameCanvas { display: block; width: 100vw; height: 100vh; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="1280" height="720"></canvas>
+<script>
+// ============================================================================
+//  APEX VELOCITY — GRAND PRIX EDITION (Full Browser & Cloud Multiplayer Build)
+// ============================================================================
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W = 1280, H = 720;
+
+// Convert client mouse coordinates to 1280x720 virtual canvas coordinates
+let mouseX = -1, mouseY = -1;
+function updateMousePos(e) {
+  const r = canvas.getBoundingClientRect();
+  mouseX = (e.clientX - r.left) * (W / r.width);
+  mouseY = (e.clientY - r.top) * (H / r.height);
+}
+canvas.addEventListener('mousemove', updateMousePos);
+
+// ============================================================================
+//  1. GARAGE CATALOG: 4 SUPERCARS & 5 ENGINE POWERTRAINS + COIN ECONOMY
+// ============================================================================
+const CARS = [
+  { id: 0, name: "APEX GT-R", tagline: "Twin-turbo grand tourer",
+    feature: "BALANCED CHASSIS — no weak spots, ideal all-rounder",
+    price: 0, maxSpeed: 200, accel: 96, grip: 1.00, armor: 1.00,
+    accent: "#9FB2CC", bodyHi: "#b4c6e0", bodyMid: "#566276", bodyLo: "#181d26", spoiler: "gt" },
+  { id: 1, name: "VORTEX V12", tagline: "Mid-engine carbon hypercar",
+    feature: "LAUNCH CONTROL — fastest base speed & acceleration",
+    price: 5000, maxSpeed: 206, accel: 108, grip: 0.97, armor: 0.82,
+    accent: "#FF3B47", bodyHi: "#ff5c66", bodyMid: "#c81e2b", bodyLo: "#2a060a", spoiler: "active" },
+  { id: 2, name: "DRIFT SPEC-R", tagline: "JDM touge weapon",
+    feature: "DRIFT GRIP — +28% cornering response in tight hairpins",
+    price: 1200, maxSpeed: 197, accel: 95, grip: 1.28, armor: 0.95,
+    accent: "#FFB52E", bodyHi: "#ffda66", bodyMid: "#d4921a", bodyLo: "#2c1a04", spoiler: "drift" },
+  { id: 3, name: "TITAN ENFORCER", tagline: "Armoured pursuit interceptor",
+    feature: "REINFORCED CAGE — shrugs off 35% of all crash damage",
+    price: 2500, maxSpeed: 199, accel: 92, grip: 1.04, armor: 1.55,
+    accent: "#37D58A", bodyHi: "#64cfa0", bodyMid: "#287654", bodyLo: "#0a1c14", spoiler: "duck" }
+];
+const CAR_DISPLAY_ORDER = [0, 2, 3, 1];
+
+const ENGINES = [
+  { id: 0, name: "STREET I4 TURBO", layout: "2.0L inline-4 single turbo",
+    feature: "LIGHTWEIGHT BLOCK — +4% handling from lighter front nose",
+    price: 0, hp: 280, topBonus: 0, accelBonus: 0, gripMod: 1.04, armorMod: 1.00, lowTorque: 0, highBoost: 0, accent: "#7FD8FF" },
+  { id: 1, name: "TWIN-TURBO V6", layout: "3.0L V6 twin-turbo",
+    feature: "TWIN-SCROLL TURBOS — smooth mid-range pull in every gear",
+    price: 800, hp: 420, topBonus: 6, accelBonus: 6, gripMod: 1.00, armorMod: 1.00, lowTorque: 6, highBoost: 4, accent: "#4FE0B0" },
+  { id: 2, name: "SUPERCHARGED V8", layout: "5.2L V8 roots supercharger",
+    feature: "INSTANT TORQUE — brutal low-end launch acceleration",
+    price: 2200, hp: 610, topBonus: 12, accelBonus: 10, gripMod: 0.98, armorMod: 1.05, lowTorque: 22, highBoost: 0, accent: "#FFC247" },
+  { id: 3, name: "HYBRID V10 KERS", layout: "5.0L V10 + electric motor",
+    feature: "KERS E-BOOST — electric acceleration surge above 130 km/h",
+    price: 4500, hp: 780, topBonus: 18, accelBonus: 14, gripMod: 1.00, armorMod: 1.00, lowTorque: 10, highBoost: 16, accent: "#9C7BFF" },
+  { id: 4, name: "QUAD-TURBO W16", layout: "8.0L W16 quad-turbo",
+    feature: "HYPER POWER — +30 km/h top speed, heavy block (-8% armour)",
+    price: 8000, hp: 1500, topBonus: 30, accelBonus: 22, gripMod: 0.96, armorMod: 0.92, lowTorque: 4, highBoost: 24, accent: "#FF5A36" }
+];
+
+const CIRCUITS = [
+  { id: 0, title: "Pacific Coast", subtitle: "Coastal Highway • Ocean Sweeps", tag: "COASTAL GP",
+    hills: 2, traffic: 3, diff: 2, accent: "#FF912D", skyTop: "#1a2a4c", skyMid: "#b85538", skyBot: "#f6a452", ground: "#3b5232", berm: "#4c683e" },
+  { id: 1, title: "Alpine Summit", subtitle: "Mountain Pass • High Elevation", tag: "ALPINE PASS",
+    hills: 5, traffic: 2, diff: 5, accent: "#4BB4FF", skyTop: "#0f203c", skyMid: "#346494", skyBot: "#9ec6e8", ground: "#8ba0b6", berm: "#aebfd2" },
+  { id: 2, title: "Neo Metropolis", subtitle: "Night Expressway • High Speed", tag: "METRO CIRCUIT",
+    hills: 1, traffic: 5, diff: 4, accent: "#F541A5", skyTop: "#090618", skyMid: "#241142", skyBot: "#681c64", ground: "#181c2c", berm: "#262c44" },
+  { id: 3, title: "Red Rock Canyon", subtitle: "Desert Speedway • Canyon Crests", tag: "CANYON RUN",
+    hills: 3, traffic: 3, diff: 3, accent: "#F06937", skyTop: "#2c1610", skyMid: "#983e22", skyBot: "#ea8848", ground: "#7a4428", berm: "#9c5432" }
+];
+
+const DIFFICULTIES = [
+  { id: 0, title: "TIER 1  •  ROOKIE SERIES", desc: "6-Car Grid   |   1.0x Coin Rewards (1st: 500 🪙)", mult: 1.0, racers: 6, lenScale: 0.65, accent: "#28E16E" },
+  { id: 1, title: "TIER 2  •  PRO CIRCUIT", desc: "10-Car Grid  |   1.5x Coin Rewards (1st: 750 🪙)", mult: 1.5, racers: 10, lenScale: 0.82, accent: "#FFC328" },
+  { id: 2, title: "TIER 3  •  WORLD CHAMPIONSHIP", desc: "16-Car Grid  |   2.5x Coin Rewards (1st: 1,250 🪙)", mult: 2.5, racers: 16, lenScale: 1.0, accent: "#FF3C50" }
+];
+
+// ============================================================================
+//  2. USER ACCOUNT PROFILE & SERVER SQLITE SYNC
+// ============================================================================
+const profile = {
+  isLoggedIn: false,
+  username: "",
+  password: "",
+  coins: 500,
+  ownedCars: 1,
+  ownedEngines: 1,
+  selectedCar: 0,
+  selectedEngine: 0,
+  wins: 0,
+  podiums: 0,
+  races: 0,
+  savedUsers: []
+};
+
+function ownsCar(idx) { return (profile.ownedCars & (1 << idx)) !== 0; }
+function ownsEngine(idx) { return (profile.ownedEngines & (1 << idx)) !== 0; }
+
+async function fetchSavedUsers() {
+  try {
+    const res = await fetch('/api/users');
+    if (res.ok) {
+      const data = await res.json();
+      profile.savedUsers = data.users || [];
+      if (profile.savedUsers.length === 0) loginState.registerMode = true;
+    }
+  } catch (e) {}
+}
+
+async function syncProfileToServer(raceRecord = null) {
+  if (!profile.isLoggedIn) return;
+  try {
+    await fetch('/api/save_profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: profile.username,
+        password: profile.password,
+        coins: profile.coins,
+        ownedCars: profile.ownedCars,
+        ownedEngines: profile.ownedEngines,
+        selectedCar: profile.selectedCar,
+        selectedEngine: profile.selectedEngine,
+        wins: profile.wins,
+        podiums: profile.podiums,
+        races: profile.races,
+        raceRecord
+      })
+    });
+  } catch (e) {}
+}
+
+// ============================================================================
+//  3. UI & GAME STATE
+// ============================================================================
+const loginState = {
+  showModal: true,
+  registerMode: true,
+  focusField: 0, // 0 = username, 1 = password
+  showPass: false,
+  username: "",
+  password: "",
+  statusMsg: "",
+  isError: false
+};
+
+const menuState = {
+  showMenu: true,
+  isTransitioning: false,
+  menuOpacity: 1.0,
+  transitionFlash: 0.0,
+  animTime: 0.0,
+  tab: 0, // 0 = Circuits, 1 = Garage, 2 = Multiplayer
+  previewCar: 0,
+  previewEngine: 0,
+  bannerText: "",
+  bannerError: false,
+  bannerTimer: 0.0,
+  difficulty: 1,
+  tod: 1, // 0 = Day, 1 = Sunset, 2 = Night
+  theme: 0
+};
+
+// ============================================================================
+//  4. TRACK & ROAD SEGMENTS GENERATOR (CURVES, HILLS & SCENERY)
+// ============================================================================
+const SEG_LEN = 200;
+const ROAD_WIDTH = 2000;
+let trackSegments = [];
+let totalTrackZ = 48000;
+
+function buildTrack(themeId) {
+  trackSegments = [];
+  const N = 320;
+  for (let i = 0; i < N; i++) {
+    let curve = 0;
+    let elev = 0;
+    const t = i / N;
+    if (themeId === 0) {
+      curve = Math.sin(t * Math.PI * 6) * 1.6 + Math.cos(t * Math.PI * 10) * 0.7;
+      elev = Math.sin(t * Math.PI * 8) * 1400 + Math.cos(t * Math.PI * 16) * 450;
+    } else if (themeId === 1) {
+      curve = Math.sin(t * Math.PI * 8) * 2.3;
+      elev = Math.sin(t * Math.PI * 10) * 2600 + Math.sin(t * Math.PI * 22) * 800;
+    } else if (themeId === 2) {
+      curve = Math.sin(t * Math.PI * 5) * 1.4;
+      elev = Math.sin(t * Math.PI * 6) * 750;
+    } else {
+      curve = Math.sin(t * Math.PI * 7) * 1.9;
+      elev = Math.sin(t * Math.PI * 12) * 1950 + Math.cos(t * Math.PI * 20) * 650;
+    }
+    const bank = -curve * 0.06;
+    trackSegments.push({
+      index: i,
+      z: i * SEG_LEN,
+      curve,
+      elevation: elev,
+      roadBank: bank,
+      isRed: (i % 2 === 0),
+      sceneryLeft: (i % 7 === 0) ? "tree" : ((i % 19 === 0) ? "rock" : null),
+      sceneryRight: (i % 6 === 0) ? "tree" : ((i % 23 === 0) ? "arch" : null),
+      gantry: (i > 10 && i % 45 === 0)
+    });
+  }
+  const lenScale = DIFFICULTIES[menuState.difficulty].lenScale;
+  totalTrackZ = Math.floor(N * SEG_LEN * lenScale);
+}
+
+// ============================================================================
+//  5. PLAYER CAR, VERTICAL BUMP PHYSICS & AI TRAFFIC
+// ============================================================================
+const player = {
+  worldZ: 0,
+  x: 0.25,
+  speed: 0,
+  maxSpeed: 200,
+  accelRate: 96,
+  gripMult: 1.0,
+  armorMult: 1.0,
+  lowTorque: 0,
+  highBoost: 0,
+  hp: 280,
+  carModelName: "APEX GT-R",
+  engineModelName: "STREET I4 TURBO",
+  steerAngle: 0,
+  gear: 1,
+  rpm: 900,
+  boostBar: 0,
+  pitchG: 0,
+  rollG: 0,
+  verticalOffset: 0,
+  verticalVelocity: 0,
+  prevSlope: 0,
+  vibration: 0,
+  health: 100,
+  crashCount: 0,
+  crashTimer: 0,
+  score: 0,
+  distanceKm: 0,
+  raceTime: 0,
+  finishTime: 0,
+  raceFinished: false,
+  currentPosition: 1,
+  totalRacers: 10,
+  thirdPersonView: true,
+  zBuffer3DMode: true,
+  adasEnabled: false,
+  arGuidesEnabled: true,
+  pixelSize: 1,
+  lastRaceCoinsEarned: 0,
+  lastRaceBaseCoins: 0,
+  lastRaceCleanBonus: 0,
+  lastRaceMult: 1.0,
+  announcement: "",
+  announcementTimer: 0,
+  infoMode: 0 // 0=WEB, 1=MUSIC, 2=RADAR, 3=CAR
+};
+
+let traffic = [];
+const keys = { up: false, down: false, left: false, right: false, space: false };
+
+function applyCarAndEngineSpecs() {
+  const car = CARS[profile.selectedCar] || CARS[0];
+  const eng = ENGINES[profile.selectedEngine] || ENGINES[0];
+  player.carModelName = car.name;
+  player.engineModelName = eng.name;
+  player.hp = eng.hp;
+  player.maxSpeed = car.maxSpeed + eng.topBonus;
+  player.accelRate = car.accel + eng.accelBonus;
+  player.gripMult = car.grip * eng.gripMod;
+  player.armorMult = car.armor * eng.armorMod;
+  player.lowTorque = eng.lowTorque;
+  player.highBoost = eng.highBoost;
+}
+
+function resetRace() {
+  applyCarAndEngineSpecs();
+  buildTrack(menuState.theme);
+  player.worldZ = 0;
+  player.x = 0.25;
+  player.speed = 0;
+  player.steerAngle = 0;
+  player.gear = 1;
+  player.rpm = 900;
+  player.pitchG = 0;
+  player.rollG = 0;
+  player.verticalOffset = 0;
+  player.verticalVelocity = 0;
+  player.prevSlope = 0;
+  player.health = 100;
+  player.crashCount = 0;
+  player.crashTimer = 0;
+  player.score = 0;
+  player.distanceKm = 0;
+  player.raceTime = 0;
+  player.finishTime = 0;
+  player.raceFinished = false;
+
+  traffic = [];
+  const numAI = DIFFICULTIES[menuState.difficulty].racers - 1;
+  const aiNames = ["V. Rossi", "M. Verstappen", "L. Hamilton", "A. Senna", "C. Leclerc", "L. Norris", "F. Alonso", "O. Piastri", "G. Russell", "C. Sainz", "S. Perez", "K. Raikkonen", "M. Schumacher", "N. Lauda", "J. Hunt"];
+  const lanes = [-0.72, -0.24, 0.24, 0.72];
+  for (let i = 0; i < numAI; i++) {
+    const baseSpd = 152 + (i % 5) * 9 + menuState.difficulty * 7;
+    traffic.push({
+      id: i + 1,
+      name: aiNames[i % aiNames.length],
+      carModel: (i + 1) % 4,
+      worldZ: 280 + i * 340,
+      x: lanes[i % 4],
+      targetX: lanes[i % 4],
+      speed: baseSpd * 0.6,
+      maxSpeed: Math.min(205, baseSpd),
+      laneTimer: 1.5 + (i % 4) * 0.7,
+      hasFinished: false,
+      finishTime: 0,
+      isRemote: false
+    });
+  }
+  player.totalRacers = traffic.length + 1 + Object.keys(mpState.peers).length;
+}
+
+// ============================================================================
+//  6. REAL-TIME WEBSOCKET MULTIPLAYER (WORKS ON RENDER HTTPS/WSS!)
+// ============================================================================
+const mpState = {
+  ws: null,
+  connected: false,
+  isHost: false,
+  myPeerId: 0,
+  roomId: "APEX-101",
+  password: "1234",
+  joinRoomId: "APEX-101",
+  joinPassword: "1234",
+  ready: false,
+  countdown: -1,
+  peers: {},
+  discoveredRooms: [],
+  statusText: "ONLINE SERVER READY",
+  errorText: "",
+  errorTimer: 0,
+  lastTelemSent: 0
+};
+
+function ensureWebSocket() {
+  if (mpState.ws && (mpState.ws.readyState === WebSocket.OPEN || mpState.ws.readyState === WebSocket.CONNECTING)) {
+    return mpState.ws;
+  }
+  const proto = (location.protocol === 'https:') ? 'wss:' : 'ws:';
+  const wsUrl = `${proto}//${location.host}/ws`;
+  const ws = new WebSocket(wsUrl);
+  mpState.ws = ws;
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: "WS_SUBSCRIBE_LOBBY" }));
+  };
+
+  ws.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    const t = msg.type;
+    if (t === "WS_ROOM_LIST") {
+      mpState.discoveredRooms = msg.rooms || [];
+    } else if (t === "WS_HOST_OK") {
+      mpState.connected = true;
+      mpState.isHost = true;
+      mpState.myPeerId = 0;
+      mpState.roomId = msg.roomId;
+      mpState.ready = true;
+      mpState.peers = {};
+      mpState.statusText = `HOSTING ROOM [${msg.roomId}]`;
+    } else if (t === "WS_AUTH_FAILED") {
+      mpState.errorText = msg.reason || "Unable to join room";
+      mpState.errorTimer = 5.0;
+    } else if (t === "WS_WELCOME") {
+      mpState.connected = true;
+      mpState.isHost = false;
+      mpState.myPeerId = msg.assignedId || 1;
+      mpState.roomId = msg.roomId;
+      mpState.ready = false;
+      mpState.peers = {};
+      (msg.roster || []).forEach(p => {
+        if (p.id !== mpState.myPeerId) {
+          mpState.peers[p.id] = { id: p.id, name: p.name, car: p.car || 0, ready: !!p.ready, worldZ: 0, x: -0.25, speed: 0 };
+        }
+      });
+      if (typeof msg.theme === 'number') menuState.theme = msg.theme;
+      if (typeof msg.tod === 'number') menuState.tod = msg.tod;
+    } else if (t === "WS_PEER_JOINED") {
+      if (msg.id !== mpState.myPeerId) {
+        mpState.peers[msg.id] = { id: msg.id, name: msg.name, car: msg.car || 0, ready: false, worldZ: 0, x: -0.25, speed: 0 };
+      }
+    } else if (t === "WS_PEER_LEFT") {
+      delete mpState.peers[msg.id];
+    } else if (t === "WS_READY") {
+      if (mpState.peers[msg.id]) mpState.peers[msg.id].ready = !!msg.ready;
+    } else if (t === "WS_CAR_SYNC") {
+      if (mpState.peers[msg.id]) mpState.peers[msg.id].car = msg.car || 0;
+    } else if (t === "WS_TRACK_SYNC") {
+      menuState.theme = msg.theme || 0;
+      menuState.tod = msg.tod || 1;
+    } else if (t === "WS_COUNTDOWN") {
+      mpState.countdown = msg.duration || 3.5;
+      startTransitionToRace(true);
+    } else if (t === "WS_TELEM") {
+      if (msg.id !== mpState.myPeerId && mpState.peers[msg.id]) {
+        const pr = mpState.peers[msg.id];
+        pr.worldZ = msg.z || 0;
+        pr.x = msg.x || 0;
+        pr.speed = msg.s || 0;
+        pr.car = msg.c || 0;
+        pr.hasFinished = !!msg.fin;
+        pr.finishTime = msg.ft || 0;
+      }
+    }
+  };
+  return ws;
+}
+
+function sendWs(obj) {
+  const ws = ensureWebSocket();
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(obj));
+  }
+}
+
+// ============================================================================
+//  7. SOUND SYNTHESIZER (WEB AUDIO API ENGINE ROAR & UI CHIMES)
+// ============================================================================
+let audioCtx = null;
+function playTone(freq, dur = 0.08, type = 'sine', gainVal = 0.08) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    g.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.connect(g);
+    g.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur);
+  } catch (e) {}
+}
+
+// ============================================================================
+//  8. PHYSICS UPDATE LOOP (WITH VERTICAL BUMP & CREST-HOP SOLVER)
+// ============================================================================
+function getSegment(z) {
+  if (trackSegments.length === 0) buildTrack(menuState.theme);
+  const N = trackSegments.length;
+  let idx = Math.floor(z / SEG_LEN) % N;
+  if (idx < 0) idx += N;
+  return trackSegments[idx];
+}
+
+function getRaceStandings() {
+  const list = [];
+  list.push({
+    name: `${profile.username || "Driver"} (${player.carModelName})`,
+    isPlayer: true,
+    hasFinished: player.raceFinished,
+    finishTime: player.finishTime,
+    progressZ: player.worldZ
+  });
+  traffic.forEach(t => {
+    list.push({
+      name: t.name,
+      isPlayer: false,
+      hasFinished: t.hasFinished,
+      finishTime: t.finishTime,
+      progressZ: t.worldZ
+    });
+  });
+  Object.values(mpState.peers).forEach(pr => {
+    list.push({
+      name: `[ONLINE] ${pr.name}`,
+      isPlayer: false,
+      hasFinished: !!pr.hasFinished,
+      finishTime: pr.finishTime || 0,
+      progressZ: pr.worldZ || 0
+    });
+  });
+  list.sort((a, b) => {
+    if (a.hasFinished && b.hasFinished) return a.finishTime - b.finishTime;
+    if (a.hasFinished !== b.hasFinished) return a.hasFinished ? -1 : 1;
+    return b.progressZ - a.progressZ;
+  });
+  list.forEach((e, i) => e.position = i + 1);
+  return list;
+}
+
+function updatePhysics(dt) {
+  if (mpState.countdown > 0) {
+    mpState.countdown -= dt;
+    if (mpState.countdown <= 0) {
+      mpState.countdown = -1;
+      playTone(880, 0.25, 'triangle', 0.14);
+    } else {
+      return;
+    }
+  }
+
+  const curSeg = getSegment(player.worldZ);
+  const nextSeg = getSegment(player.worldZ + SEG_LEN);
+  const slope = (nextSeg.elevation - curSeg.elevation) / SEG_LEN;
+
+  // 1. Steering & ADAS Assist
+  let steerInput = 0;
+  if (keys.left) steerInput -= 1;
+  if (keys.right) steerInput += 1;
+
+  if (player.adasEnabled && steerInput === 0 && player.speed > 40) {
+    // ADAS obstacle scan ahead
+    let blocked = false;
+    for (const npc of traffic) {
+      const dz = npc.worldZ - player.worldZ;
+      if (dz > 0 && dz < 750 && Math.abs(npc.x - player.x) < 0.23) {
+        blocked = true;
+        steerInput = (player.x > 0) ? -0.65 : 0.65;
+        break;
+      }
+    }
+  }
+
+  const steerSpeed = 3.2 * player.gripMult;
+  player.steerAngle += (steerInput - player.steerAngle) * Math.min(1, steerSpeed * dt);
+  player.x += player.steerAngle * player.gripMult * (Math.max(40, player.speed) / 130) * 1.45 * dt;
+  // Centrifugal curve pull
+  player.x -= curSeg.curve * (player.speed / player.maxSpeed) * 0.42 * dt;
+  player.x = Math.max(-1.25, Math.min(1.25, player.x));
+
+  // 2. Throttle, Engine Torque Band & Braking
+  let accel = 0;
+  if (keys.up && !player.raceFinished) {
+    const topRef = Math.max(215, player.maxSpeed + 18);
+    const powerFactor = Math.max(0.38, Math.min(1.0, 1.0 - (player.speed / topRef)));
+    const bandBonus = (player.speed < 95) ? player.lowTorque : ((player.speed > 130) ? player.highBoost : player.lowTorque * 0.35);
+    accel = (player.accelRate + bandBonus) * powerFactor;
+    player.boostBar = Math.min(1, player.boostBar + 1.2 * dt);
+  } else {
+    player.boostBar = Math.max(0, player.boostBar - 2.2 * dt);
+  }
+
+  if (keys.down) accel -= 98;
+  if (keys.space) accel -= 145;
+  if (Math.abs(player.x) > 1.02) accel -= 60; // Off-road drag
+  accel -= (0.00018 * player.speed * player.speed + 4.0 + slope * 0.045);
+
+  player.speed = Math.max(0, Math.min(player.maxSpeed, player.speed + accel * dt));
+  const worldSpeed = (player.speed > 0.2) ? ((player.speed / 3.6) * 62.0 + 240.0 * Math.min(1, player.speed / 22)) * dt : 0;
+
+  if (!player.raceFinished && (keys.up || player.speed > 1)) {
+    player.raceTime += dt;
+  }
+  player.worldZ += worldSpeed;
+  player.distanceKm += (player.speed / 3600) * dt;
+  player.score += Math.floor((player.speed / 3600) * dt * 320);
+
+  // 3. Vertical Bump, Hill-Crest Hop & Coilover Suspension Physics
+  {
+    const speedNorm = Math.min(1.25, player.speed / 185);
+    const slopeDelta = player.prevSlope - slope;
+    player.prevSlope = slope;
+
+    const crestImpulse = Math.max(-32, Math.min(46, slopeDelta * speedNorm * 0.55));
+    if (Math.abs(crestImpulse) > 1.0 && speedNorm > 0.15) {
+      player.verticalVelocity += crestImpulse;
+    }
+
+    let unevenness = 1.0 + Math.abs(slope) * 0.015 + Math.abs(curSeg.roadBank) * 4.0;
+    const onKerb = (Math.abs(player.x) > 0.88 && Math.abs(player.x) <= 1.05);
+    if (onKerb) unevenness += 2.2;
+    if (Math.abs(player.x) > 1.05) unevenness += 3.2;
+
+    const roadWave = Math.sin(player.worldZ * 0.011) * 0.55
+                   + Math.sin(player.worldZ * 0.029) * 0.35
+                   + (onKerb ? Math.sin(player.worldZ * 0.14) * 0.65 : 0);
+    const bumpExcitation = (roadWave + 0.22 * Math.max(0, roadWave)) * unevenness * speedNorm * 58.0;
+
+    const prevOff = player.verticalOffset;
+    const kSpring = 150.0, cDamper = 17.5;
+    let vAccel = 0;
+    if (player.verticalOffset > 4.0) {
+      vAccel = -125.0 - (player.verticalOffset - 4.0) * 45.0 - cDamper * 0.45 * player.verticalVelocity;
+    } else {
+      vAccel = -kSpring * player.verticalOffset - cDamper * player.verticalVelocity + bumpExcitation;
+    }
+    player.verticalVelocity = Math.max(-65, Math.min(65, player.verticalVelocity + vAccel * dt));
+    player.verticalOffset = Math.max(-4.5, Math.min(14.0, player.verticalOffset + player.verticalVelocity * dt));
+
+    if (prevOff > 2.5 && player.verticalOffset <= 2.5 && player.verticalVelocity < -12) {
+      player.pitchG -= 0.016;
+    }
+  }
+
+  // Pitch, Roll & Gear/RPM
+  let targetPitch = keys.down ? -0.055 : (keys.up ? 0.032 : 0);
+  targetPitch += (slope * 0.00012) + (player.verticalOffset * 0.0022);
+  player.pitchG += (targetPitch - player.pitchG) * 6.0 * dt;
+  const targetRoll = -player.steerAngle * (player.speed / 200) * 0.055;
+  player.rollG += (targetRoll - player.rollG) * 7.0 * dt;
+
+  const s = player.speed;
+  player.gear = (s < 38) ? 1 : (s < 72) ? 2 : (s < 108) ? 3 : (s < 144) ? 4 : (s < 180) ? 5 : 6;
+  player.rpm = 1100 + ((s % 38) / 38) * 6400;
+
+  // 4. AI Traffic & Collisions
+  if (player.crashTimer > 0) player.crashTimer -= dt;
+  const lanes = [-0.72, -0.24, 0.24, 0.72];
+  for (const npc of traffic) {
+    if (npc.speed < npc.maxSpeed) npc.speed = Math.min(npc.maxSpeed, npc.speed + 42 * dt);
+    const npcWorldSpd = ((npc.speed / 3.6) * 62.0 + 240.0) * dt;
+    npc.worldZ += npcWorldSpd;
+    npc.laneTimer -= dt;
+    if (npc.laneTimer <= 0) {
+      npc.laneTimer = 2.5 + Math.random() * 2.5;
+      npc.targetX = lanes[Math.floor(Math.random() * 4)];
+    }
+    npc.x += (npc.targetX - npc.x) * 2.5 * dt;
+
+    if (!npc.hasFinished && npc.worldZ >= totalTrackZ) {
+      npc.hasFinished = true;
+      npc.finishTime = Math.max(0.1, player.raceTime);
+    }
+
+    // Collision check
+    const dz = Math.abs(npc.worldZ - player.worldZ);
+    const dx = Math.abs(npc.x - player.x);
+    if (dz < 145 && dx < 0.21 && player.crashTimer <= 0 && !player.raceFinished) {
+      player.crashTimer = 1.1;
+      player.crashCount++;
+      const dmg = Math.max(4, Math.round(14 / player.armorMult));
+      player.health = Math.max(10, player.health - dmg);
+      player.speed *= 0.68;
+      player.verticalVelocity = 24;
+      playTone(110, 0.22, 'sawtooth', 0.16);
+    }
+  }
+
+  // 5. Standings & Finish Line Coin Reward Calculation
+  const standings = getRaceStandings();
+  for (const e of standings) {
+    if (e.isPlayer) player.currentPosition = e.position;
+  }
+
+  if (!player.raceFinished && player.worldZ >= totalTrackZ) {
+    player.raceFinished = true;
+    player.finishTime = Math.max(0.1, player.raceTime);
+    traffic.forEach((npc, idx) => {
+      if (!npc.hasFinished) {
+        const remZ = Math.max(40, totalTrackZ - npc.worldZ);
+        const uPerSec = (Math.max(160, npc.speed) / 3.6) * 62 + 240;
+        npc.finishTime = player.finishTime + (remZ / uPerSec) + idx * 0.18;
+        npc.hasFinished = true;
+      }
+    });
+
+    const finalStandings = getRaceStandings();
+    for (const e of finalStandings) {
+      if (e.isPlayer) player.currentPosition = e.position;
+    }
+
+    const baseTable = [0, 500, 350, 250, 160, 110];
+    const baseCoins = baseTable[player.currentPosition] || 70;
+    const cleanBonus = (player.crashCount === 0) ? 100 : 0;
+    const diffMult = DIFFICULTIES[menuState.difficulty].mult;
+    const mpMult = mpState.connected ? 1.25 : 1.0;
+    const totalCoins = Math.round((baseCoins + cleanBonus) * diffMult * mpMult);
+
+    player.lastRaceBaseCoins = baseCoins;
+    player.lastRaceCleanBonus = cleanBonus;
+    player.lastRaceMult = diffMult * mpMult;
+    player.lastRaceCoinsEarned = totalCoins;
+
+    profile.coins += totalCoins;
+    profile.races++;
+    if (player.currentPosition === 1) profile.wins++;
+    if (player.currentPosition <= 3) profile.podiums++;
+    syncProfileToServer({
+      position: player.currentPosition,
+      coinsEarned: totalCoins,
+      carId: profile.selectedCar,
+      engineId: profile.selectedEngine
+    });
+    playTone(587.33, 0.18, 'triangle', 0.14);
+    setTimeout(() => playTone(880, 0.32, 'triangle', 0.16), 150);
+  }
+
+  // Send 25Hz multiplayer telemetry
+  if (mpState.connected) {
+    const now = performance.now();
+    if (now - mpState.lastTelemSent > 40) {
+      mpState.lastTelemSent = now;
+      sendWs({
+        type: "WS_TELEM",
+        id: mpState.myPeerId,
+        z: Math.round(player.worldZ),
+        x: Number(player.x.toFixed(3)),
+        s: Math.round(player.speed),
+        c: profile.selectedCar,
+        fin: player.raceFinished,
+        ft: Number(player.finishTime.toFixed(2))
+      });
+    }
+  }
+}
+
+// ============================================================================
+//  9. DRAWING HELPERS & 3D PHONG/GOURAUD SUPERCAR RENDERER
+// ============================================================================
+function roundRect(x, y, w, h, r, fill, stroke, lineW = 1.2) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineW; ctx.stroke(); }
+}
+
+function hitRect(r) {
+  return r && mouseX >= r.x && mouseX <= r.x + r.w && mouseY >= r.y && mouseY <= r.y + r.h;
+}
+
+// Draw a 3D Phong & Gouraud shaded supercar (rear or side preview) at center (cx, cy) with width cw, height ch
+function draw3DSupercar(cx, cy, cw, ch, carIdx, isBraking = false, yawShift = 0, rollDeg = 0, spitFlames = false) {
+  const car = CARS[carIdx] || CARS[0];
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (Math.abs(rollDeg) > 0.01) ctx.rotate(rollDeg * Math.PI / 180);
+
+  // 1. Ground contact AO shadow & crimson tail-light reflection pool
+  const ao = ctx.createRadialGradient(0, -4, 4, 0, -4, cw * 0.56);
+  ao.addColorStop(0, "rgba(4,6,12,0.92)");
+  ao.addColorStop(0.7, "rgba(6,8,14,0.55)");
+  ao.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = ao;
+  ctx.beginPath();
+  ctx.ellipse(0, -3, cw * 0.55, ch * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const poolAlpha = isBraking ? 0.62 : 0.34;
+  for (let side = -1; side <= 1; side += 2) {
+    const pg = ctx.createRadialGradient(side * cw * 0.30, 5, 2, side * cw * 0.30, 5, cw * 0.22);
+    pg.addColorStop(0, `rgba(255,32,38,${poolAlpha})`);
+    pg.addColorStop(1, "rgba(255,0,0,0)");
+    ctx.fillStyle = pg;
+    ctx.beginPath();
+    ctx.ellipse(side * cw * 0.30, 5, cw * 0.22, ch * 0.10, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 2. Wide 3D cylindrical rear performance tires + deep-dish alloy rim lip
+  const tw = cw * 0.17, th = ch * 0.32;
+  for (let side = -1; side <= 1; side += 2) {
+    const tx = (side < 0) ? -cw * 0.45 : (cw * 0.45 - tw);
+    const ty = -th + 2;
+    const tg = ctx.createLinearGradient(tx, ty, tx + tw, ty);
+    tg.addColorStop(0, "#080a0e");
+    tg.addColorStop(0.32, "#242934");
+    tg.addColorStop(0.55, "#3a4254");
+    tg.addColorStop(1, "#080a0e");
+    roundRect(tx, ty, tw, th, 5, tg, "#06080c", 1.2);
+  }
+
+  // 3. 3D Foreshortened receding side flanks & NACA ducts
+  for (let side = -1; side <= 1; side += 2) {
+    ctx.beginPath();
+    ctx.moveTo(side * cw * 0.49, -ch * 0.28);
+    ctx.lineTo(side * cw * 0.36 + yawShift * 0.5, -ch * 0.52);
+    ctx.lineTo(side * cw * 0.29 + yawShift * 0.5, -ch * 0.70);
+    ctx.lineTo(side * cw * 0.38 + yawShift * 0.2, -ch * 0.62);
+    ctx.closePath();
+    ctx.fillStyle = car.bodyMid;
+    ctx.fill();
+    ctx.strokeStyle = car.bodyHi;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // 4. Sculpted Widebody Rear Haunches with Dark Automotive Horizon Reflection Band
+  const bg = ctx.createLinearGradient(0, -ch * 0.66, 0, -ch * 0.15);
+  bg.addColorStop(0.0, car.bodyHi);
+  bg.addColorStop(0.22, car.bodyMid);
+  bg.addColorStop(0.38, car.bodyLo); // Dark automotive horizon reflection crease
+  bg.addColorStop(0.54, car.bodyMid);
+  bg.addColorStop(1.0, car.bodyLo);
+
+  ctx.beginPath();
+  ctx.moveTo(-cw * 0.49, -ch * 0.21);
+  ctx.bezierCurveTo(-cw * 0.52, -ch * 0.42, -cw * 0.47, -ch * 0.59, -cw * 0.38 + yawShift * 0.25, -ch * 0.64);
+  ctx.lineTo(cw * 0.38 + yawShift * 0.25, -ch * 0.64);
+  ctx.bezierCurveTo(cw * 0.47, -ch * 0.59, cw * 0.52, -ch * 0.42, cw * 0.49, -ch * 0.21);
+  ctx.lineTo(cw * 0.34, -ch * 0.16);
+  ctx.lineTo(-cw * 0.34, -ch * 0.16);
+  ctx.closePath();
+  ctx.fillStyle = bg;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(210,225,245,0.65)";
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+
+  // Dual-Lobe 3D Blinn-Phong Specular Clear-Coat Hotspots on Left & Right Fender Haunches
+  for (let side = -1; side <= 1; side += 2) {
+    const hx = side * cw * 0.37 + yawShift * 0.18;
+    const hy = -ch * 0.52;
+    const pg = ctx.createRadialGradient(hx, hy, 1, hx, hy, cw * 0.16);
+    pg.addColorStop(0, "rgba(255,255,255,0.88)");
+    pg.addColorStop(0.45, "rgba(220,240,255,0.34)");
+    pg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = pg;
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, cw * 0.16, ch * 0.13, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 5. Fastback Cabin Dome, Flying-Buttress C-Pillars & Rear Glass Canopy
+  const rg = ctx.createLinearGradient(0, -ch * 0.95, 0, -ch * 0.62);
+  rg.addColorStop(0, car.bodyHi);
+  rg.addColorStop(0.45, car.bodyMid);
+  rg.addColorStop(1, car.bodyLo);
+  ctx.beginPath();
+  ctx.moveTo(-cw * 0.36 + yawShift * 0.25, -ch * 0.62);
+  ctx.bezierCurveTo(-cw * 0.30 + yawShift * 0.4, -ch * 0.84, -cw * 0.22 + yawShift * 0.5, -ch * 0.94, -cw * 0.16 + yawShift * 0.55, -ch * 0.95);
+  ctx.lineTo(cw * 0.16 + yawShift * 0.55, -ch * 0.95);
+  ctx.bezierCurveTo(cw * 0.22 + yawShift * 0.5, -ch * 0.94, cw * 0.30 + yawShift * 0.4, -ch * 0.84, cw * 0.36 + yawShift * 0.25, -ch * 0.62);
+  ctx.closePath();
+  ctx.fillStyle = rg;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(225,238,255,0.75)";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Roof Crown Phong Hotspot
+  const rPhong = ctx.createRadialGradient(yawShift * 0.45, -ch * 0.90, 1, yawShift * 0.45, -ch * 0.90, cw * 0.20);
+  rPhong.addColorStop(0, "rgba(255,255,255,0.85)");
+  rPhong.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = rPhong;
+  ctx.beginPath();
+  ctx.ellipse(yawShift * 0.45, -ch * 0.90, cw * 0.20, ch * 0.11, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rear Canopy Glass + Louvers
+  ctx.beginPath();
+  ctx.moveTo(-cw * 0.15 + yawShift * 0.5, -ch * 0.89);
+  ctx.lineTo(cw * 0.15 + yawShift * 0.5, -ch * 0.89);
+  ctx.lineTo(cw * 0.22 + yawShift * 0.28, -ch * 0.64);
+  ctx.lineTo(-cw * 0.22 + yawShift * 0.28, -ch * 0.64);
+  ctx.closePath();
+  ctx.fillStyle = "#0b1018";
+  ctx.fill();
+
+  // 6. Recessed Rear Fascia, Tail Lights & Exhausts
+  roundRect(-cw * 0.42, -ch * 0.56, cw * 0.84, ch * 0.17, 4, "#0d1016", "#3e4654", 1.2);
+  const tlCol = isBraking ? "#ff2828" : "#c81620";
+  if (carIdx === 1) {
+    // VORTEX V12 Razor Chevron LEDs
+    ctx.strokeStyle = tlCol;
+    ctx.lineWidth = isBraking ? 3.5 : 2.2;
+    for (let side = -1; side <= 1; side += 2) {
+      ctx.beginPath();
+      ctx.moveTo(side * cw * 0.38, -ch * 0.53);
+      ctx.lineTo(side * cw * 0.22, -ch * 0.48);
+      ctx.lineTo(side * cw * 0.38, -ch * 0.43);
+      ctx.stroke();
+    }
+  } else if (carIdx === 2) {
+    // DRIFT SPEC-R Quad Skyline Circles
+    for (let side = -1; side <= 1; side += 2) {
+      for (let c = -1; c <= 1; c += 2) {
+        ctx.fillStyle = tlCol;
+        ctx.beginPath();
+        ctx.arc(side * cw * 0.28 + c * cw * 0.05, -ch * 0.48, cw * 0.034, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else {
+    // Continuous LED Strip + Dual Halo Clusters
+    roundRect(-cw * 0.40, -ch * 0.53, cw * 0.23, ch * 0.11, 3, tlCol, "#ff8888", 1);
+    roundRect(cw * 0.17, -ch * 0.53, cw * 0.23, ch * 0.11, 3, tlCol, "#ff8888", 1);
+  }
+
+  // Rear Wing / Spoiler
+  const wingY = -ch * (carIdx === 2 ? 0.81 : 0.67);
+  roundRect(-cw * 0.46 + yawShift * 0.25, wingY, cw * 0.92, ch * 0.055, 3, "#181c24", car.accent, 1.4);
+
+  // Twin Nitro Exhaust Flames
+  if (spitFlames) {
+    for (let side = -1; side <= 1; side += 2) {
+      const fx = side * cw * 0.24, fy = -ch * 0.14;
+      const fg = ctx.createRadialGradient(fx, fy, 1, fx, fy, cw * 0.08);
+      fg.addColorStop(0, "#ffffff");
+      fg.addColorStop(0.4, "#00e5ff");
+      fg.addColorStop(1, "rgba(255,60,10,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.ellipse(fx, fy + 4, cw * 0.05, ch * 0.12, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// ============================================================================
+//  10. 3D ROAD, SURROUNDINGS, COCKPIT & HUD RENDERER
+// ============================================================================
+function renderWorldAndHUD() {
+  const theme = CIRCUITS[menuState.theme] || CIRCUITS[0];
+  const isNight = (menuState.tod === 2);
+  const isDay = (menuState.tod === 0);
+
+  const horizonY = H * 0.42 + player.pitchG * 140;
+
+  // 1. Sky Backdrop & Mountain Range
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY + 20);
+  if (isNight) {
+    skyGrad.addColorStop(0, "#050712");
+    skyGrad.addColorStop(0.6, "#0d162c");
+    skyGrad.addColorStop(1, "#1c2848");
+  } else if (isDay) {
+    skyGrad.addColorStop(0, "#184b8a");
+    skyGrad.addColorStop(0.6, "#4d8fd6");
+    skyGrad.addColorStop(1, "#b8dcf8");
+  } else {
+    skyGrad.addColorStop(0, theme.skyTop);
+    skyGrad.addColorStop(0.55, theme.skyMid);
+    skyGrad.addColorStop(1, theme.skyBot);
+  }
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, horizonY + 10);
+
+  // Sun / Moon Disc with Phong atmospheric bloom
+  const sunX = W * 0.52 - getSegment(player.worldZ).curve * 38;
+  const sunY = horizonY - 68;
+  const sunG = ctx.createRadialGradient(sunX, sunY, 6, sunX, sunY, 95);
+  sunG.addColorStop(0, isNight ? "#e0f4ff" : "#fff7d0");
+  sunG.addColorStop(0.35, isNight ? "rgba(110,190,255,0.45)" : "rgba(255,170,65,0.55)");
+  sunG.addColorStop(1, "rgba(255,140,40,0)");
+  ctx.fillStyle = sunG;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, 95, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 3D Gouraud Faceted Mountain Peaks along Horizon
+  for (let m = -2; m < 10; m++) {
+    const mx = ((m * 210 - (player.worldZ * 0.02) % 210));
+    const mh = 65 + ((m * 37) % 55);
+    // Left sunlit facet
+    ctx.fillStyle = isNight ? "#162238" : (menuState.theme === 1 ? "#c6ddf0" : "#7a4c44");
+    ctx.beginPath();
+    ctx.moveTo(mx, horizonY);
+    ctx.lineTo(mx + 95, horizonY - mh);
+    ctx.lineTo(mx + 105, horizonY);
+    ctx.closePath();
+    ctx.fill();
+    // Right shadowed facet
+    ctx.fillStyle = isNight ? "#0c1322" : (menuState.theme === 1 ? "#5a7896" : "#3d2424");
+    ctx.beginPath();
+    ctx.moveTo(mx + 95, horizonY - mh);
+    ctx.lineTo(mx + 215, horizonY);
+    ctx.lineTo(mx + 105, horizonY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Base terrain fill below horizon
+  ctx.fillStyle = isNight ? "#0d121c" : theme.ground;
+  ctx.fillRect(0, horizonY, W, H - horizonY);
+
+  // 2. Project 70 Road Segments with Curves, Hills & Vertical Bump Camera Lift
+  const N = trackSegments.length;
+  const baseIdx = Math.floor(player.worldZ / SEG_LEN);
+  const basePct = (player.worldZ % SEG_LEN) / SEG_LEN;
+  const seg0 = getSegment(player.worldZ);
+  const seg1 = getSegment(player.worldZ + SEG_LEN);
+  const baseElev = seg0.elevation + (seg1.elevation - seg0.elevation) * basePct;
+  const eyeHeight = baseElev + 950 + player.verticalOffset * 12.5;
+  const camX = player.x * ROAD_WIDTH;
+  const camDepth = 0.82;
+
+  let dx = -seg0.curve * basePct;
+  let x = -dx * basePct;
+  const projSegs = [];
+
+  for (let n = 0; n < 72; n++) {
+    const seg = trackSegments[(baseIdx + n) % N];
+    const nextS = trackSegments[(baseIdx + n + 1) % N];
+    const z1 = (baseIdx + n) * SEG_LEN - player.worldZ;
+    const z2 = (baseIdx + n + 1) * SEG_LEN - player.worldZ;
+    x += dx;
+    dx += seg.curve;
+
+    const cZ1 = Math.max(10, z1);
+    const cZ2 = Math.max(10, z2);
+    const scale1 = camDepth / cZ1;
+    const scale2 = camDepth / cZ2;
+
+    const sx1 = (W / 2) + scale1 * (x - camX) * (W / 2);
+    const sy1 = horizonY - scale1 * (seg.elevation - eyeHeight) * (H / 2);
+    const sw1 = scale1 * ROAD_WIDTH * (W / 2);
+
+    const sx2 = (W / 2) + scale2 * (x + dx - camX) * (W / 2);
+    const sy2 = horizonY - scale2 * (nextS.elevation - eyeHeight) * (H / 2);
+    const sw2 = scale2 * ROAD_WIDTH * (W / 2);
+
+    projSegs.push({ seg, n, cZ1, sx1, sy1, sw1, sx2, sy2, sw2 });
+  }
+
+  // Draw Road Segments Back-to-Front
+  for (let i = projSegs.length - 1; i >= 0; i--) {
+    const ps = projSegs[i];
+    if (ps.sy1 <= ps.sy2) continue;
+
+    // Terrain strip
+    ctx.fillStyle = (ps.seg.index % 2 === 0)
+      ? (isNight ? "#0e1420" : theme.ground)
+      : (isNight ? "#0b101a" : theme.berm);
+    ctx.fillRect(0, ps.sy2, W, ps.sy1 - ps.sy2 + 1);
+
+    // 3D Sculpted Roadside Embankment Slopes
+    if (ps.n < 52) {
+      const bIn1 = ps.sw1 * 1.26, bIn2 = ps.sw2 * 1.26;
+      const bMid1 = ps.sw1 * 1.95, bMid2 = ps.sw2 * 1.95;
+      const rH1 = ps.sw1 * 0.22, rH2 = ps.sw2 * 0.22;
+      ctx.fillStyle = isNight ? "#161e2e" : theme.berm;
+      // Left embankment
+      ctx.beginPath();
+      ctx.moveTo(ps.sx1 - bMid1, ps.sy1 - rH1);
+      ctx.lineTo(ps.sx2 - bMid2, ps.sy2 - rH2);
+      ctx.lineTo(ps.sx2 - bIn2, ps.sy2);
+      ctx.lineTo(ps.sx1 - bIn1, ps.sy1);
+      ctx.fill();
+      // Right embankment
+      ctx.beginPath();
+      ctx.moveTo(ps.sx1 + bIn1, ps.sy1);
+      ctx.lineTo(ps.sx2 + bIn2, ps.sy2);
+      ctx.lineTo(ps.sx2 + bMid2, ps.sy2 - rH2);
+      ctx.lineTo(ps.sx1 + bMid1, ps.sy1 - rH1);
+      ctx.fill();
+    }
+
+    // 3D Beveled Rumble Kerbs
+    const r1 = ps.sw1 * 1.12, r2 = ps.sw2 * 1.12;
+    ctx.fillStyle = ps.seg.isRed ? "#e0282e" : "#f2f4f8";
+    ctx.beginPath();
+    ctx.moveTo(ps.sx1 - r1, ps.sy1);
+    ctx.lineTo(ps.sx2 - r2, ps.sy2);
+    ctx.lineTo(ps.sx2 + r2, ps.sy2);
+    ctx.lineTo(ps.sx1 + r1, ps.sy1);
+    ctx.fill();
+
+    // Asphalt Road Surface with Phong Specular Crown
+    ctx.fillStyle = (ps.seg.index % 2 === 0)
+      ? (isNight ? "#181c26" : "#383c44")
+      : (isNight ? "#141820" : "#31353d");
+    ctx.beginPath();
+    ctx.moveTo(ps.sx1 - ps.sw1, ps.sy1);
+    ctx.lineTo(ps.sx2 - ps.sw2, ps.sy2);
+    ctx.lineTo(ps.sx2 + ps.sw2, ps.sy2);
+    ctx.lineTo(ps.sx1 + ps.sw1, ps.sy1);
+    ctx.fill();
+
+    // Specular Reflection Lobe down center of road
+    if (ps.n < 32) {
+      ctx.fillStyle = isNight ? "rgba(110,185,255,0.08)" : "rgba(255,235,200,0.09)";
+      ctx.beginPath();
+      ctx.moveTo(ps.sx1 - ps.sw1 * 0.32, ps.sy1);
+      ctx.lineTo(ps.sx2 - ps.sw2 * 0.32, ps.sy2);
+      ctx.lineTo(ps.sx2 + ps.sw2 * 0.32, ps.sy2);
+      ctx.lineTo(ps.sx1 + ps.sw1 * 0.32, ps.sy1);
+      ctx.fill();
+    }
+
+    // Lane Divider Dashes
+    if (ps.seg.index % 3 === 0) {
+      ctx.strokeStyle = "rgba(235,242,255,0.75)";
+      ctx.lineWidth = Math.max(1, ps.sw1 * 0.015);
+      for (const lOff of [-0.5, 0, 0.5]) {
+        ctx.beginPath();
+        ctx.moveTo(ps.sx1 + ps.sw1 * lOff, ps.sy1);
+        ctx.lineTo(ps.sx2 + ps.sw2 * lOff, ps.sy2);
+        ctx.stroke();
+      }
+    }
+
+    // 3D AR Trajectory Gap Rails ([3] AR GAP)
+    if (player.arGuidesEnabled && ps.n >= 2 && ps.n <= 20) {
+      ctx.strokeStyle = "rgba(0,235,255,0.55)";
+      ctx.lineWidth = Math.max(1.5, ps.sw1 * 0.018);
+      for (const side of [-0.18, 0.18]) {
+        ctx.beginPath();
+        ctx.moveTo(ps.sx1 + ps.sw1 * (player.x + side), ps.sy1);
+        ctx.lineTo(ps.sx2 + ps.sw2 * (player.x + side), ps.sy2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 3. Roadside Scenery & Rival / Multiplayer Cars (Back-to-Front)
+  for (let i = projSegs.length - 1; i >= 1; i--) {
+    const ps = projSegs[i];
+    // Trees / Boulders
+    if (ps.seg.sceneryLeft && ps.n < 48) {
+      const tx = ps.sx1 - ps.sw1 * 1.48, ty = ps.sy1;
+      const th = ps.sw1 * 0.55, tw = th * 0.55;
+      ctx.fillStyle = "rgba(6,8,14,0.45)";
+      ctx.beginPath(); ctx.ellipse(tx, ty, tw * 0.4, Math.max(2, th * 0.06), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#48301e";
+      ctx.fillRect(tx - tw * 0.08, ty - th * 0.25, tw * 0.16, th * 0.25);
+      ctx.fillStyle = "#226436";
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - th);
+      ctx.lineTo(tx - tw * 0.5, ty - th * 0.22);
+      ctx.lineTo(tx + tw * 0.5, ty - th * 0.22);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (ps.seg.sceneryRight && ps.n < 48) {
+      const tx = ps.sx1 + ps.sw1 * 1.48, ty = ps.sy1;
+      const th = ps.sw1 * 0.52, tw = th * 0.55;
+      ctx.fillStyle = "#2b7842";
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - th);
+      ctx.lineTo(tx - tw * 0.5, ty);
+      ctx.lineTo(tx + tw * 0.5, ty);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Rival AI & Remote Multiplayer Cars in this depth slice
+    const zMin = player.worldZ + (ps.n - 1) * SEG_LEN;
+    const zMax = player.worldZ + ps.n * SEG_LEN;
+    const allRivals = [...traffic];
+    Object.values(mpState.peers).forEach(pr => {
+      allRivals.push({
+        name: `[P${pr.id + 1}] ${pr.name}`,
+        carModel: pr.car || 0,
+        worldZ: pr.worldZ || 0,
+        x: pr.x || 0,
+        isRemote: true
+      });
+    });
+
+    for (const rv of allRivals) {
+      if (rv.worldZ >= zMin && rv.worldZ < zMax) {
+        const cx = ps.sx1 + ps.sw1 * rv.x;
+        const cy = ps.sy1;
+        const cw = Math.max(18, ps.sw1 * 0.36);
+        const ch = cw * 0.48;
+        draw3DSupercar(cx, cy, cw, ch, rv.carModel % 4, false, 0, 0, false);
+        if (cw > 34) {
+          roundRect(cx - 48, cy - ch - 18, 96, 14, 3, "rgba(10,16,26,0.85)", rv.isRemote ? "#00e5ff" : "#ffc846", 1);
+          ctx.fillStyle = rv.isRemote ? "#78f5ff" : "#ffe082";
+          ctx.font = "bold 8px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(rv.name, cx, cy - ch - 8);
+        }
+      }
+    }
+  }
+
+  // 4. Render Player Vehicle (3rd-Person Chase Supercar OR 1st-Person Cockpit Dashboard)
+  if (player.thirdPersonView) {
+    const bumpUp = Math.max(-4.5, Math.min(14.0, player.verticalOffset));
+    const groundY = H - 34 + player.pitchG * 20;
+    const carX = W * 0.5 + player.steerAngle * 52 - player.rollG * 28;
+    const carY = groundY - bumpUp;
+    const rollDeg = player.steerAngle * 4.2 + player.rollG * 8.0;
+    const yawShift = player.steerAngle * 14.0;
+    const flames = keys.up && (player.rpm > 5400 || player.boostBar > 0.4);
+    draw3DSupercar(carX, carY, 316, 148, profile.selectedCar, keys.down, yawShift, rollDeg, flames);
+  } else {
+    // 1st-Person Cockpit Dashboard with Vertical Bump Heave, Gauges, Steering Wheel & Infotainment
+    const dashX = Math.round(player.rollG * 60);
+    const dashY = Math.round(player.pitchG * 90 - player.verticalOffset * 0.85);
+
+    // Rearview mirror at top
+    roundRect(W / 2 - 130, 56, 260, 46, 8, "#0e1522", "#506482", 2);
+    ctx.fillStyle = "#7892b5";
+    ctx.font = "bold 8px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("REARVIEW TELEMETRY MIRROR", W / 2, 82);
+
+    // Dashboard Hood & Console cowling
+    const dg = ctx.createLinearGradient(0, H - 235 + dashY, 0, H);
+    dg.addColorStop(0, "#192130");
+    dg.addColorStop(0.3, "#101622");
+    dg.addColorStop(1, "#080b12");
+    roundRect(-20 + dashX, H - 225 + dashY, W + 40, 250, 28, dg, "#344660", 2);
+
+    // Speedometer & RPM Dials
+    const drawDial = (dx, dy, rad, val, maxVal, unit, col) => {
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2);
+      ctx.fillStyle = "#0a0f18"; ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 2.2; ctx.stroke();
+      const frac = Math.min(1, Math.max(0, val / maxVal));
+      const ang = (-210 + frac * 240) * Math.PI / 180;
+      ctx.strokeStyle = "#ff3b47"; ctx.lineWidth = 2.8;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ang) * (rad - 10), Math.sin(ang) * (rad - 10)); ctx.stroke();
+      ctx.fillStyle = "#fff"; ctx.font = "bold 16px Arial"; ctx.textAlign = "center";
+      ctx.fillText(Math.round(val), 0, 6);
+      ctx.fillStyle = col; ctx.font = "bold 8px Arial";
+      ctx.fillText(unit, 0, 22);
+      ctx.restore();
+    };
+    drawDial(285 + dashX, H - 108 + dashY, 54, player.rpm, 8000, `RPM • G${player.gear}`, "#ffb52e");
+    drawDial(425 + dashX, H - 108 + dashY, 54, player.speed, 240, "KM/H", "#00e5ff");
+
+    // Steering Wheel
+    ctx.save();
+    ctx.translate(355 + dashX, H - 62 + dashY);
+    ctx.rotate(player.steerAngle * 0.65);
+    ctx.beginPath(); ctx.arc(0, 0, 86, 0, Math.PI * 2);
+    ctx.strokeStyle = "#252f42"; ctx.lineWidth = 16; ctx.stroke();
+    ctx.strokeStyle = "#00e5ff"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, 86, -Math.PI * 0.6, -Math.PI * 0.4); ctx.stroke();
+    ctx.restore();
+
+    // Center Console Touchscreen Infotainment
+    const sx = 615 + dashX, sy = 505 + dashY, sw = 355, sh = 175;
+    roundRect(sx, sy, sw, sh, 8, "#0b1320", "#00d8ff", 1.5);
+    const tabs = ["WEB", "MUSIC", "RADAR", "BUILD"];
+    for (let t = 0; t < 4; t++) {
+      const tw = sw / 4;
+      roundRect(sx + t * tw, sy, tw, 24, 3, player.infoMode === t ? "rgba(0,215,255,0.28)" : "#0e1726", "#263850", 1);
+      ctx.fillStyle = player.infoMode === t ? "#00f0ff" : "#9ab0cc";
+      ctx.font = "bold 9px Arial"; ctx.textAlign = "center";
+      ctx.fillText(tabs[t], sx + t * tw + tw / 2, sy + 16);
+    }
+    ctx.fillStyle = "#d8ecff"; ctx.font = "bold 11px Arial"; ctx.textAlign = "left";
+    ctx.fillText(`CHASSIS: ${player.carModelName}`, sx + 16, sy + 56);
+    ctx.fillStyle = "#ffd65a";
+    ctx.fillText(`ENGINE: ${player.engineModelName} (${player.hp} HP)`, sx + 16, sy + 80);
+    ctx.fillStyle = "#50f096";
+    ctx.fillText(`TOP SPEED: ${Math.round(player.maxSpeed)} KM/H  •  ARMOR: ${Math.round(player.armorMult * 100)}%`, sx + 16, sy + 104);
+    ctx.fillStyle = "#88c8ff";
+    ctx.fillText(`VERTICAL SUSPENSION TRAVEL: ${player.verticalOffset.toFixed(1)} PX`, sx + 16, sy + 128);
+  }
+
+  // 5. Top Motorsport HUD Bar (Overlap-Free Layout)
+  roundRect(0, 0, W, 50, 0, "rgba(8,12,20,0.92)", null);
+  ctx.fillStyle = "#00e5ff"; ctx.fillRect(0, 48, W, 2);
+
+  // Left: Speed, Gear & Camera Switch Button
+  ctx.fillStyle = "#fff"; ctx.font = "900 18px Arial"; ctx.textAlign = "left";
+  ctx.fillText(`${Math.round(player.speed)} KM/H`, 16, 24);
+  ctx.fillStyle = "#00e5ff"; ctx.font = "bold 10px Arial";
+  ctx.fillText(`GEAR ${player.gear}  •  ${Math.round(player.rpm)} RPM`, 16, 41);
+
+  // Camera Switch Button & POS/TIME Badge
+  roundRect(292, 6, 148, 22, 5, player.thirdPersonView ? "rgba(238,185,75,0.28)" : "rgba(0,210,255,0.25)",
+            player.thirdPersonView ? "#f5c85f" : "#00ebff", 1.5);
+  ctx.fillStyle = player.thirdPersonView ? "#ffe696" : "#b4f8ff";
+  ctx.font = "bold 9px Arial"; ctx.textAlign = "center";
+  ctx.fillText(player.thirdPersonView ? "1ST PERSON VIEW [C]" : "3RD PERSON VIEW [C]", 366, 20);
+
+  roundRect(292, 30, 148, 17, 4, "rgba(18,24,36,0.9)", "#f5c84b", 1);
+  ctx.fillStyle = "#ffdc5f"; ctx.font = "bold 9px Arial";
+  const dispTime = player.raceFinished ? player.finishTime : player.raceTime;
+  ctx.fillText(`POS ${player.currentPosition}/${player.totalRacers}  •  TIME ${dispTime.toFixed(1)}s`, 366, 42);
+
+  // Center Turn Advisory Pill & Compact Quick-Keys Status Badge (Bounded to 260px so it never overlaps POS/TIME)
+  const aheadCurve = getSegment(player.worldZ + 550).curve;
+  const cx = W / 2;
+  const isTurn = Math.abs(aheadCurve) > 0.7;
+  roundRect(cx - 130, 6, 260, 22, 4, isTurn ? "rgba(255,165,25,0.22)" : "rgba(20,30,45,0.75)",
+            isTurn ? "#ffbe28" : "#3a5070", 1.2);
+  ctx.fillStyle = isTurn ? "#ffd448" : "#b4d7f5"; ctx.font = "bold 10px Arial";
+  ctx.fillText(isTurn ? (aheadCurve > 0 ? "◀ SWEEPING CURVE LEFT" : "SWEEPING CURVE RIGHT ▶") : "▲ EXPRESSWAY SPEEDWAY ▲", cx, 21);
+
+  roundRect(cx - 130, 30, 260, 17, 4, "rgba(14,20,30,0.85)", "#374b69", 1);
+  ctx.fillStyle = "#a5d7f5"; ctx.font = "bold 9px Arial";
+  ctx.fillText("[Y] REPAIR  •  [N] LIGHTING  •  [M] MENU", cx, 42);
+
+  // 4 Interactive Feature Pills at btnY = 56 (Below header border)
+  const pills = [
+    { label: `[1] 3D MESH: ${player.zBuffer3DMode ? "ON" : "OFF"}`, act: player.zBuffer3DMode, col: "#00e6ff" },
+    { label: `[2] ADAS: ${player.adasEnabled ? "ON" : "OFF"}`, act: player.adasEnabled, col: "#2df082" },
+    { label: `[3] AR GAP: ${player.arGuidesEnabled ? "ON" : "OFF"}`, act: player.arGuidesEnabled, col: "#ffcd37" },
+    { label: `[4] PIXEL: ${player.pixelSize}px`, act: player.pixelSize > 1, col: "#eb73ff" }
+  ];
+  const btnW = 132, btnH = 22, btnGap = 8;
+  const startX = cx - (4 * btnW + 3 * btnGap) / 2;
+  for (let i = 0; i < 4; i++) {
+    const rx = startX + i * (btnW + btnGap);
+    roundRect(rx, 56, btnW, btnH, 5, pills[i].act ? "rgba(0,210,255,0.22)" : "rgba(14,18,28,0.86)",
+              pills[i].act ? pills[i].col : "#46546c", 1.3);
+    ctx.fillStyle = pills[i].act ? "#fff" : "#a0b2ca";
+    ctx.font = "bold 9px Arial";
+    ctx.fillText(pills[i].label, rx + btnW / 2, 70);
+  }
+
+  // Right: Coins, Score & Integrity
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#ffd84d"; ctx.font = "bold 12px Arial";
+  ctx.fillText(`COINS: ${profile.coins} 🪙   •   SCORE: ${player.score}`, W - 18, 22);
+  ctx.fillStyle = player.health > 40 ? "#38ef88" : "#ff4b55"; ctx.font = "bold 10px Arial";
+  ctx.fillText(`INTEGRITY: ${player.health}%   •   ${player.carModelName} (${player.hp} HP)`, W - 18, 41);
+
+  // Left Standings Tower at y = 56
+  const standings = getRaceStandings();
+  roundRect(14, 56, 210, 168, 6, "rgba(10,15,24,0.84)", "#283a52", 1.2);
+  ctx.fillStyle = "#00e5ff"; ctx.font = "bold 9px Arial"; ctx.textAlign = "left";
+  ctx.fillText("LIVE STANDINGS", 24, 72);
+  for (let i = 0; i < Math.min(6, standings.length); i++) {
+    const e = standings[i];
+    const ry = 80 + i * 23;
+    roundRect(20, ry, 198, 20, 3, e.isPlayer ? "rgba(0,220,255,0.25)" : "rgba(18,26,38,0.75)",
+              e.isPlayer ? "#00e5ff" : null, 1);
+    ctx.fillStyle = e.isPlayer ? "#8cf8ff" : "#dce6f5";
+    ctx.font = "bold 9px Arial";
+    ctx.fillText(`P${e.position}  ${e.name.substring(0, 22)}`, 26, ry + 14);
+  }
+
+  // Finish Line Scoreboard & Coin Reward Breakdown Overlay
+  if (player.raceFinished) {
+    const bw = 660, bh = 408, bx = (W - bw) / 2, by = (H - bh) / 2 - 10;
+    roundRect(bx, by, bw, bh, 12, "rgba(10,14,22,0.97)", "#f5c855", 2.5);
+    roundRect(bx + 14, by + 12, bw - 28, 36, 6, "rgba(245,195,70,0.18)", "#f5c855", 1);
+    ctx.fillStyle = "#ffdc5f"; ctx.font = "900 14px Arial"; ctx.textAlign = "center";
+    ctx.fillText(`CHECKERED FLAG — FINAL RACE STANDINGS (YOU: P${player.currentPosition}/${player.totalRacers})`, W / 2, by + 35);
+
+    // Coin Reward Banner
+    roundRect(bx + 14, by + 53, bw - 28, 36, 6, "rgba(48,36,10,0.9)", "#ffd241", 1.5);
+    ctx.fillStyle = "#ffe155"; ctx.font = "bold 11px Arial"; ctx.textAlign = "left";
+    const cleanStr = player.lastRaceCleanBonus > 0 ? ` + ${player.lastRaceCleanBonus} Clean` : "";
+    ctx.fillText(`RACE REWARD: +${player.lastRaceCoinsEarned} COINS  (P${player.currentPosition} Base: ${player.lastRaceBaseCoins}${cleanStr} × ${player.lastRaceMult.toFixed(2)}x)`, bx + 26, by + 75);
+    ctx.fillStyle = "#4bf596"; ctx.textAlign = "right";
+    ctx.fillText(`VAULT: ${profile.coins} COINS`, bx + bw - 26, by + 75);
+
+    for (let i = 0; i < Math.min(8, standings.length); i++) {
+      const e = standings[i];
+      const ry = by + 106 + i * 31;
+      roundRect(bx + 14, ry, bw - 28, 26, 4, e.isPlayer ? "rgba(0,225,255,0.24)" : "rgba(20,26,38,0.8)",
+                e.isPlayer ? "#00f0ff" : null, 1.2);
+      ctx.fillStyle = e.isPlayer ? "#80f8ff" : (i === 0 ? "#ffdc5a" : "#dce6f5");
+      ctx.font = "bold 11px Arial"; ctx.textAlign = "left";
+      ctx.fillText(`P${e.position}`, bx + 26, ry + 17);
+      ctx.fillText(e.name, bx + 85, ry + 17);
+      ctx.textAlign = "right";
+      ctx.fillText(`${e.finishTime.toFixed(2)}s`, bx + bw - 28, ry + 17);
+    }
+
+    roundRect(bx + 14, by + bh - 38, bw - 28, 26, 5, "rgba(245,195,70,0.16)", "#f5c855", 1);
+    ctx.fillStyle = "#ffe673"; ctx.font = "bold 10px Arial"; ctx.textAlign = "center";
+    ctx.fillText("PRESS [R] OR CLICK HERE FOR NEW RACE   •   PRESS [M] FOR GARAGE & MENU", W / 2, by + bh - 21);
+  }
+
+  // Multiplayer 3-2-1 Countdown Overlay
+  if (mpState.countdown > 0) {
+    const cdNum = Math.floor(mpState.countdown);
+    const cdText = cdNum >= 1 ? String(cdNum) : "GO!";
+    roundRect(W / 2 - 160, H / 2 - 110, 320, 130, 14, "rgba(10,15,25,0.92)", "#ffca28", 2.5);
+    ctx.fillStyle = cdNum >= 1 ? "#ffd03b" : "#2df06e";
+    ctx.font = "900 58px Arial"; ctx.textAlign = "center";
+    ctx.fillText(cdText, W / 2, H / 2 - 32);
+  }
+}
+
+// ============================================================================
+//  11. LUXURY MAIN MENU, DRIVER VIP LOUNGE, GARAGE & MULTIPLAYER UI
+// ============================================================================
+const uiRects = {
+  accountBadge: null,
+  soloTab: null,
+  garageTab: null,
+  mpTab: null,
+  diffBtns: [],
+  todBtns: [],
+  quickCars: [],
+  openGarageQuick: null,
+  trackCards: [],
+  startRaceBtn: null,
+  resetRaceBtn: null,
+  lightsBtn: null,
+  garageCarCards: [],
+  garageEngineCards: [],
+  // Login Modal Rects
+  loginSignInTab: null,
+  loginRegTab: null,
+  loginUserBox: null,
+  loginPassBox: null,
+  loginShowPass: null,
+  loginSubmitBtn: null,
+  registerDirectBtn: null,
+  loginCloseBtn: null,
+  savedUserChips: [],
+  // Multiplayer Rects
+  mpEditName: null,
+  mpCars: [],
+  mpTracks: [],
+  mpHostRoomBox: null,
+  mpHostRandBtn: null,
+  mpHostPassBox: null,
+  mpCreateBtn: null,
+  mpJoinRoomBox: null,
+  mpJoinPassBox: null,
+  mpJoinBtn: null,
+  mpRoomChips: [],
+  mpReadyBtn: null,
+  mpStartBtn: null,
+  mpLeaveBtn: null
+};
+
+function startTransitionToRace(resetFirst = false) {
+  if (resetFirst) resetRace();
+  if (menuState.showMenu) {
+    menuState.isTransitioning = true;
+    menuState.transitionFlash = 1.0;
+    playTone(520, 0.14, 'triangle', 0.12);
+  }
+}
+
+async function submitLoginOrRegister(isRegister) {
+  loginState.registerMode = isRegister;
+  const u = loginState.username.trim();
+  const p = loginState.password;
+  if (u.length < 2) {
+    loginState.statusMsg = "Driver Callsign must be at least 2 characters.";
+    loginState.isError = true;
+    return;
+  }
+  if (p.length < 4) {
+    loginState.statusMsg = "Security Passkey must be at least 4 characters.";
+    loginState.isError = true;
+    return;
+  }
+  try {
+    const endpoint = isRegister ? '/api/register' : '/api/login';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      loginState.statusMsg = data.error || "Authentication failed.";
+      loginState.isError = true;
+      playTone(180, 0.18, 'sawtooth', 0.12);
+      return;
+    }
+    profile.isLoggedIn = true;
+    profile.username = data.username;
+    profile.password = p;
+    profile.coins = data.coins ?? 500;
+    profile.ownedCars = data.ownedCars || 1;
+    profile.ownedEngines = data.ownedEngines || 1;
+    profile.selectedCar = data.selectedCar || 0;
+    profile.selectedEngine = data.selectedEngine || 0;
+    profile.wins = data.wins || 0;
+    profile.podiums = data.podiums || 0;
+    profile.races = data.races || 0;
+
+    menuState.previewCar = profile.selectedCar;
+    menuState.previewEngine = profile.selectedEngine;
+    applyCarAndEngineSpecs();
+
+    loginState.showModal = false;
+    loginState.password = "";
+    loginState.statusMsg = "";
+    menuState.bannerText = `WELCOME, ${profile.username.toUpperCase()}!  •  ${profile.coins} COINS IN VAULT  •  ${profile.wins} CAREER WINS`;
+    menuState.bannerError = false;
+    menuState.bannerTimer = 5.0;
+    fetchSavedUsers();
+    playTone(660, 0.15, 'triangle', 0.14);
+  } catch (e) {
+    loginState.statusMsg = "Network error communicating with server.";
+    loginState.isError = true;
+  }
+}
+
+function handleCarClick(carIdx) {
+  menuState.previewCar = carIdx;
+  const cs = CARS[carIdx];
+  if (ownsCar(carIdx)) {
+    profile.selectedCar = carIdx;
+    applyCarAndEngineSpecs();
+    syncProfileToServer();
+    if (mpState.connected) sendWs({ type: "WS_CAR_SYNC", id: mpState.myPeerId, car: carIdx });
+    menuState.bannerText = `CHASSIS EQUIPPED: ${cs.name}  —  ${cs.feature}`;
+    menuState.bannerError = false;
+    menuState.bannerTimer = 4.0;
+    playTone(540, 0.08, 'sine', 0.1);
+  } else if (profile.coins >= cs.price) {
+    profile.coins -= cs.price;
+    profile.ownedCars |= (1 << carIdx);
+    profile.selectedCar = carIdx;
+    applyCarAndEngineSpecs();
+    syncProfileToServer();
+    menuState.bannerText = `UNLOCKED & EQUIPPED: ${cs.name} (-${cs.price} COINS)!  ${cs.feature}`;
+    menuState.bannerError = false;
+    menuState.bannerTimer = 5.0;
+    playTone(784, 0.18, 'triangle', 0.15);
+  } else {
+    const need = cs.price - profile.coins;
+    menuState.bannerText = `LOCKED SUPERCAR: ${cs.name} REQUIRES ${cs.price} COINS (NEED ${need} MORE COINS — RACE TO EARN!)`;
+    menuState.bannerError = true;
+    menuState.bannerTimer = 4.5;
+    playTone(200, 0.14, 'sawtooth', 0.1);
+  }
+}
+
+function handleEngineClick(engIdx) {
+  menuState.previewEngine = engIdx;
+  const es = ENGINES[engIdx];
+  if (ownsEngine(engIdx)) {
+    profile.selectedEngine = engIdx;
+    applyCarAndEngineSpecs();
+    syncProfileToServer();
+    menuState.bannerText = `POWERTRAIN INSTALLED: ${es.name} (${es.hp} HP)  —  ${es.feature}`;
+    menuState.bannerError = false;
+    menuState.bannerTimer = 4.0;
+    playTone(580, 0.08, 'sine', 0.1);
+  } else if (profile.coins >= es.price) {
+    profile.coins -= es.price;
+    profile.ownedEngines |= (1 << engIdx);
+    profile.selectedEngine = engIdx;
+    applyCarAndEngineSpecs();
+    syncProfileToServer();
+    menuState.bannerText = `UNLOCKED & INSTALLED: ${es.name} (${es.hp} HP, -${es.price} COINS)!  ${es.feature}`;
+    menuState.bannerError = false;
+    menuState.bannerTimer = 5.0;
+    playTone(880, 0.18, 'triangle', 0.15);
+  } else {
+    const need = es.price - profile.coins;
+    menuState.bannerText = `LOCKED POWERTRAIN: ${es.name} REQUIRES ${es.price} COINS (NEED ${need} MORE COINS!)`;
+    menuState.bannerError = true;
+    menuState.bannerTimer = 4.5;
+    playTone(200, 0.14, 'sawtooth', 0.1);
+  }
+}
+
+function renderDriverLoginLounge() {
+  uiRects.savedUserChips = [];
+  ctx.fillStyle = "rgba(4,7,14,0.88)";
+  ctx.fillRect(0, 0, W, H);
+
+  const cardW = 590, cardH = 466;
+  const cx = (W - cardW) / 2, cy = (H - cardH) / 2;
+  const bg = ctx.createLinearGradient(cx, cy, cx + cardW, cy + cardH);
+  bg.addColorStop(0, "rgba(15,23,38,0.98)");
+  bg.addColorStop(0.5, "rgba(10,16,28,0.98)");
+  bg.addColorStop(1, "rgba(7,11,20,0.99)");
+  roundRect(cx, cy, cardW, cardH, 14, bg, "rgba(255,210,75,0.75)", 1.8);
+
+  // Hero Supercar Studio Banner
+  const hb = { x: cx + 18, y: cy + 14, w: cardW - 36, h: 78 };
+  roundRect(hb.x, hb.y, hb.w, hb.h, 9, "rgba(18,28,46,0.92)", "rgba(55,78,110,0.65)", 1);
+  draw3DSupercar(hb.x + 68, hb.y + 70, 96, 46, 1, true, 0, 0, false);
+  draw3DSupercar(hb.x + hb.w - 68, hb.y + 70, 96, 46, 0, true, 0, 0, false);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ffd24b"; ctx.font = "bold 9px Arial";
+  ctx.fillText("APEX VELOCITY   •   WORLD TOUR", W / 2, hb.y + 20);
+  ctx.fillStyle = "#fff"; ctx.font = "900 20px Arial";
+  ctx.fillText("DRIVER VIP LOUNGE", W / 2, hb.y + 44);
+  ctx.fillStyle = "#87e1ff"; ctx.font = "bold 9px Arial";
+  ctx.fillText("PERSONAL GARAGE   •   COIN VAULT   •   CAREER LICENSE", W / 2, hb.y + 64);
+
+  if (profile.isLoggedIn) {
+    uiRects.loginCloseBtn = { x: hb.x + hb.w - 72, y: hb.y + 6, w: 64, h: 22 };
+    roundRect(uiRects.loginCloseBtn.x, uiRects.loginCloseBtn.y, 64, 22, 4, "#1c283c", "#82a0c4", 1);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 9px Arial";
+    ctx.fillText("✕ BACK", uiRects.loginCloseBtn.x + 32, uiRects.loginCloseBtn.y + 14);
+  } else {
+    uiRects.loginCloseBtn = null;
+  }
+
+  // Mode Tabs
+  const tabY = hb.y + hb.h + 12;
+  const tabW = (cardW - 46) / 2;
+  uiRects.loginSignInTab = { x: cx + 18, y: tabY, w: tabW, h: 32 };
+  uiRects.loginRegTab = { x: cx + 28 + tabW, y: tabY, w: tabW, h: 32 };
+
+  const signAct = !loginState.registerMode;
+  roundRect(uiRects.loginSignInTab.x, tabY, tabW, 32, 6, signAct ? "rgba(0,195,245,0.28)" : "#111928",
+            signAct ? "#00ebff" : "#2d3e56", signAct ? 1.8 : 1);
+  ctx.fillStyle = signAct ? "#78f8ff" : "#9bb0c8"; ctx.font = "bold 10px Arial";
+  ctx.fillText("SIGN IN TO LICENSE", uiRects.loginSignInTab.x + tabW / 2, tabY + 20);
+
+  const regAct = loginState.registerMode;
+  roundRect(uiRects.loginRegTab.x, tabY, tabW, 32, 6, regAct ? "rgba(255,195,45,0.28)" : "#111928",
+            regAct ? "#ffd741" : "#2d3e56", regAct ? 1.8 : 1);
+  ctx.fillStyle = regAct ? "#ffe664" : "#9bb0c8";
+  ctx.fillText("NEW DRIVER  (+500 COINS 🪙)", uiRects.loginRegTab.x + tabW / 2, tabY + 20);
+
+  // Status Banner
+  const formY = tabY + 40;
+  roundRect(cx + 18, formY, cardW - 36, 28, 5,
+            loginState.statusMsg ? (loginState.isError ? "rgba(120,20,32,0.9)" : "rgba(14,52,72,0.9)") : "rgba(14,21,34,0.85)",
+            loginState.statusMsg ? (loginState.isError ? "#ff5f69" : "#00e1ff") : "#26364c", 1.2);
+  ctx.fillStyle = loginState.statusMsg ? "#fff" : (regAct ? "#ffdc5f" : "#afd0f0");
+  ctx.font = "bold 9px Arial";
+  ctx.fillText(loginState.statusMsg || (regAct
+    ? "Create your Driver License — receive 500 Starting Coins & the APEX GT-R!"
+    : "Sign in to access your accumulated Coins, Supercars, and Custom Engines."), W / 2, formY + 18);
+
+  const cursorOn = Math.sin(menuState.animTime * 6.5) >= 0;
+
+  // Username Box
+  const uY = formY + 34;
+  ctx.textAlign = "left"; ctx.fillStyle = "#afc8e4"; ctx.font = "bold 9px Arial";
+  ctx.fillText("DRIVER CALLSIGN  (TYPE ON KEYBOARD OR CLICK TO EDIT)", cx + 20, uY + 11);
+  uiRects.loginUserBox = { x: cx + 18, y: uY + 16, w: cardW - 36, h: 38 };
+  const uFocus = (loginState.focusField === 0);
+  roundRect(uiRects.loginUserBox.x, uiRects.loginUserBox.y, uiRects.loginUserBox.w, 38, 6,
+            uFocus ? "#142032" : "#0d1420", uFocus ? "#00ebff" : "#344862", uFocus ? 1.8 : 1.1);
+  roundRect(uiRects.loginUserBox.x + 6, uiRects.loginUserBox.y + 6, 26, 26, 4, uFocus ? "rgba(0,210,255,0.25)" : "#162234", "#415a78", 1);
+  ctx.fillStyle = uFocus ? "#70f5ff" : "#91aac8"; ctx.font = "bold 9px Arial"; ctx.textAlign = "center";
+  ctx.fillText("ID", uiRects.loginUserBox.x + 19, uiRects.loginUserBox.y + 22);
+
+  ctx.textAlign = "left"; ctx.font = "bold 13px Arial";
+  ctx.fillStyle = loginState.username ? "#fff" : "#5f7691";
+  const uDisp = loginState.username ? (loginState.username + (uFocus && cursorOn ? " ▋" : "")) : "Type or click to enter driver name...";
+  ctx.fillText(uDisp, uiRects.loginUserBox.x + 40, uiRects.loginUserBox.y + 24);
+
+  // Password Box
+  const pY = uY + 60;
+  ctx.fillStyle = "#afc8e4"; ctx.font = "bold 9px Arial";
+  ctx.fillText("SECURITY PASSKEY", cx + 20, pY + 11);
+  uiRects.loginPassBox = { x: cx + 18, y: pY + 16, w: cardW - 36 - 86, h: 38 };
+  uiRects.loginShowPass = { x: cx + cardW - 18 - 78, y: pY + 16, w: 78, h: 38 };
+  const pFocus = (loginState.focusField === 1);
+  roundRect(uiRects.loginPassBox.x, uiRects.loginPassBox.y, uiRects.loginPassBox.w, 38, 6,
+            pFocus ? "#142032" : "#0d1420", pFocus ? "#ffd23c" : "#344862", pFocus ? 1.8 : 1.1);
+  roundRect(uiRects.loginPassBox.x + 6, uiRects.loginPassBox.y + 6, 26, 26, 4, pFocus ? "rgba(255,195,45,0.25)" : "#162234", "#415a78", 1);
+  ctx.fillStyle = pFocus ? "#ffe15a" : "#91aac8"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center";
+  ctx.fillText("KEY", uiRects.loginPassBox.x + 19, uiRects.loginPassBox.y + 22);
+
+  const masked = loginState.showPass ? loginState.password : "•".repeat(loginState.password.length);
+  ctx.textAlign = "left"; ctx.font = "bold 13px Arial";
+  ctx.fillStyle = loginState.password ? "#ffe15a" : "#5f7691";
+  const pDisp = loginState.password ? (masked + (pFocus && cursorOn ? " ▋" : "")) : "Type or click to enter passkey...";
+  ctx.fillText(pDisp, uiRects.loginPassBox.x + 40, uiRects.loginPassBox.y + 24);
+
+  roundRect(uiRects.loginShowPass.x, uiRects.loginShowPass.y, 78, 38, 6, "#141e2e", "#445c7c", 1.1);
+  ctx.fillStyle = "#cde1f8"; ctx.font = "bold 9px Arial"; ctx.textAlign = "center";
+  ctx.fillText(loginState.showPass ? "HIDE KEY" : "VIEW KEY", uiRects.loginShowPass.x + 39, uiRects.loginShowPass.y + 23);
+
+  // Side-by-Side Action Buttons: [ ▶ SIGN IN & ENTER ] and [ ✚ REGISTER (+500 🪙) ]
+  const subY = pY + 64;
+  const halfW = (cardW - 36 - 12) / 2;
+  uiRects.loginSubmitBtn = { x: cx + 18, y: subY, w: halfW, h: 42 };
+  uiRects.registerDirectBtn = { x: cx + 18 + halfW + 12, y: subY, w: halfW, h: 42 };
+
+  const lg = ctx.createLinearGradient(uiRects.loginSubmitBtn.x, subY, uiRects.loginSubmitBtn.x, subY + 42);
+  lg.addColorStop(0, "#19eb8c"); lg.addColorStop(1, "#00964e");
+  roundRect(uiRects.loginSubmitBtn.x, subY, halfW, 42, 7, lg, "#96ffcb", 1.6);
+  ctx.fillStyle = "#05140a"; ctx.font = "900 12px Arial";
+  ctx.fillText("▶  SIGN IN & ENTER", uiRects.loginSubmitBtn.x + halfW / 2, subY + 26);
+
+  const rg = ctx.createLinearGradient(uiRects.registerDirectBtn.x, subY, uiRects.registerDirectBtn.x, subY + 42);
+  rg.addColorStop(0, "#ffd84d"); rg.addColorStop(1, "#c87e0c");
+  roundRect(uiRects.registerDirectBtn.x, subY, halfW, 42, 7, rg, "#fff0a0", 1.6);
+  ctx.fillStyle = "#180e04"; ctx.font = "900 12px Arial";
+  ctx.fillText("✚  REGISTER (+500 🪙)", uiRects.registerDirectBtn.x + halfW / 2, subY + 26);
+
+  // Registered Drivers Bar
+  const chipY = subY + 52;
+  roundRect(cx + 18, chipY, cardW - 36, 46, 6, "rgba(10,15,25,0.9)", "#24344a", 1);
+  if (profile.savedUsers.length === 0) {
+    ctx.fillStyle = "#96b2d0"; ctx.font = "bold 9px Arial";
+    ctx.fillText("NEW DRIVER BONUS: Register your Driver Callsign above to claim 500 Starting Coins!", W / 2, chipY + 27);
+  } else {
+    ctx.textAlign = "left"; ctx.fillStyle = "#96b2d0"; ctx.font = "bold 8px Arial";
+    ctx.fillText("REGISTERED DRIVERS  (CLICK TO SELECT PROFILE):", cx + 30, chipY + 14);
+    let curX = cx + 30;
+    for (const uName of profile.savedUsers) {
+      const cw = Math.max(76, uName.length * 8 + 24);
+      if (curX + cw > cx + cardW - 26) break;
+      const cr = { x: curX, y: chipY + 20, w: cw, h: 21 };
+      const sel = (loginState.username.toLowerCase() === uName.toLowerCase());
+      roundRect(cr.x, cr.y, cr.w, cr.h, 4, sel ? "rgba(0,215,255,0.25)" : "#141f32", sel ? "#00ebff" : "#3e5878", 1);
+      ctx.fillStyle = sel ? "#82f8ff" : "#fff"; ctx.font = "bold 9px Arial"; ctx.textAlign = "center";
+      ctx.fillText(uName, cr.x + cr.w / 2, cr.y + 14);
+      uiRects.savedUserChips.push({ rect: cr, name: uName });
+      curX += cw + 6;
+    }
+  }
+}
+
+function renderGarageTab(contentX, contentW, topY) {
+  let curY = topY;
+  roundRect(contentX, curY, contentW, 28, 6,
+            (menuState.bannerTimer > 0 && menuState.bannerText)
+              ? (menuState.bannerError ? "rgba(125,22,32,0.92)" : "rgba(14,58,42,0.92)")
+              : "rgba(13,20,32,0.9)",
+            (menuState.bannerTimer > 0 && menuState.bannerText)
+              ? (menuState.bannerError ? "#ff555f" : "#2df087")
+              : "#2e405a", 1.2);
+  ctx.fillStyle = (menuState.bannerTimer > 0 && menuState.bannerText) ? "#fff" : "#ffda55";
+  ctx.font = "bold 10px Arial"; ctx.textAlign = "center";
+  ctx.fillText((menuState.bannerTimer > 0 && menuState.bannerText)
+    ? menuState.bannerText
+    : "CUSTOMIZATION SHOWROOM: Select any Owned Car or Engine to Equip, or click any Locked item to Unlock with Coins!",
+    W / 2, curY + 18);
+  curY += 34;
+
+  const colGap = 12;
+  const leftW = Math.round(contentW * 0.34);
+  const rightW = Math.round(contentW * 0.34);
+  const centerW = contentW - leftW - rightW - 2 * colGap;
+  const panelH = 430;
+
+  // LEFT COLUMN: 4 SUPERCARS
+  ctx.textAlign = "left"; ctx.fillStyle = "#00e6ff"; ctx.font = "900 10px Arial";
+  ctx.fillText("01  •  SUPERCAR LINEUP (4 CHASSIS)", contentX, curY + 15);
+  uiRects.garageCarCards = [];
+  const carCardY = curY + 24, carGap = 7, carCardH = Math.floor((panelH - 24 - 3 * carGap) / 4);
+
+  for (let i = 0; i < 4; i++) {
+    const cIdx = CAR_DISPLAY_ORDER[i];
+    const cs = CARS[cIdx];
+    const owned = ownsCar(cIdx);
+    const eq = (profile.selectedCar === cIdx);
+    const prev = (menuState.previewCar === cIdx);
+    const canBuy = (profile.coins >= cs.price);
+    const card = { x: contentX, y: carCardY + i * (carCardH + carGap), w: leftW, h: carCardH };
+    uiRects.garageCarCards.push({ rect: card, idx: cIdx });
+
+    roundRect(card.x, card.y, card.w, card.h, 7, eq ? "#14243a" : "#0e1522",
+              eq ? cs.accent : (prev ? "#ffd74b" : "#28384e"), eq ? 2 : 1.2);
+    ctx.fillStyle = owned ? cs.accent : "#6e788a";
+    ctx.fillRect(card.x, card.y + 6, 4, card.h - 12);
+
+    draw3DSupercar(card.x + 38, card.y + card.h - 16, 56, 36, cIdx, true, 0, 0, false);
+
+    const tx = card.x + 74;
+    ctx.textAlign = "left"; ctx.fillStyle = "#fff"; ctx.font = "900 11px Arial";
+    ctx.fillText(cs.name, tx, card.y + 18);
+
+    // Status Badge
+    const bx = card.x + card.w - 96, by = card.y + 5;
+    if (eq) {
+      roundRect(bx, by, 88, 17, 4, "rgba(40,235,130,0.22)", "#28eb82", 1.2);
+      ctx.fillStyle = "#3cfa91"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center";
+      ctx.fillText("✓ EQUIPPED", bx + 44, by + 12);
+    } else if (owned) {
+      roundRect(bx, by, 88, 17, 4, "rgba(0,210,255,0.16)", "#00d7ff", 1);
+      ctx.fillStyle = "#82ebff"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center";
+      ctx.fillText("OWNED • EQUIP", bx + 44, by + 12);
+    } else {
+      roundRect(bx, by, 88, 17, 4, canBuy ? "rgba(255,195,35,0.22)" : "rgba(45,30,36,0.75)",
+                canBuy ? "#ffd23c" : "#a54b55", 1.2);
+      ctx.fillStyle = canBuy ? "#ffe155" : "#ff8287"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center";
+      ctx.fillText(`🔒 ${cs.price} 🪙`, bx + 44, by + 12);
+    }
+
+    ctx.textAlign = "left"; ctx.fillStyle = cs.accent; ctx.font = "bold 9px Arial";
+    ctx.fillText(`${cs.maxSpeed} KM/H BASE  •  GRIP ${Math.round(cs.grip * 100)}%  •  ARMOR ${Math.round(cs.armor * 100)}%`, tx, card.y + 34);
+    ctx.fillStyle = "#a0b4cd"; ctx.font = "8px Arial";
+    ctx.fillText(cs.feature.substring(0, 56), tx, card.y + 50);
+  }
+
+  // CENTER COLUMN: SHOWROOM STAGE & LIVE DYNO SPECS
+  const centerX = contentX + leftW + colGap;
+  roundRect(centerX, curY, centerW, panelH, 8, "rgba(11,16,26,0.96)", "rgba(0,220,255,0.6)", 1.5);
+  ctx.fillStyle = "#ffd241"; ctx.fillRect(centerX, curY, centerW, 3);
+
+  const cSpec = CARS[menuState.previewCar] || CARS[0];
+  const eSpec = ENGINES[menuState.previewEngine] || ENGINES[0];
+
+  ctx.textAlign = "center"; ctx.fillStyle = "#ffdc50"; ctx.font = "900 10px Arial";
+  ctx.fillText("SHOWROOM STAGE  •  LIVE DYNO SPECS", centerX + centerW / 2, curY + 18);
+
+  const stg = { x: centerX + 12, y: curY + 28, w: centerW - 24, h: 118 };
+  roundRect(stg.x, stg.y, stg.w, stg.h, 7, "#0d1624", "#2a3c56", 1);
+  ctx.strokeStyle = cSpec.accent; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.ellipse(stg.x + stg.w / 2, stg.y + stg.h - 18, stg.w * 0.42, 14, 0, 0, Math.PI * 2); ctx.stroke();
+
+  const hoverYaw = Math.sin(menuState.animTime * 2.0) * 6.0;
+  draw3DSupercar(stg.x + stg.w / 2, stg.y + stg.h - 12, 195, 92, cSpec.id, true, hoverYaw, 0, true);
+
+  const combSpeed = cSpec.maxSpeed + eSpec.topBonus;
+  const combAccel = cSpec.accel + eSpec.accelBonus + (eSpec.lowTorque + eSpec.highBoost) * 0.35;
+  const combGrip = cSpec.grip * eSpec.gripMod;
+  const combArmor = cSpec.armor * eSpec.armorMod;
+
+  const specY = stg.y + stg.h + 18;
+  ctx.fillStyle = "#fff"; ctx.font = "900 12px Arial";
+  ctx.fillText(`${cSpec.name}  +  ${eSpec.name}`, centerX + centerW / 2, specY);
+  ctx.fillStyle = "#ffd746"; ctx.font = "bold 10px Arial";
+  ctx.fillText(`POWER: ${eSpec.hp} HP   •   MAX SPEED: ${Math.round(combSpeed)} KM/H`, centerX + centerW / 2, specY + 18);
+
+  const drawDynoBar = (by, label, valTxt, baseF, totF, col) => {
+    const bx = centerX + 14, bw = centerW - 28;
+    ctx.textAlign = "left"; ctx.fillStyle = "#afc3dc"; ctx.font = "bold 9px Arial";
+    ctx.fillText(label, bx, by);
+    ctx.textAlign = "right"; ctx.fillStyle = col;
+    ctx.fillText(valTxt, bx + bw, by);
+    ctx.fillStyle = "#141c2a"; ctx.fillRect(bx, by + 5, bw, 8);
+    const bW = Math.round(bw * Math.max(0.05, Math.min(1, baseF)));
+    const tW = Math.round(bw * Math.max(0.05, Math.min(1, totF)));
+    ctx.fillStyle = col; ctx.fillRect(bx, by + 5, Math.min(bW, tW), 8);
+    if (tW > bW) {
+      ctx.fillStyle = "#2df587"; ctx.fillRect(bx + bW, by + 5, tW - bW, 8);
+    }
+  };
+  const barY = specY + 38;
+  drawDynoBar(barY, "TOP SPEED", `${Math.round(combSpeed)} KM/H (+${eSpec.topBonus})`, (cSpec.maxSpeed - 180) / 60, (combSpeed - 180) / 60, "#00e1ff");
+  drawDynoBar(barY + 28, "ACCELERATION", `${Math.round(combAccel)} RATING (${eSpec.hp} HP)`, (cSpec.accel - 75) / 65, (combAccel - 75) / 65, "#ffc32d");
+  drawDynoBar(barY + 56, "CORNERING GRIP", `${Math.round(combGrip * 100)}%`, cSpec.grip / 1.4, combGrip / 1.4, "#af7dff");
+  drawDynoBar(barY + 84, "ARMOR DURABILITY", `${Math.round(combArmor * 100)}%`, cSpec.armor / 1.65, combArmor / 1.65, "#32eb8c");
+
+  roundRect(centerX + 12, curY + panelH - 58, centerW - 24, 48, 6, "rgba(16,24,36,0.9)", "rgba(255,205,60,0.55)", 1);
+  ctx.textAlign = "center"; ctx.fillStyle = "#ffdc50"; ctx.font = "bold 9px Arial";
+  ctx.fillText("CHAMPIONSHIP PRIZE PURSE", centerX + centerW / 2, curY + panelH - 42);
+  ctx.fillStyle = "#c3d7eb"; ctx.font = "bold 8px Arial";
+  ctx.fillText("1st: 500 COINS • 2nd: 350 • 3rd: 250 • Clean Race: +100", centerX + centerW / 2, curY + panelH - 27);
+  ctx.fillText("Difficulty Multiplier: Rookie 1.0x | Pro 1.5x | Championship 2.5x", centerX + centerW / 2, curY + panelH - 15);
+
+  // RIGHT COLUMN: 5 ENGINE POWERTRAINS
+  const rightX = centerX + centerW + colGap;
+  ctx.textAlign = "left"; ctx.fillStyle = "#ffcd37"; ctx.font = "900 10px Arial";
+  ctx.fillText("02  •  ENGINE POWERTRAINS (5 BLOCKS)", rightX, curY + 15);
+  uiRects.garageEngineCards = [];
+  const engCardY = curY + 24, engGap = 6, engCardH = Math.floor((panelH - 24 - 4 * engGap) / 5);
+
+  for (let e = 0; e < 5; e++) {
+    const es = ENGINES[e];
+    const owned = ownsEngine(e);
+    const eq = (profile.selectedEngine === e);
+    const prev = (menuState.previewEngine === e);
+    const canBuy = (profile.coins >= es.price);
+    const card = { x: rightX, y: engCardY + e * (engCardH + engGap), w: rightW, h: engCardH };
+    uiRects.garageEngineCards.push({ rect: card, idx: e });
+
+    roundRect(card.x, card.y, card.w, card.h, 7, eq ? "#162436" : "#0d131e",
+              eq ? es.accent : (prev ? "#ffd74b" : "#28384e"), eq ? 2 : 1.1);
+    ctx.fillStyle = owned ? es.accent : "#6e788a";
+    ctx.fillRect(card.x, card.y + 5, 4, card.h - 10);
+
+    roundRect(card.x + 10, card.y + 7, 52, card.h - 14, 4, "#121a28", es.accent, 1.2);
+    ctx.textAlign = "center"; ctx.fillStyle = es.accent; ctx.font = "900 12px Arial";
+    ctx.fillText(es.hp, card.x + 36, card.y + 26);
+    ctx.fillStyle = "#b9cde1"; ctx.font = "bold 8px Arial";
+    ctx.fillText("HP", card.x + 36, card.y + 40);
+
+    const tx = card.x + 70;
+    ctx.textAlign = "left"; ctx.fillStyle = "#fff"; ctx.font = "900 10px Arial";
+    ctx.fillText(es.name, tx, card.y + 16);
+
+    const bx = card.x + card.w - 92, by = card.y + 4;
+    if (eq) {
+      roundRect(bx, by, 86, 16, 4, "rgba(40,235,130,0.22)", "#28eb82", 1.2);
+      ctx.fillStyle = "#3cfa91"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center";
+      ctx.fillText("✓ INSTALLED", bx + 43, by + 11);
+    } else if (owned) {
+      roundRect(bx, by, 86, 16, 4, "rgba(0,210,255,0.16)", "#00d7ff", 1);
+      ctx.fillStyle = "#82ebff"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center";
+      ctx.fillText("OWNED • INSTALL", bx + 43, by + 11);
+    } else {
+      roundRect(bx, by, 86, 16, 4, canBuy ? "rgba(255,195,35,0.22)" : "rgba(45,30,36,0.75)",
+                canBuy ? "#ffd23c" : "#a54b55", 1.2);
+      ctx.fillStyle = canBuy ? "#ffe155" : "#ff8287"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center";
+      ctx.fillText(`🔒 ${es.price} 🪙`, bx + 43, by + 11);
+    }
+
+    ctx.textAlign = "left"; ctx.fillStyle = es.accent; ctx.font = "bold 8px Arial";
+    ctx.fillText(`${es.layout}  •  +${es.topBonus} KM/H  •  +${es.accelBonus} ACCEL`, tx, card.y + 30);
+    ctx.fillStyle = "#9bb0c8"; ctx.font = "8px Arial";
+    ctx.fillText(es.feature.substring(0, 56), tx, card.y + 44);
+  }
+
+  // Bottom Dock
+  const actY = curY + panelH + 10;
+  uiRects.startRaceBtn = { x: W / 2 - 260, y: actY, w: 300, h: 38 };
+  uiRects.resetRaceBtn = { x: W / 2 + 54, y: actY, w: 210, h: 38 };
+  roundRect(uiRects.startRaceBtn.x, actY, 300, 38, 6, "#0ad778", "#82ffc3", 1.6);
+  ctx.fillStyle = "#06120a"; ctx.font = "900 12px Arial"; ctx.textAlign = "center";
+  ctx.fillText("▶  RACE WITH THIS BUILD  [ENTER]", uiRects.startRaceBtn.x + 150, actY + 24);
+
+  roundRect(uiRects.resetRaceBtn.x, actY, 210, 38, 6, "#162030", "#00d7ff", 1.4);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 10px Arial";
+  ctx.fillText("◀  BACK TO CIRCUITS", uiRects.resetRaceBtn.x + 105, actY + 23);
+}
+
+function renderMultiplayerTab(contentX, contentW, topY) {
+  ensureWebSocket();
+  uiRects.mpRoomChips = [];
+  const paneW = 1080, paneX = (W - paneW) / 2;
+  let curY = topY;
+
+  // Top Profile & Server Status Bar
+  roundRect(paneX, curY, paneW, 50, 6, "rgba(12,18,28,0.95)", "#283850", 1.2);
+  uiRects.mpEditName = { x: paneX + 10, y: curY + 7, w: 230, h: 36 };
+  roundRect(uiRects.mpEditName.x, uiRects.mpEditName.y, 230, 36, 4, "#121a28", "#00d7ff", 1.2);
+  ctx.textAlign = "left"; ctx.fillStyle = "#00dcff"; ctx.font = "bold 8px Arial";
+  ctx.fillText("DRIVER CALLSIGN", uiRects.mpEditName.x + 10, uiRects.mpEditName.y + 13);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 12px Arial";
+  ctx.fillText(profile.username || "Driver", uiRects.mpEditName.x + 10, uiRects.mpEditName.y + 29);
+
+  ctx.fillStyle = "#50f596"; ctx.font = "bold 11px Arial";
+  ctx.fillText(`ONLINE SERVER: ${location.host}  (GLOBAL CROSS-NETWORK MULTIPLAYER ACTIVE)`, paneX + 260, curY + 23);
+  ctx.fillStyle = "#96b2d0"; ctx.font = "9px Arial";
+  ctx.fillText(`ACTIVE BUILD: ${player.carModelName} + ${player.engineModelName} (${player.hp} HP)  •  1.25x MULTIPLAYER COIN BONUS`, paneX + 260, curY + 39);
+
+  curY += 58;
+
+  if (mpState.errorTimer > 0 && mpState.errorText) {
+    roundRect(paneX, curY, paneW, 30, 5, "rgba(145,22,32,0.92)", "#ff5560", 1.4);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 11px Arial"; ctx.textAlign = "center";
+    ctx.fillText(`UNABLE TO JOIN ROOM: ${mpState.errorText}`, W / 2, curY + 19);
+    curY += 36;
+  }
+
+  if (!mpState.connected) {
+    const cardGap = 16, cardW = (paneW - cardGap) / 2, cardH = 265;
+    // Left Card: Host Room
+    const hc = { x: paneX, y: curY, w: cardW, h: cardH };
+    roundRect(hc.x, hc.y, cardW, cardH, 7, "rgba(13,19,29,0.95)", "#2a3a52", 1.5);
+    ctx.fillStyle = "#00dcff"; ctx.fillRect(hc.x, hc.y, cardW, 3);
+    ctx.textAlign = "left"; ctx.font = "bold 14px Arial";
+    ctx.fillText("01  •  HOST MULTIPLAYER ROOM", hc.x + 18, curY + 26);
+    ctx.fillStyle = "#91a5be"; ctx.font = "10px Arial";
+    ctx.fillText("Create an 8-driver online lobby secured by Room ID & Passkey.", hc.x + 18, curY + 44);
+
+    ctx.fillStyle = "#afc3dc"; ctx.font = "bold 9px Arial";
+    ctx.fillText("ROOM ID  (CLICK TO EDIT)", hc.x + 18, curY + 68);
+    uiRects.mpHostRoomBox = { x: hc.x + 18, y: curY + 74, w: cardW - 154, h: 32 };
+    uiRects.mpHostRandBtn = { x: hc.x + cardW - 128, y: curY + 74, w: 110, h: 32 };
+    roundRect(uiRects.mpHostRoomBox.x, uiRects.mpHostRoomBox.y, uiRects.mpHostRoomBox.w, 32, 4, "#131b28", "#00c8f0", 1);
+    ctx.fillStyle = "#00ebff"; ctx.font = "bold 13px Arial";
+    ctx.fillText(mpState.roomId, uiRects.mpHostRoomBox.x + 12, uiRects.mpHostRoomBox.y + 21);
+
+    roundRect(uiRects.mpHostRandBtn.x, uiRects.mpHostRandBtn.y, 110, 32, 4, "#182436", "#416491", 1);
+    ctx.fillStyle = "#c3e1ff"; ctx.font = "bold 9px Arial"; ctx.textAlign = "center";
+    ctx.fillText("NEW CODE", uiRects.mpHostRandBtn.x + 55, uiRects.mpHostRandBtn.y + 20);
+
+    ctx.textAlign = "left"; ctx.fillStyle = "#afc3dc"; ctx.font = "bold 9px Arial";
+    ctx.fillText("ROOM PASSKEY  (CLICK TO EDIT  |  BLANK = OPEN LOBBY)", hc.x + 18, curY + 124);
+    uiRects.mpHostPassBox = { x: hc.x + 18, y: curY + 130, w: cardW - 36, h: 32 };
+    roundRect(uiRects.mpHostPassBox.x, uiRects.mpHostPassBox.y, uiRects.mpHostPassBox.w, 32, 4, "#131b28", "#00c8f0", 1);
+    ctx.fillStyle = "#ffcd37"; ctx.font = "bold 11px Arial";
+    ctx.fillText(mpState.password ? `PASSKEY: ${mpState.password}` : "OPEN LOBBY (NO PASSKEY)", uiRects.mpHostPassBox.x + 12, uiRects.mpHostPassBox.y + 20);
+
+    uiRects.mpCreateBtn = { x: hc.x + 18, y: curY + cardH - 48, w: cardW - 36, h: 36 };
+    roundRect(uiRects.mpCreateBtn.x, uiRects.mpCreateBtn.y, uiRects.mpCreateBtn.w, 36, 5, "#00b9e6", "#6ef5ff", 1.5);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
+    ctx.fillText("CREATE & HOST ROOM", uiRects.mpCreateBtn.x + uiRects.mpCreateBtn.w / 2, uiRects.mpCreateBtn.y + 23);
+
+    // Right Card: Join Room
+    const jc = { x: paneX + cardW + cardGap, y: curY, w: cardW, h: cardH };
+    roundRect(jc.x, jc.y, cardW, cardH, 7, "rgba(13,19,29,0.95)", "#2a3a52", 1.5);
+    ctx.fillStyle = "#ffc328"; ctx.fillRect(jc.x, jc.y, cardW, 3);
+    ctx.textAlign = "left"; ctx.fillStyle = "#ffcd37"; ctx.font = "bold 14px Arial";
+    ctx.fillText("02  •  JOIN MULTIPLAYER ROOM", jc.x + 18, curY + 26);
+    ctx.fillStyle = "#91a5be"; ctx.font = "10px Arial";
+    ctx.fillText("Enter a Room ID & Passkey or click any active lobby below.", jc.x + 18, curY + 44);
+
+    ctx.fillStyle = "#afc3dc"; ctx.font = "bold 9px Arial";
+    ctx.fillText("ROOM ID  (CLICK TO EDIT)", jc.x + 18, curY + 68);
+    uiRects.mpJoinRoomBox = { x: jc.x + 18, y: curY + 74, w: cardW - 36, h: 32 };
+    roundRect(uiRects.mpJoinRoomBox.x, uiRects.mpJoinRoomBox.y, uiRects.mpJoinRoomBox.w, 32, 4, "#131b28", "#ffc328", 1);
+    ctx.fillStyle = "#ffd241"; ctx.font = "bold 13px Arial";
+    ctx.fillText(mpState.joinRoomId, uiRects.mpJoinRoomBox.x + 12, uiRects.mpJoinRoomBox.y + 21);
+
+    ctx.fillStyle = "#afc3dc"; ctx.font = "bold 9px Arial";
+    ctx.fillText("ROOM PASSKEY  (CLICK TO EDIT)", jc.x + 18, curY + 124);
+    uiRects.mpJoinPassBox = { x: jc.x + 18, y: curY + 130, w: cardW - 36, h: 32 };
+    roundRect(uiRects.mpJoinPassBox.x, uiRects.mpJoinPassBox.y, uiRects.mpJoinPassBox.w, 32, 4, "#131b28", "#ffc328", 1);
+    ctx.fillStyle = "#ffd241"; ctx.font = "bold 11px Arial";
+    ctx.fillText(mpState.joinPassword ? `PASSKEY: ${mpState.joinPassword}` : "NO PASSKEY", uiRects.mpJoinPassBox.x + 12, uiRects.mpJoinPassBox.y + 20);
+
+    // Discovered Rooms Bar
+    const db = { x: jc.x + 18, y: curY + 170, w: cardW - 36, h: 32 };
+    roundRect(db.x, db.y, db.w, 32, 4, "#0a0f18", "#1e2a3c", 1);
+    if (mpState.discoveredRooms.length === 0) {
+      ctx.fillStyle = "#87a0be"; ctx.font = "9px Arial";
+      ctx.fillText("Live rooms hosted by any player online appear here automatically.", db.x + 10, db.y + 20);
+    } else {
+      ctx.fillStyle = "#28e673"; ctx.font = "bold 9px Arial";
+      ctx.fillText("LIVE ROOMS:", db.x + 10, db.y + 20);
+      let cx = db.x + 84;
+      for (const r of mpState.discoveredRooms.slice(0, 3)) {
+        const cw = Math.max(82, r.roomId.length * 8 + 22);
+        const cr = { x: cx, y: db.y + 4, w: cw, h: 24 };
+        roundRect(cr.x, cr.y, cw, 24, 3, "#182434", "#28e673", 1);
+        ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+        ctx.fillText(r.roomId, cr.x + cw / 2, cr.y + 16);
+        uiRects.mpRoomChips.push({ rect: cr, roomId: r.roomId });
+        cx += cw + 6;
+      }
+    }
+
+    uiRects.mpJoinBtn = { x: jc.x + 18, y: curY + cardH - 48, w: cardW - 36, h: 36 };
+    roundRect(uiRects.mpJoinBtn.x, uiRects.mpJoinBtn.y, uiRects.mpJoinBtn.w, 36, 5, "#eb9b14", "#ffdc55", 1.5);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
+    ctx.fillText("JOIN ROOM", uiRects.mpJoinBtn.x + uiRects.mpJoinBtn.w / 2, uiRects.mpJoinBtn.y + 23);
+  } else {
+    // Active Connected Lobby Roster
+    const lh = 250;
+    roundRect(paneX, curY, paneW, lh, 7, "rgba(12,17,26,0.96)", "#28e673", 1.5);
+    ctx.textAlign = "left"; ctx.fillStyle = "#28e673"; ctx.font = "bold 13px Arial";
+    const totalP = 1 + Object.keys(mpState.peers).length;
+    ctx.fillText(`ACTIVE ROOM: ${mpState.roomId}   •   GRID: ${totalP} / 8 DRIVERS   •   ROLE: ${mpState.isHost ? "HOST" : "DRIVER P" + (mpState.myPeerId + 1)}`, paneX + 18, curY + 28);
+
+    const slotW = Math.floor((paneW - 36 - 3 * 8) / 4), slotH = 56;
+    for (let s = 0; s < 8; s++) {
+      const col = s % 4, row = Math.floor(s / 4);
+      const sx = paneX + 18 + col * (slotW + 8), sy = curY + 46 + row * (slotH + 10);
+      if (s === mpState.myPeerId) {
+        roundRect(sx, sy, slotW, slotH, 5, "#122234", "#00e6ff", 1.5);
+        ctx.fillStyle = "#00ebff"; ctx.font = "bold 10px Arial"; ctx.textAlign = "left";
+        ctx.fillText(`[P${s + 1}] ${profile.username} (YOU)`, sx + 12, sy + 22);
+        ctx.fillStyle = "#b4c8e1"; ctx.font = "9px Arial";
+        ctx.fillText(`${player.carModelName}  •  READY`, sx + 12, sy + 42);
+      } else if (mpState.peers[s]) {
+        const pr = mpState.peers[s];
+        roundRect(sx, sy, slotW, slotH, 5, "#141c28", "#ffc832", 1.2);
+        ctx.fillStyle = "#ffd241"; ctx.font = "bold 10px Arial"; ctx.textAlign = "left";
+        ctx.fillText(`[P${s + 1}] ${pr.name}`, sx + 12, sy + 22);
+        ctx.fillStyle = "#a5b9d2"; ctx.font = "9px Arial";
+        ctx.fillText(`${(CARS[pr.car] || CARS[0]).name}  •  ${pr.ready ? "READY" : "STANDBY"}`, sx + 12, sy + 42);
+      } else {
+        roundRect(sx, sy, slotW, slotH, 5, "rgba(14,18,25,0.6)", "#222c3c", 1);
+        ctx.fillStyle = "#4b5f78"; ctx.font = "bold 9px Arial"; ctx.textAlign = "center";
+        ctx.fillText(`GRID SLOT P${s + 1} • OPEN`, sx + slotW / 2, sy + 32);
+      }
+    }
+
+    const actY = curY + lh - 46;
+    uiRects.mpReadyBtn = { x: paneX + 18, y: actY, w: 160, h: 34 };
+    roundRect(uiRects.mpReadyBtn.x, actY, 160, 34, 5, "#143726", "#28e673", 1.2);
+    ctx.fillStyle = "#28e673"; ctx.font = "bold 10px Arial"; ctx.textAlign = "center";
+    ctx.fillText(mpState.ready ? "STATUS: READY" : "SET READY", uiRects.mpReadyBtn.x + 80, actY + 21);
+
+    uiRects.mpStartBtn = { x: paneX + (paneW - 380) / 2, y: actY, w: 380, h: 34 };
+    roundRect(uiRects.mpStartBtn.x, actY, 380, 34, 5, mpState.isHost ? "#00c878" : "#1a2636", "#6effb4", 1.5);
+    ctx.fillStyle = mpState.isHost ? "#06140c" : "#fff"; ctx.font = "900 11px Arial";
+    ctx.fillText(mpState.isHost ? `LAUNCH MULTIPLAYER RACE (${totalP} DRIVERS)` : "WAITING FOR HOST TO LAUNCH RACE",
+                 uiRects.mpStartBtn.x + 190, actY + 21);
+
+    uiRects.mpLeaveBtn = { x: paneX + paneW - 178, y: actY, w: 160, h: 34 };
+    roundRect(uiRects.mpLeaveBtn.x, actY, 160, 34, 5, "#4b161c", "#d73c41", 1.2);
+    ctx.fillStyle = "#ffb9b9"; ctx.font = "bold 10px Arial";
+    ctx.fillText(mpState.isHost ? "CLOSE ROOM" : "LEAVE ROOM", uiRects.mpLeaveBtn.x + 80, actY + 21);
+  }
+}
+
+function renderMainMenuOverlay() {
+  // 1. Luxury Obsidian-Glass Showroom Backdrop
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "rgba(5,9,17,0.92)");
+  bg.addColorStop(0.5, "rgba(9,14,26,0.85)");
+  bg.addColorStop(1, "rgba(4,7,14,0.95)");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Floating Golden & Cyan Bokeh Light Motes
+  for (let m = 0; m < 14; m++) {
+    const mx = ((m * 137) + menuState.animTime * (12 + (m % 4) * 5)) % W;
+    const my = ((m * 89) - menuState.animTime * (10 + (m % 3) * 4) + H * 10) % H;
+    ctx.fillStyle = (m % 2 === 0) ? "rgba(255,215,90,0.18)" : "rgba(80,230,255,0.15)";
+    ctx.beginPath(); ctx.arc(mx, my, 2 + (m % 3), 0, Math.PI * 2); ctx.fill();
+  }
+
+  const contentW = 1160, contentX = (W - contentW) / 2;
+
+  // Top Left: Driver License & Career Record Card
+  uiRects.accountBadge = { x: contentX, y: 8, w: 308, h: 40 };
+  roundRect(uiRects.accountBadge.x, 8, 308, 40, 7, "rgba(13,21,34,0.94)",
+            profile.isLoggedIn ? "rgba(45,240,135,0.75)" : "rgba(255,205,55,0.75)", 1.3);
+  ctx.fillStyle = profile.isLoggedIn ? "#14442e" : "#3a2c0e";
+  ctx.beginPath(); ctx.arc(contentX + 21, 28, 12, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.font = "900 10px Arial"; ctx.textAlign = "center";
+  ctx.fillText((profile.username || "D")[0].toUpperCase(), contentX + 21, 32);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = profile.isLoggedIn ? "#55fa9e" : "#ffdc4b"; ctx.font = "900 10px Arial";
+  ctx.fillText(profile.isLoggedIn ? `DRIVER: ${profile.username.toUpperCase()}   •   SWITCH` : "GUEST DRIVER   •   SIGN IN", contentX + 40, 23);
+  ctx.fillStyle = "#b9dcf8"; ctx.font = "bold 9px Arial";
+  ctx.fillText(`CAREER: ${profile.wins} WINS  •  ${profile.podiums} PODIUMS  •  ${profile.races} RACES`, contentX + 40, 39);
+
+  // Center Championship Title
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ffd44b"; ctx.font = "bold 9px Arial";
+  ctx.fillText("WORLD SERIES CHAMPIONSHIP   •   GRAND PRIX EDITION", W / 2, 18);
+  ctx.fillStyle = "#fff"; ctx.font = "900 21px Arial";
+  ctx.fillText("A P E X   V E L O C I T Y", W / 2, 41);
+
+  // Top Right: Royal Gold Coin Vault Card
+  const wb = { x: contentX + contentW - 312, y: 8, w: 312, h: 40 };
+  roundRect(wb.x, 8, 312, 40, 7, "rgba(28,22,10,0.94)", "rgba(255,208,60,0.85)", 1.5);
+  ctx.fillStyle = "#f5b91e";
+  ctx.beginPath(); ctx.arc(wb.x + 22, 28, 12, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#2d1c04"; ctx.font = "900 11px Arial"; ctx.textAlign = "center";
+  ctx.fillText("$", wb.x + 22, 32);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffe150"; ctx.font = "900 11px Arial";
+  const lastAdd = player.lastRaceCoinsEarned > 0 ? ` (+${player.lastRaceCoinsEarned})` : "";
+  ctx.fillText(`${(profile.username || "VAULT").toUpperCase()}  •  ${profile.coins} COINS${lastAdd}`, wb.x + 40, 23);
+  ctx.fillStyle = "#afe6ff"; ctx.font = "bold 9px Arial";
+  ctx.fillText(`${player.carModelName}  •  ${player.engineModelName} (${player.hp} HP)`, wb.x + 40, 39);
+
+  // 3-Tab Navigation Bar
+  const tabW = 286, tabH = 28, tabGap = 10;
+  const tabsX = (W - (3 * tabW + 2 * tabGap)) / 2;
+  uiRects.soloTab = { x: tabsX, y: 53, w: tabW, h: tabH };
+  uiRects.garageTab = { x: tabsX + tabW + tabGap, y: 53, w: tabW, h: tabH };
+  uiRects.mpTab = { x: tabsX + 2 * (tabW + tabGap), y: 53, w: tabW, h: tabH };
+
+  const t0 = (menuState.tab === 0), t1 = (menuState.tab === 1), t2 = (menuState.tab === 2);
+  roundRect(uiRects.soloTab.x, 53, tabW, tabH, 6, t0 ? "rgba(0,200,245,0.24)" : "rgba(14,20,30,0.88)", t0 ? "#00ebff" : "#2c3a4e", t0 ? 1.8 : 1.2);
+  ctx.fillStyle = t0 ? "#70f5ff" : "#a0b4cd"; ctx.font = "900 10px Arial"; ctx.textAlign = "center";
+  ctx.fillText("01  •  WORLD TOUR CIRCUITS", uiRects.soloTab.x + tabW / 2, 71);
+
+  roundRect(uiRects.garageTab.x, 53, tabW, tabH, 6, t1 ? "rgba(255,195,40,0.25)" : "rgba(14,20,30,0.88)", t1 ? "#ffd741" : "#2c3a4e", t1 ? 1.8 : 1.2);
+  ctx.fillStyle = t1 ? "#ffe45a" : "#d7c391";
+  ctx.fillText("02  •  GARAGE: CARS & ENGINES 🪙", uiRects.garageTab.x + tabW / 2, 71);
+
+  roundRect(uiRects.mpTab.x, 53, tabW, tabH, 6, t2 ? "rgba(0,225,255,0.24)" : "rgba(14,20,30,0.88)", t2 ? "#00e1ff" : "#2c3a4e", t2 ? 1.8 : 1.2);
+  ctx.fillStyle = t2 ? "#6ef5ff" : "#a0b4cd";
+  ctx.fillText(mpState.connected ? "03  •  MULTIPLAYER [LIVE]" : "03  •  ONLINE MULTIPLAYER [O]", uiRects.mpTab.x + tabW / 2, 71);
+
+  // If not logged in or switching driver, render Driver VIP Lounge Modal on top
+  if (loginState.showModal || !profile.isLoggedIn) {
+    renderDriverLoginLounge();
+    return;
+  }
+
+  if (menuState.tab === 1) {
+    renderGarageTab(contentX, contentW, 86);
+    return;
+  }
+  if (menuState.tab === 2) {
+    renderMultiplayerTab(contentX, contentW, 86);
+    return;
+  }
+
+  // TAB 0: WORLD TOUR CIRCUITS & QUICK LOADOUT
+  uiRects.diffBtns = [];
+  const diffGap = 14, diffW = Math.floor((contentW - 2 * diffGap) / 3);
+  for (let i = 0; i < 3; i++) {
+    const d = DIFFICULTIES[i];
+    const r = { x: contentX + i * (diffW + diffGap), y: 86, w: diffW, h: 44 };
+    uiRects.diffBtns.push(r);
+    const act = (menuState.difficulty === i);
+    roundRect(r.x, r.y, r.w, r.h, 6, act ? "rgba(18,27,42,0.95)" : "rgba(12,17,26,0.9)", act ? d.accent : "#263244", act ? 1.8 : 1.1);
+    ctx.fillStyle = act ? d.accent : "#323e50"; ctx.fillRect(r.x, r.y + 6, 3, 32);
+    ctx.textAlign = "left"; ctx.fillStyle = act ? d.accent : "#fff"; ctx.font = "bold 11px Arial";
+    ctx.fillText(d.title, r.x + 12, r.y + 18);
+    ctx.fillStyle = "#a5b9d2"; ctx.font = "9px Arial";
+    ctx.fillText(d.desc, r.x + 12, r.y + 35);
+  }
+
+  // Row 2: Lighting, Quick Supercars & Tune Engine Button
+  uiRects.todBtns = [];
+  const todLabels = ["DAYLIGHT", "SUNSET", "MIDNIGHT"];
+  const todCols = ["#1e96f5", "#f07823", "#8c3cf0"];
+  for (let i = 0; i < 3; i++) {
+    const r = { x: contentX + i * 80, y: 136, w: 74, h: 38 };
+    uiRects.todBtns.push(r);
+    const act = (menuState.tod === i);
+    roundRect(r.x, r.y, r.w, r.h, 5, act ? todCols[i] : "#0e131c", act ? "#fff" : "#283446", 1.2);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 9px Arial"; ctx.textAlign = "center";
+    ctx.fillText(todLabels[i], r.x + 37, r.y + 23);
+  }
+
+  uiRects.openGarageQuick = { x: contentX + contentW - 180, y: 136, w: 180, h: 38 };
+  roundRect(uiRects.openGarageQuick.x, 136, 180, 38, 5, "rgba(52,40,12,0.94)", "#ffd23c", 1.5);
+  ctx.fillStyle = "#ffe150"; ctx.font = "900 9px Arial"; ctx.textAlign = "center";
+  ctx.fillText("⚙ TUNE ENGINE & GARAGE", uiRects.openGarageQuick.x + 90, 151);
+  ctx.fillStyle = "#b9e1ff"; ctx.font = "bold 8px Arial";
+  ctx.fillText(`${player.engineModelName} (${player.hp} HP)`, uiRects.openGarageQuick.x + 90, 166);
+
+  uiRects.quickCars = [];
+  const carStartX = contentX + 248;
+  const remW = uiRects.openGarageQuick.x - 12 - carStartX;
+  const carBtnW = Math.floor((remW - 24) / 4);
+  for (let i = 0; i < 4; i++) {
+    const cIdx = CAR_DISPLAY_ORDER[i];
+    const cs = CARS[cIdx];
+    const owned = ownsCar(cIdx);
+    const sel = (profile.selectedCar === cIdx);
+    const r = { x: carStartX + i * (carBtnW + 8), y: 136, w: carBtnW, h: 38 };
+    uiRects.quickCars.push({ rect: r, idx: cIdx });
+    roundRect(r.x, r.y, r.w, r.h, 5, sel ? "#141e2e" : "#0d121c", sel ? cs.accent : "#283446", sel ? 1.8 : 1);
+    draw3DSupercar(r.x + 24, r.y + 34, 34, 22, cIdx, true, 0, 0, false);
+    ctx.textAlign = "left"; ctx.fillStyle = sel ? cs.accent : (owned ? "#fff" : "#ffd241"); ctx.font = "bold 9px Arial";
+    ctx.fillText(cs.name, r.x + 46, r.y + 16);
+    ctx.fillStyle = owned ? "#91aac3" : "#ffc337"; ctx.font = "bold 8px Arial";
+    ctx.fillText(owned ? `${cs.maxSpeed + ENGINES[profile.selectedEngine].topBonus} KM/H • OWNED` : `🔒 UNLOCK: ${cs.price} 🪙`, r.x + 46, r.y + 30);
+  }
+
+  // Row 3: 4 Grand Prix Circuit Cards
+  uiRects.trackCards = [];
+  const cGap = 14, cW = Math.floor((contentW - 3 * cGap) / 4), cH = 312, cY = 182;
+  const p1Purse = Math.round(500 * DIFFICULTIES[menuState.difficulty].mult);
+  for (let i = 0; i < 4; i++) {
+    const c = CIRCUITS[i];
+    const cx = contentX + i * (cW + cGap);
+    const r = { x: cx, y: cY, w: cW, h: cH };
+    uiRects.trackCards.push(r);
+    const sel = (menuState.theme === i);
+    roundRect(cx, cY, cW, cH, 7, sel ? "rgba(20,29,44,0.96)" : "rgba(12,17,26,0.92)", sel ? c.accent : "#263244", sel ? 2.2 : 1);
+
+    // Thumbnail sky preview
+    const tg = ctx.createLinearGradient(cx + 6, cY + 6, cx + 6, cY + 110);
+    tg.addColorStop(0, c.skyTop); tg.addColorStop(0.6, c.skyMid); tg.addColorStop(1, c.skyBot);
+    roundRect(cx + 6, cY + 6, cW - 12, 104, 4, tg, sel ? c.accent : "#000", 1);
+
+    roundRect(cx + 12, cY + 12, 88, 18, 3, "rgba(8,12,20,0.88)", c.accent, 1);
+    ctx.fillStyle = c.accent; ctx.font = "bold 8px Arial"; ctx.textAlign = "center";
+    ctx.fillText(c.tag, cx + 56, cY + 24);
+
+    roundRect(cx + cW - 102, cY + 12, 90, 18, 3, "rgba(28,22,6,0.9)", "#ffcd37", 1);
+    ctx.fillStyle = "#ffe14b"; ctx.font = "bold 8px Arial";
+    ctx.fillText(`1ST: +${p1Purse} 🪙`, cx + cW - 57, cY + 24);
+
+    ctx.textAlign = "left"; ctx.fillStyle = "#fff"; ctx.font = "bold 15px Arial";
+    ctx.fillText(c.title, cx + 12, cY + 134);
+    ctx.fillStyle = "#96aac3"; ctx.font = "10px Arial";
+    ctx.fillText(c.subtitle, cx + 12, cY + 152);
+
+    const drawDots = (ry, lbl, val, col) => {
+      ctx.fillStyle = "#879bb4"; ctx.font = "bold 9px Arial"; ctx.textAlign = "left";
+      ctx.fillText(lbl, cx + 12, ry + 8);
+      for (let s = 0; s < 5; s++) {
+        roundRect(cx + cW - 82 + s * 14, ry, 11, 7, 1, s < val ? col : "#1a222e", null);
+      }
+    };
+    drawDots(cY + 174, "ELEVATION", c.hills, "#00d7ff");
+    drawDots(cY + 194, "TRAFFIC", c.traffic, "#ffb928");
+    drawDots(cY + 214, "CHALLENGE", c.diff, c.accent);
+
+    roundRect(cx + 12, cY + cH - 40, cW - 24, 30, 5, sel ? c.accent : "#161e2c", sel ? "#fff" : "#303e52", 1.2);
+    ctx.fillStyle = sel ? "#080c12" : "#fff"; ctx.font = "bold 10px Arial"; ctx.textAlign = "center";
+    ctx.fillText(sel ? "SELECTED CIRCUIT  •  RACE ▶" : "SELECT CIRCUIT", cx + cW / 2, cY + cH - 21);
+  }
+
+  // Row 4: Command Dock
+  const actY = cY + cH + 12;
+  uiRects.startRaceBtn = { x: W / 2 - 384, y: actY, w: 310, h: 40 };
+  uiRects.resetRaceBtn = { x: W / 2 - 60, y: actY, w: 215, h: 40 };
+  uiRects.lightsBtn = { x: W / 2 + 169, y: actY, w: 215, h: 40 };
+
+  roundRect(uiRects.startRaceBtn.x, actY, 310, 40, 6, "#00d778", "#82ffc3", 1.8);
+  ctx.fillStyle = "#06120a"; ctx.font = "900 13px Arial"; ctx.textAlign = "center";
+  ctx.fillText(player.speed > 1 ? "▶  RESUME RACE  [ESC]" : "▶  START RACE  [ENTER / CLICK]", uiRects.startRaceBtn.x + 155, actY + 25);
+
+  roundRect(uiRects.resetRaceBtn.x, actY, 215, 40, 6, "#1a2434", "#ffa532", 1.2);
+  ctx.fillStyle = "#ffc869"; ctx.font = "bold 10px Arial";
+  ctx.fillText("FRESH GRID START  [KEY R]", uiRects.resetRaceBtn.x + 107, actY + 24);
+
+  roundRect(uiRects.lightsBtn.x, actY, 215, 40, 6, "#162234", "#00d2ff", 1.2);
+  ctx.fillStyle = "#a5e6ff"; ctx.font = "bold 10px Arial";
+  ctx.fillText("TIME OF DAY  [KEY N]", uiRects.lightsBtn.x + 107, actY + 24);
+
+  ctx.fillStyle = "#879bb6"; ctx.font = "bold 9px Arial";
+  ctx.fillText("CONTROLS:  [W/S or UP/DOWN] THROTTLE & BRAKE  •  [A/D or LEFT/RIGHT] STEER  •  [C] CAMERA VIEW  •  [F1-F4] SUPERCAR  •  [M/ESC] MENU", W / 2, H - 10);
+}
+
+// ============================================================================
+//  12. INPUT EVENTS & 60 FPS MAIN LOOP
+// ============================================================================
+canvas.addEventListener('mousedown', (e) => {
+  updateMousePos(e);
+
+  if (menuState.showMenu && !menuState.isTransitioning) {
+    if (loginState.showModal || !profile.isLoggedIn) {
+      if (hitRect(uiRects.loginSignInTab)) { loginState.registerMode = false; loginState.statusMsg = ""; return; }
+      if (hitRect(uiRects.loginRegTab)) { loginState.registerMode = true; loginState.statusMsg = ""; return; }
+      if (hitRect(uiRects.loginUserBox)) {
+        loginState.focusField = 0;
+        const v = prompt("Enter Driver Callsign:", loginState.username);
+        if (v !== null) { loginState.username = v.trim(); loginState.focusField = 1; }
+        return;
+      }
+      if (hitRect(uiRects.loginPassBox)) {
+        loginState.focusField = 1;
+        const v = prompt("Enter Security Passkey (min 4 chars):", loginState.password);
+        if (v !== null) loginState.password = v;
+        return;
+      }
+      if (hitRect(uiRects.loginShowPass)) { loginState.showPass = !loginState.showPass; return; }
+      if (hitRect(uiRects.loginSubmitBtn)) { submitLoginOrRegister(false); return; }
+      if (hitRect(uiRects.registerDirectBtn)) { submitLoginOrRegister(true); return; }
+      if (profile.isLoggedIn && hitRect(uiRects.loginCloseBtn)) { loginState.showModal = false; return; }
+      for (const chip of uiRects.savedUserChips) {
+        if (hitRect(chip.rect)) {
+          loginState.username = chip.name;
+          loginState.password = "";
+          loginState.registerMode = false;
+          loginState.focusField = 1;
+          loginState.statusMsg = `Selected driver '${chip.name}'. Enter passkey to sign in.`;
+          loginState.isError = false;
+          return;
+        }
+      }
+      return;
+    }
+
+    if (hitRect(uiRects.accountBadge)) {
+      loginState.showModal = true;
+      loginState.password = "";
+      loginState.statusMsg = `Currently signed in as '${profile.username}'. Switch profile or register a new driver.`;
+      loginState.isError = false;
+      return;
+    }
+    if (hitRect(uiRects.soloTab)) { menuState.tab = 0; return; }
+    if (hitRect(uiRects.garageTab)) {
+      menuState.tab = 1;
+      menuState.previewCar = profile.selectedCar;
+      menuState.previewEngine = profile.selectedEngine;
+      return;
+    }
+    if (hitRect(uiRects.mpTab)) { menuState.tab = 2; ensureWebSocket(); return; }
+
+    if (menuState.tab === 1) {
+      for (const c of uiRects.garageCarCards) if (hitRect(c.rect)) { handleCarClick(c.idx); return; }
+      for (const eg of uiRects.garageEngineCards) if (hitRect(eg.rect)) { handleEngineClick(eg.idx); return; }
+      if (hitRect(uiRects.startRaceBtn)) { startTransitionToRace(false); return; }
+      if (hitRect(uiRects.resetRaceBtn)) { menuState.tab = 0; return; }
+      return;
+    }
+
+    if (menuState.tab === 2) {
+      if (!mpState.connected) {
+        if (hitRect(uiRects.mpHostRoomBox)) {
+          const v = prompt("Enter Room ID to Host:", mpState.roomId);
+          if (v && v.trim()) mpState.roomId = v.trim().toUpperCase();
+          return;
+        }
+        if (hitRect(uiRects.mpHostRandBtn)) {
+          const pfx = ["APEX", "TURBO", "VORTEX", "DRIFT", "NITRO", "HYPER"][Math.floor(Math.random() * 6)];
+          mpState.roomId = `${pfx}-${Math.floor(100 + Math.random() * 900)}`;
+          return;
+        }
+        if (hitRect(uiRects.mpHostPassBox)) {
+          const v = prompt("Enter Room Passkey (leave blank for open lobby):", mpState.password);
+          if (v !== null) mpState.password = v.trim();
+          return;
+        }
+        if (hitRect(uiRects.mpCreateBtn)) {
+          sendWs({
+            type: "WS_HOST_ROOM",
+            roomId: mpState.roomId,
+            password: mpState.password,
+            name: profile.username || "HostDriver",
+            car: profile.selectedCar,
+            theme: menuState.theme,
+            tod: menuState.tod
+          });
+          return;
+        }
+        if (hitRect(uiRects.mpJoinRoomBox)) {
+          const v = prompt("Enter Room ID to Join:", mpState.joinRoomId);
+          if (v && v.trim()) mpState.joinRoomId = v.trim().toUpperCase();
+          return;
+        }
+        if (hitRect(uiRects.mpJoinPassBox)) {
+          const v = prompt("Enter Room Passkey:", mpState.joinPassword);
+          if (v !== null) mpState.joinPassword = v.trim();
+          return;
+        }
+        for (const ch of uiRects.mpRoomChips) {
+          if (hitRect(ch.rect)) { mpState.joinRoomId = ch.roomId; return; }
+        }
+        if (hitRect(uiRects.mpJoinBtn)) {
+          sendWs({
+            type: "WS_JOIN_ROOM",
+            roomId: mpState.joinRoomId,
+            password: mpState.joinPassword,
+            name: profile.username || "Driver",
+            car: profile.selectedCar
+          });
+          return;
+        }
+      } else {
+        if (hitRect(uiRects.mpReadyBtn)) {
+          mpState.ready = !mpState.ready;
+          sendWs({ type: "WS_READY", id: mpState.myPeerId, ready: mpState.ready });
+          return;
+        }
+        if (hitRect(uiRects.mpStartBtn) && mpState.isHost) {
+          sendWs({ type: "WS_START_RACE", duration: 3.5, theme: menuState.theme, tod: menuState.tod });
+          return;
+        }
+        if (hitRect(uiRects.mpLeaveBtn)) {
+          sendWs({ type: "WS_LEAVE_ROOM" });
+          mpState.connected = false;
+          mpState.peers = {};
+          return;
+        }
+      }
+      return;
+    }
+
+    // Tab 0 clicks
+    for (let i = 0; i < uiRects.diffBtns.length; i++) {
+      if (hitRect(uiRects.diffBtns[i])) { menuState.difficulty = i; resetRace(); return; }
+    }
+    for (let i = 0; i < uiRects.todBtns.length; i++) {
+      if (hitRect(uiRects.todBtns[i])) { menuState.tod = i; return; }
+    }
+    if (hitRect(uiRects.openGarageQuick)) {
+      menuState.tab = 1;
+      menuState.previewCar = profile.selectedCar;
+      menuState.previewEngine = profile.selectedEngine;
+      return;
+    }
+    for (const qc of uiRects.quickCars) {
+      if (hitRect(qc.rect)) { handleCarClick(qc.idx); return; }
+    }
+    for (let i = 0; i < uiRects.trackCards.length; i++) {
+      if (hitRect(uiRects.trackCards[i])) {
+        menuState.theme = i;
+        resetRace();
+        startTransitionToRace(false);
+        return;
+      }
+    }
+    if (hitRect(uiRects.startRaceBtn)) { startTransitionToRace(false); return; }
+    if (hitRect(uiRects.resetRaceBtn)) { startTransitionToRace(true); return; }
+    if (hitRect(uiRects.lightsBtn)) { menuState.tod = (menuState.tod + 1) % 3; return; }
+    return;
+  }
+
+  // In-game HUD clicks
+  if (mouseX >= 292 && mouseX <= 440 && mouseY >= 6 && mouseY <= 28) {
+    player.thirdPersonView = !player.thirdPersonView;
+    return;
+  }
+  const startX = W / 2 - (4 * 132 + 3 * 8) / 2;
+  if (mouseY >= 56 && mouseY <= 78) {
+    for (let i = 0; i < 4; i++) {
+      const rx = startX + i * 140;
+      if (mouseX >= rx && mouseX <= rx + 132) {
+        if (i === 0) player.zBuffer3DMode = !player.zBuffer3DMode;
+        if (i === 1) player.adasEnabled = !player.adasEnabled;
+        if (i === 2) player.arGuidesEnabled = !player.arGuidesEnabled;
+        if (i === 3) player.pixelSize = (player.pixelSize === 1) ? 2 : (player.pixelSize === 2 ? 4 : 1);
+        return;
+      }
+    }
+  }
+  if (player.raceFinished) {
+    resetRace();
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if (menuState.showMenu && (loginState.showModal || !profile.isLoggedIn)) {
+    if (e.key === 'Tab' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      loginState.focusField = (loginState.focusField === 0) ? 1 : 0;
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitLoginOrRegister(loginState.registerMode);
+      return;
+    }
+    if (e.key === 'Escape' && profile.isLoggedIn) {
+      loginState.showModal = false;
+      return;
+    }
+    if (e.key === 'Backspace') {
+      if (loginState.focusField === 0) loginState.username = loginState.username.slice(0, -1);
+      else loginState.password = loginState.password.slice(0, -1);
+      return;
+    }
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      if (loginState.focusField === 0 && loginState.username.length < 22) loginState.username += e.key;
+      else if (loginState.focusField === 1 && loginState.password.length < 28) loginState.password += e.key;
+    }
+    return;
+  }
+
+  const k = e.key.toLowerCase();
+  if (k === 'w' || e.key === 'ArrowUp') keys.up = true;
+  if (k === 's' || e.key === 'ArrowDown') keys.down = true;
+  if (k === 'a' || e.key === 'ArrowLeft') keys.left = true;
+  if (k === 'd' || e.key === 'ArrowRight') keys.right = true;
+  if (e.key === ' ') keys.space = true;
+  if (k === 'c' || k === 'v') player.thirdPersonView = !player.thirdPersonView;
+  if (k === 'n') menuState.tod = (menuState.tod + 1) % 3;
+  if (k === '1' || k === 'z') player.zBuffer3DMode = !player.zBuffer3DMode;
+  if (k === '2' || k === 'g') player.adasEnabled = !player.adasEnabled;
+  if (k === '3' || k === 'f') player.arGuidesEnabled = !player.arGuidesEnabled;
+  if (k === '4' || k === 'j') player.pixelSize = (player.pixelSize === 1) ? 2 : (player.pixelSize === 2 ? 4 : 1);
+  if (k === 'y') player.health = 100;
+  if (k === 'r') resetRace();
+  if (k === 'o') { menuState.tab = 2; menuState.showMenu = true; menuState.isTransitioning = false; }
+  if (e.key === 'F1') { e.preventDefault(); handleCarClick(0); }
+  if (e.key === 'F2') { e.preventDefault(); handleCarClick(1); }
+  if (e.key === 'F3') { e.preventDefault(); handleCarClick(2); }
+  if (e.key === 'F4') { e.preventDefault(); handleCarClick(3); }
+  if (e.key === 'Enter' && menuState.showMenu && !menuState.isTransitioning) {
+    startTransitionToRace(false);
+  }
+  if (k === 'm' || e.key === 'Escape') {
+    if (menuState.showMenu && !menuState.isTransitioning) startTransitionToRace(false);
+    else { menuState.showMenu = true; menuState.isTransitioning = false; }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || e.key === 'ArrowUp') keys.up = false;
+  if (k === 's' || e.key === 'ArrowDown') keys.down = false;
+  if (k === 'a' || e.key === 'ArrowLeft') keys.left = false;
+  if (k === 'd' || e.key === 'ArrowRight') keys.right = false;
+  if (e.key === ' ') keys.space = false;
+});
+
+// Initialize & Start 60 FPS Loop
+resetRace();
+fetchSavedUsers();
+let lastTime = performance.now();
+
+function gameLoop(now) {
+  const dt = Math.min(0.05, Math.max(0.004, (now - lastTime) / 1000));
+  lastTime = now;
+  menuState.animTime += dt;
+  if (menuState.bannerTimer > 0) menuState.bannerTimer -= dt;
+  if (mpState.errorTimer > 0) mpState.errorTimer -= dt;
+
+  if (menuState.isTransitioning) {
+    menuState.menuOpacity -= dt * 1.85;
+    if (menuState.menuOpacity <= 0) {
+      menuState.menuOpacity = 0;
+      menuState.isTransitioning = false;
+      menuState.showMenu = false;
+    }
+  } else if (menuState.showMenu) {
+    menuState.menuOpacity = Math.min(1, menuState.menuOpacity + dt * 4.5);
+  } else {
+    menuState.menuOpacity = Math.max(0, menuState.menuOpacity - dt * 4.5);
+  }
+  if (menuState.transitionFlash > 0) {
+    menuState.transitionFlash = Math.max(0, menuState.transitionFlash - dt * 1.35);
+  }
+
+  if (!menuState.showMenu || menuState.isTransitioning) {
+    updatePhysics(dt);
+  }
+
+  renderWorldAndHUD();
+
+  if (menuState.showMenu || menuState.menuOpacity > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = menuState.menuOpacity;
+    renderMainMenuOverlay();
+    ctx.restore();
+  }
+
+  if (menuState.transitionFlash > 0.01) {
+    const bell = Math.sin(menuState.transitionFlash * Math.PI);
+    ctx.fillStyle = `rgba(0,225,255,${(0.22 * bell).toFixed(3)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
