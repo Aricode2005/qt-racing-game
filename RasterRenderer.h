@@ -13,6 +13,7 @@ public:
 
     // Main render call
     void render(QPainter& painter, const GameEngine& engine, int screenWidth, int screenHeight, qreal dt = 0.016);
+    void renderThirdPersonPlayerCar(QPainter& p, const GameEngine& engine, int w, int h);
 
 private:
     void renderBackdrop(QPainter& p, const GameEngine& engine, int w, int h);
@@ -34,7 +35,6 @@ private:
     void renderWindshieldHolographicHUD(QPainter& p, const GameEngine& engine, int w, int h, int dashX, int dashY);
     void renderWindshieldEffects(QPainter& p, const GameEngine& engine, int w, int h);
     void renderSportPedals(QPainter& p, const GameEngine& engine, int w, int h);
-    void renderThirdPersonPlayerCar(QPainter& p, const GameEngine& engine, int w, int h);
     void renderThirdPersonHUD(QPainter& p, const GameEngine& engine, int w, int h);
     void renderHUD(QPainter& p, const GameEngine& engine, int w, int h);
     void renderSpeedStreaks(QPainter& p, const GameEngine& engine, int w, int h);

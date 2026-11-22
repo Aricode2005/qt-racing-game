@@ -28,6 +28,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB_GAME_PATH = os.path.join(HERE, "web_game.html")
+ASSETS_DIR = os.path.join(HERE, "assets")
 DB_PATH = os.environ.get("APEX_DB_PATH", os.path.join(HERE, "apex_accounts.db"))
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -529,6 +530,27 @@ async def handle_http_or_ws_upgrade(first_line: bytes, reader: asyncio.StreamRea
             payload = {}
         res = db_save_profile(payload)
         await send_http_response(writer, "200 OK", "application/json; charset=utf-8", json.dumps(res).encode("utf-8"))
+        return "CLOSED"
+
+    if path.startswith("/assets/"):
+        fname = os.path.basename(path[len("/assets/"):])
+        if fname.endswith(".png"):
+            fpath = os.path.join(ASSETS_DIR, fname)
+            if os.path.isfile(fpath):
+                with open(fpath, "rb") as f:
+                    img_bytes = f.read()
+                resp = (
+                    f"HTTP/1.1 200 OK\r\n"
+                    f"Content-Type: image/png\r\n"
+                    f"Content-Length: {len(img_bytes)}\r\n"
+                    f"Cache-Control: public, max-age=86400\r\n"
+                    f"Connection: close\r\n\r\n"
+                ).encode("utf-8") + img_bytes
+                writer.write(resp)
+                await writer.drain()
+                writer.close()
+                return "CLOSED"
+        await send_http_response(writer, "404 Not Found", "text/plain; charset=utf-8", b"Asset Not Found")
         return "CLOSED"
 
     if path == "/status":
