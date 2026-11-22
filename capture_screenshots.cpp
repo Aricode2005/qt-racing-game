@@ -1,12 +1,91 @@
 #include <QApplication>
 #include <QPixmap>
 #include <QPainter>
+#include <QDir>
 #include <QDebug>
 #include "GameWindow.h"
+#include "RasterAssets.h"
+#include "RasterRenderer.h"
 
 int main(int argc, char *argv[]) {
     // Note: Do not use "offscreen" platform on Windows MinGW as it lacks a font engine and produces glyph boxes
     QApplication app(argc, argv);
+
+    if (argc > 1 && QString(argv[1]) == "--export-assets") {
+        QString outDir = "C:/Users/aritr/Downloads/ApexRacingGame/qt-racing-game/relay_server/assets";
+        QDir().mkpath(outDir);
+        RasterAssets& assets = RasterAssets::instance();
+        assets.initialize();
+
+        // 1. Export all 4 3rd-person player supercars (normal & braking) using RasterRenderer::renderThirdPersonPlayerCar
+        RasterRenderer renderer;
+        GameEngine eng;
+        for (int carIdx = 0; carIdx < 4; ++carIdx) {
+            for (int brake = 0; brake <= 1; ++brake) {
+                PlayerCar& pc = eng.getPlayerMutable();
+                pc.selectedCar = carIdx;
+                pc.isBraking = (brake == 1);
+                pc.isAccelerating = (brake == 0);
+                pc.rpm = (brake == 0) ? 6500 : 3200;
+                pc.boostBar = (brake == 0) ? 0.55 : 0.0;
+                pc.steerAngle = 0.0;
+                pc.pitchG = 0.0;
+                pc.rollG = 0.0;
+                pc.verticalOffset = 0.0;
+                pc.vibration = 0.0;
+
+                QImage carImg(400, 220, QImage::Format_ARGB32_Premultiplied);
+                carImg.fill(Qt::transparent);
+                QPainter cp(&carImg);
+                renderer.renderThirdPersonPlayerCar(cp, eng, 400, 210);
+                cp.end();
+                QString fn = QString("%1/player_car_%2%3.png")
+                                 .arg(outDir)
+                                 .arg(carIdx)
+                                 .arg(brake ? "_brake" : "");
+                carImg.save(fn);
+            }
+        }
+
+        // 2. Export per-pixel Phong NPC/Traffic vehicle sprites (rear, rear_brake, front, side_left, side_right)
+        for (int v = 0; v < 5; ++v) {
+            VehicleType vt = static_cast<VehicleType>(v);
+            assets.getVehicle(vt, true, false, false, false).save(QString("%1/vehicle_rear_%2.png").arg(outDir).arg(v));
+            assets.getVehicle(vt, true, true, false, false).save(QString("%1/vehicle_rear_brake_%2.png").arg(outDir).arg(v));
+            assets.getVehicle(vt, false, false, false, false).save(QString("%1/vehicle_front_%2.png").arg(outDir).arg(v));
+            if (v < 4) {
+                assets.getVehicleSide(vt, false).save(QString("%1/vehicle_side_r_%2.png").arg(outDir).arg(v));
+                assets.getVehicleSide(vt, true).save(QString("%1/vehicle_side_l_%2.png").arg(outDir).arg(v));
+            }
+        }
+
+        // 3. Export all 12 high-resolution sky & 3D mountain backdrops (4 themes x 3 times of day)
+        for (int th = 0; th < 4; ++th) {
+            for (int td = 0; td < 3; ++td) {
+                assets.getBackdrop(static_cast<TrackTheme>(th), static_cast<TimeOfDay>(td))
+                    .save(QString("%1/backdrop_%2_%3.png").arg(outDir).arg(th).arg(td));
+            }
+        }
+
+        // 4. Export all 13 roadside scenery sprites
+        for (int sc = 0; sc <= 12; ++sc) {
+            assets.getScenery(static_cast<SceneryType>(sc))
+                .save(QString("%1/scenery_%2.png").arg(outDir).arg(sc));
+        }
+
+        // 5. Export genuine cockpit dashboard, steering wheel, gauges, needle & mirrors
+        assets.getDashboard().save(outDir + "/dashboard.png");
+        assets.getSteeringWheel().save(outDir + "/wheel.png");
+        assets.getGaugeDialSpeed(false).save(outDir + "/dial_speed.png");
+        assets.getGaugeDialRpm(false).save(outDir + "/dial_rpm.png");
+        assets.getNeedle().save(outDir + "/needle.png");
+        assets.getRearviewMirrorFrame().save(outDir + "/mirror_rear.png");
+        assets.getSideMirrorLeft().save(outDir + "/mirror_left.png");
+        assets.getSideMirrorRight().save(outDir + "/mirror_right.png");
+
+        qDebug() << "Successfully exported all genuine C++ RasterAssets & RasterRenderer PNGs to" << outDir;
+        return 0;
+    }
 
     GameWindow window;
     window.resize(1280, 720);
